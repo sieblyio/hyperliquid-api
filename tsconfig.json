@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": false,
+    "inlineSourceMap": false,
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "pretty": true,
+    "removeComments": false,
+    "resolveJsonModule": true,
+    "skipLibCheck": false,
+    "sourceMap": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "types": ["node"],
+    "target": "esnext"
+  },
+  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*.*"]
+}

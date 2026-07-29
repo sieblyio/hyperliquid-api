@@ -1,0 +1,107 @@
+{
+  "name": "@siebly/hyperliquid-api",
+  "version": "0.0.1",
+  "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
+    "lint": "eslint src",
+    "test": "jest --passWithNoTests",
+    "test:extensions": "tsc -p tsconfig.extensions.json",
+    "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
+    "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
+    "test:unit": "jest --passWithNoTests --runInBand test/unit",
+    "prepublishOnly": "npm run validate:release && npm run lint && npm run test:types && npm run test:unit && npm run test:packed"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "dist/mjs/index.js",
+  "types": "dist/mjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mjs/index.d.ts",
+      "browser": "./dist/mjs/index.js",
+      "import": "./dist/mjs/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/mjs/index.js"
+    }
+  },
+  "browser": {
+    "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "npm@11.12.0",
+  "files": [
+    "dist/*"
+  ],
+  "author": "Siebly.io (https://github.com/sieblyio)",
+  "contributors": [
+    "Tiago Siebler (https://github.com/tiagosiebler)"
+  ],
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
+    "axios": "1.18.1",
+    "ethers": "^6.16.0",
+    "fflate": "^0.8.2",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/compat": "2.1.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.14",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "esbuild": "0.27.2",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-require-extensions": "0.1.3",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "@babel/core": "7.29.6",
+    "form-data": "4.0.6",
+    "js-yaml": "3.15.0"
+  },
+  "keywords": [
+    "hyperliquid",
+    "hyperliquid api",
+    "hyperliquid nodejs",
+    "hyperliquid javascript",
+    "hyperliquid typescript",
+    "hyperliquid websocket",
+    "hip-3",
+    "algo trading",
+    "api",
+    "sdk",
+    "websocket",
+    "rest",
+    "trading bots",
+    "cryptocurrency",
+    "siebly",
+    "siebly.io"
+  ],
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/tiagosiebler"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sieblyio/hyperliquid-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sieblyio/hyperliquid-api/issues"
+  },
+  "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  }
+}

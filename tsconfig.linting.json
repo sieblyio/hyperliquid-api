@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "rootDir": ".",
+    "target": "esnext",
+    "types": ["node", "jest"]
+  },
+  "include": [
+    "src/**/*.*",
+    "test/**/*.*",
+    "examples/**/*.*",
+    "eslint.config.cjs",
+    "jest.config.cjs"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "../",
+    "target": "esnext",
+    "types": ["node", "jest"]
+  },
+  "include": ["../src/**/*.*", "../test/**/*.*"],
+  "exclude": ["packaging/fixtures/**/*", "types/**/*"]
+}

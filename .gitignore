@@ -1,0 +1,15 @@
+hyperliquidref
+!.gitkeep
+.DS_Store
+*.log
+*.tgz
+.env
+.env.test
+.eslintcache
+.npm
+.tmp-packed*
+coverage
+dist
+node_modules
+README_BEFORE_RELEASE.md
+examples/tstests

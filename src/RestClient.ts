@@ -1,0 +1,2009 @@
+import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
+import { ActionBuilder } from './lib/action-builder.js';
+import type {
+  AssetIdentifier,
+  Grouping,
+  ModifyWireInput,
+  OrderWireInput,
+} from './lib/action-factory.js';
+import { AssetResolver, type ResolvedAsset } from './lib/asset-resolver.js';
+import { BaseRestClient } from './lib/BaseRestClient.js';
+import { decimalToWire } from './lib/decimal.js';
+import { normalizeAddresses } from './lib/normalize-addresses.js';
+import { USER_SIGNED_ACTIONS } from './lib/user-signed-actions.js';
+import { sanitizeObjectForWire } from './lib/wire.js';
+import type {
+  ApproveApiWalletRequest,
+  CancelOrdersByClientOrderIdRequest,
+  CancelOrdersRequest,
+  CancelTwapOrderRequest,
+  ConvertToMultiSigUserRequest,
+  DelegateOrUndelegateStakeRequest,
+  DeployPerpRequest,
+  DeploySpotRequest,
+  L1RequestOptions,
+  LinkStakingAccountRequest,
+  ModifyOrderRequest,
+  ModifyOrdersRequest,
+  MultiSigL1RequestOptions,
+  MultiSigUserSignedRequestOptions,
+  SendAssetFromApiWalletRequest,
+  SendAssetRequest,
+  SendSpotAssetRequest,
+  SendToEvmWithDataRequest,
+  SendUsdRequest,
+  SetIsolatedMarginLeverageRequest,
+  SetUserAbstractionRequest,
+  SubmitLimitOrderRequest,
+  SubmitMarketOrderRequest,
+  SubmitOrderRequest,
+  SubmitTwapOrderRequest,
+  SubmitUserOutcomeRequest,
+  TransferSpotToOrFromSubAccountRequest,
+  TransferUsdBetweenSpotAndPerpRequest,
+  TransferUsdToOrFromSubAccountRequest,
+  TransferVaultFundsRequest,
+  UpdateIsolatedMarginRequest,
+  UpdateLeverageRequest,
+  UserSignedRequestOptions,
+  UserToggleRequest,
+  WithdrawUsdRequest,
+} from './types/request/exchange.types.js';
+import type {
+  AccountDexRequest,
+  AccountRequest,
+  GetCandlesRequest,
+  GetFundingHistoryRequest,
+  GetMaxBuilderFeeRequest,
+  GetOrderBookRequest,
+  GetOrderStatusRequest,
+  GetPreTransferCheckRequest,
+  GetUserBorrowLendInterestRequest,
+  GetUserFillsByTimeRequest,
+  GetUserFillsRequest,
+  GetUserFundingHistoryRequest,
+  GetUserNonFundingLedgerUpdatesRequest,
+  GetUserTwapSliceFillsByTimeRequest,
+  GetVaultDetailsRequest,
+  UserRequest,
+} from './types/request/info.types.js';
+import type {
+  ExchangeResponse,
+  OrderResponseData,
+} from './types/response/exchange.types.js';
+import type {
+  AccountBalancesResponse,
+  AllMidsResponse,
+  Candle,
+  InfoResponse,
+  OpenOrder,
+  OrderBookResponse,
+  PerpAccountSummaryResponse,
+  PerpMeta,
+  SpotBalancesResponse,
+  SpotMeta,
+  UserFill,
+  UserRoleResponse,
+} from './types/response/info.types.js';
+import type {
+  JsonObject,
+  RequestOptions,
+  RestClientOptions,
+  UserSignedActionDefinition,
+} from './types/shared.types.js';
+
+type InfoParams = object;
+
+type BuilderApprovalState =
+  'approved' | 'checking' | 'unapproved' | 'unavailable' | 'unchecked';
+
+interface BuilderApprovalOwner {
+  address: string;
+  canAutoApprove: boolean;
+}
+
+interface SignerAccountResolution {
+  accountAddress: string;
+  role?: UserRoleResponse;
+  signerAddress: string;
+}
+
+const BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS = 1_000;
+const DEFAULT_MARKET_ORDER_SLIPPAGE = 0.05;
+
+const TRADING_ACTIONS = new Set([
+  'batchModify',
+  'cancel',
+  'cancelByCloid',
+  'modify',
+  'order',
+  'scheduleCancel',
+  'twapCancel',
+  'twapOrder',
+]);
+
+function userRequest<T extends UserRequest>(params: T): T {
+  return normalizeAddresses(params);
+}
+
+function userSignedAction(type: string, params: object): JsonObject {
+  const fields = normalizeAddresses(sanitizeObjectForWire({ ...params }));
+  delete fields.type;
+
+  return {
+    type,
+    ...fields,
+    ...('nonce' in fields || 'time' in fields ? {} : { nonce: 0 }),
+  };
+}
+
+function decimalOrSubaccountAmount(value: string): string {
+  const match = /^(.+?)\s+subaccount:(0x[0-9a-fA-F]{40})$/.exec(value);
+  if (!match) {
+    return decimalToWire(value);
+  }
+
+  return `${decimalToWire(match[1])} subaccount:${normalizeAddresses(match[2])}`;
+}
+
+function positiveDecimal(value: string, field: string): string {
+  const normalized = decimalToWire(value);
+  if (normalized === '0' || normalized.startsWith('-')) {
+    throw new RangeError(`${field} must be greater than zero.`);
+  }
+  return normalized;
+}
+
+function floorDecimalPlaces(
+  value: string,
+  decimalPlaces: number,
+  field: string,
+): string {
+  const normalized = positiveDecimal(value, field);
+  const [integer, fraction = ''] = normalized.split('.');
+  const truncatedFraction = fraction.slice(0, decimalPlaces);
+  const truncated = decimalToWire(
+    truncatedFraction ? `${integer}.${truncatedFraction}` : integer,
+  );
+  if (truncated === '0') {
+    throw new RangeError(
+      `${field} rounds to zero at ${decimalPlaces} decimal places.`,
+    );
+  }
+  return truncated;
+}
+
+function marketLimitPrice(
+  mid: string,
+  isBuy: boolean,
+  maxSlippage: number,
+  asset: ResolvedAsset,
+): string {
+  if (asset.szDecimals === undefined) {
+    throw new TypeError(
+      `Market order metadata is unavailable for "${asset.canonicalName}". Use a metadata-derived symbol instead of a numeric asset ID.`,
+    );
+  }
+
+  const midNumber = Number(mid);
+  if (!Number.isFinite(midNumber) || midNumber <= 0) {
+    throw new TypeError(
+      `Hyperliquid returned an invalid midpoint for "${asset.canonicalName}".`,
+    );
+  }
+
+  const maxPriceDecimals =
+    (asset.kind === 'spot' || asset.kind === 'outcome' ? 8 : 6) -
+    asset.szDecimals;
+  if (maxPriceDecimals < 0) {
+    throw new TypeError(
+      `Hyperliquid returned invalid size decimals for "${asset.canonicalName}".`,
+    );
+  }
+
+  const adjusted = midNumber * (isBuy ? 1 + maxSlippage : 1 - maxSlippage);
+  const fiveSignificantFigures = Number(adjusted.toPrecision(5));
+  return positiveDecimal(
+    fiveSignificantFigures.toFixed(maxPriceDecimals),
+    'Market order limit price',
+  );
+}
+
+export class RestClient extends BaseRestClient {
+  readonly actionBuilder: ActionBuilder;
+
+  readonly assetResolver: AssetResolver;
+
+  private builderAutoApprovalPromise: Promise<void> | undefined;
+
+  private builderApprovalOwner: BuilderApprovalOwner | undefined;
+
+  private builderApprovalPromise: Promise<void> | undefined;
+
+  private builderApprovalState: BuilderApprovalState = 'unchecked';
+
+  private builderOrderStarted = false;
+
+  private builderPreflightDeadline: number | undefined;
+
+  private referralAttempted = false;
+
+  private signerAccountPromise: Promise<SignerAccountResolution> | undefined;
+
+  constructor(options: RestClientOptions = {}) {
+    super(
+      options.baseUrl ??
+        (options.testnet === true ? TESTNET_API_URL : MAINNET_API_URL),
+      options,
+    );
+    this.assetResolver = new AssetResolver(
+      (request) => this.submitRawInfoRequest(request),
+      options.assetCacheTtlMs,
+    );
+    this.actionBuilder = new ActionBuilder(this.assetResolver, options);
+  }
+
+  submitRawInfoRequest<T = InfoResponse>(
+    request: InfoParams,
+    requestOptions?: RequestOptions,
+  ): Promise<T> {
+    return this.post<T>(
+      '/info',
+      sanitizeObjectForWire({ ...request }),
+      requestOptions,
+    );
+  }
+
+  async submitRawL1Action<T = ExchangeResponse>(
+    action: JsonObject,
+    options: L1RequestOptions = {},
+  ): Promise<T> {
+    const builderPreflight = this.prepareBuilderForTradingAction(
+      action.type,
+      this.actionBuilder.hasSigner()
+        ? () => this.resolveBuilderApprovalOwner()
+        : undefined,
+    );
+    this.beforeTradingAction(action.type);
+    await builderPreflight;
+    const envelope = await this.actionBuilder.prepareL1Action(action, options);
+    return this.post<T>('/exchange', envelope, options.requestOptions);
+  }
+
+  async submitRawUserSignedAction<T = ExchangeResponse>(
+    action: JsonObject,
+    definition: UserSignedActionDefinition,
+    options: UserSignedRequestOptions = {},
+  ): Promise<T> {
+    const builderPreflight = this.prepareBuilderForTradingAction(
+      action.type,
+      this.actionBuilder.hasSigner()
+        ? () => this.resolveBuilderApprovalOwner()
+        : undefined,
+    );
+    this.beforeTradingAction(action.type);
+    await builderPreflight;
+    const envelope = await this.actionBuilder.prepareUserSignedAction(
+      action,
+      definition,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, options.requestOptions);
+  }
+
+  async submitMultiSigL1Action<T = ExchangeResponse>(
+    action: JsonObject,
+    options: MultiSigL1RequestOptions,
+  ): Promise<T> {
+    const builderPreflight = this.prepareBuilderForTradingAction(
+      action.type,
+      () =>
+        Promise.resolve({
+          address: normalizeAddresses(options.multiSigUser),
+          canAutoApprove: false,
+        }),
+    );
+    this.beforeMultiSigTradingAction(action.type, options);
+    await builderPreflight;
+    const envelope = await this.actionBuilder.prepareMultiSigL1Action(
+      action,
+      options.signers,
+      options.multiSigUser,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, options.requestOptions);
+  }
+
+  async submitMultiSigUserSignedAction<T = ExchangeResponse>(
+    action: JsonObject,
+    definition: UserSignedActionDefinition,
+    options: MultiSigUserSignedRequestOptions,
+  ): Promise<T> {
+    const builderPreflight = this.prepareBuilderForTradingAction(
+      action.type,
+      () =>
+        Promise.resolve({
+          address: normalizeAddresses(options.multiSigUser),
+          canAutoApprove: false,
+        }),
+    );
+    this.beforeMultiSigTradingAction(action.type, options);
+    await builderPreflight;
+    const envelope = await this.actionBuilder.prepareMultiSigUserSignedAction(
+      action,
+      definition,
+      options.signers,
+      options.multiSigUser,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, options.requestOptions);
+  }
+
+  resolveAsset(identifier: AssetIdentifier): Promise<ResolvedAsset> {
+    return this.assetResolver.resolve(identifier);
+  }
+
+  refreshAssetMetadata(): Promise<void> {
+    return this.assetResolver.refresh();
+  }
+
+  getAccountAddress(requestOptions?: RequestOptions): Promise<string> {
+    return this.resolveAccountAddress(undefined, requestOptions);
+  }
+
+  getAllMids(
+    params: { dex?: string } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<AllMidsResponse> {
+    return this.info('allMids', params, requestOptions);
+  }
+
+  async getActiveAssetData(
+    params: AccountRequest & { coin: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo(
+      'activeAssetData',
+      {
+        ...params,
+        coin: await this.infoCoin(params.coin),
+      },
+      requestOptions,
+    );
+  }
+
+  getAllBorrowLendReserveStates(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('allBorrowLendReserveStates', {}, requestOptions);
+  }
+
+  getAllPerpMetadata(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('allPerpMetas', {}, requestOptions);
+  }
+
+  getApprovedBuilders(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('approvedBuilders', params, requestOptions);
+  }
+
+  getBorrowLendReserveState(
+    params: { token: number },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('borrowLendReserveState', params, requestOptions);
+  }
+
+  getUserBorrowLendState(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('borrowLendUserState', params, requestOptions);
+  }
+
+  async getCandles(
+    params: GetCandlesRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<Candle[]> {
+    return this.info(
+      'candleSnapshot',
+      {
+        req: {
+          ...params,
+          coin: await this.infoCoin(params.coin),
+        },
+      },
+      requestOptions,
+    );
+  }
+
+  getPerpAccountSummary(
+    params: AccountDexRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<PerpAccountSummaryResponse> {
+    return this.accountInfo('clearinghouseState', params, requestOptions);
+  }
+
+  getStakingDelegations(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('delegations', params, requestOptions);
+  }
+
+  getStakingHistory(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('delegatorHistory', params, requestOptions);
+  }
+
+  getStakingRewards(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('delegatorRewards', params, requestOptions);
+  }
+
+  getStakingSummary(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('delegatorSummary', params, requestOptions);
+  }
+
+  getExchangeStatus(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('exchangeStatus', {}, requestOptions);
+  }
+
+  getExtraAgents(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('extraAgents', params, requestOptions);
+  }
+
+  getFrontendOpenOrders(
+    params: AccountDexRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<OpenOrder[]> {
+    return this.accountInfo('frontendOpenOrders', params, requestOptions);
+  }
+
+  async getFundingHistory(
+    params: GetFundingHistoryRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info(
+      'fundingHistory',
+      {
+        ...params,
+        coin: await this.infoCoin(params.coin),
+      },
+      requestOptions,
+    );
+  }
+
+  getGossipPriorityAuctionStatus(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('gossipPriorityAuctionStatus', {}, requestOptions);
+  }
+
+  getGossipRootIps(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('gossipRootIps', {}, requestOptions);
+  }
+
+  getOrderHistory(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('historicalOrders', params, requestOptions);
+  }
+
+  getVipStatus(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<boolean> {
+    return this.accountInfo('isVip', params, requestOptions);
+  }
+
+  async getOrderBook(
+    params: GetOrderBookRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<OrderBookResponse | null> {
+    return this.info(
+      'l2Book',
+      {
+        ...params,
+        coin: await this.infoCoin(params.coin),
+      },
+      requestOptions,
+    );
+  }
+
+  getLeadingVaults(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('leadingVaults', params, requestOptions);
+  }
+
+  getLegalStatus(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('legalCheck', params, requestOptions);
+  }
+
+  getLiquidatablePositions(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('liquidatable', {}, requestOptions);
+  }
+
+  getMarginTable(
+    params: { id: number },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('marginTable', params, requestOptions);
+  }
+
+  getMaxBuilderFee(
+    params: GetMaxBuilderFeeRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<number> {
+    return this.accountInfo('maxBuilderFee', params, requestOptions);
+  }
+
+  getMaxMarketOrderNotionals(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('maxMarketOrderNtls', {}, requestOptions);
+  }
+
+  getPerpMetadata(
+    params: { dex?: string } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<PerpMeta> {
+    return this.info('meta', params, requestOptions);
+  }
+
+  getPerpAssetContexts(
+    params: { dex?: string } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('metaAndAssetCtxs', params, requestOptions);
+  }
+
+  getOpenOrders(
+    params: AccountDexRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<OpenOrder[]> {
+    return this.accountInfo('openOrders', params, requestOptions);
+  }
+
+  getOrderStatus(
+    params: GetOrderStatusRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('orderStatus', params, requestOptions);
+  }
+
+  getOutcomeMetadata(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('outcomeMeta', {}, requestOptions);
+  }
+
+  async getPerpAnnotation(
+    params: { coin: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info(
+      'perpAnnotation',
+      { coin: await this.infoCoin(params.coin) },
+      requestOptions,
+    );
+  }
+
+  getPerpCategories(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('perpCategories', {}, requestOptions);
+  }
+
+  getConcisePerpAnnotations(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('perpConciseAnnotations', {}, requestOptions);
+  }
+
+  getPerpDeployAuctionStatus(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('perpDeployAuctionStatus', {}, requestOptions);
+  }
+
+  getPerpDexLimits(
+    params: { dex: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('perpDexLimits', params, requestOptions);
+  }
+
+  getPerpDexStatus(
+    params: { dex: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('perpDexStatus', params, requestOptions);
+  }
+
+  getPerpDexs(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('perpDexs', {}, requestOptions);
+  }
+
+  getPerpsAtOpenInterestCap(
+    params: { dex?: string } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<string[]> {
+    return this.info('perpsAtOpenInterestCap', params, requestOptions);
+  }
+
+  getPortfolio(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('portfolio', params, requestOptions);
+  }
+
+  getPreTransferCheck(
+    params: GetPreTransferCheckRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info(
+      'preTransferCheck',
+      normalizeAddresses(params),
+      requestOptions,
+    );
+  }
+
+  getPredictedFundingRates(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('predictedFundings', {}, requestOptions);
+  }
+
+  async getRecentTrades(
+    params: { coin: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info(
+      'recentTrades',
+      { coin: await this.infoCoin(params.coin) },
+      requestOptions,
+    );
+  }
+
+  getReferralInfo(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('referral', params, requestOptions);
+  }
+
+  getSettledOutcome(
+    params: { outcome: number },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('settledOutcome', params, requestOptions);
+  }
+
+  async getBalances(
+    params: AccountDexRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<AccountBalancesResponse> {
+    const user = await this.resolveAccountAddress(params.user, requestOptions);
+    const [perp, spot] = await Promise.all([
+      this.getPerpAccountSummary(
+        {
+          user,
+          ...(params.dex === undefined ? {} : { dex: params.dex }),
+        },
+        requestOptions,
+      ),
+      this.getSpotBalances({ user }, requestOptions),
+    ]);
+
+    return { perp, spot, user };
+  }
+
+  getSpotBalances(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SpotBalancesResponse> {
+    return this.accountInfo('spotClearinghouseState', params, requestOptions);
+  }
+
+  getSpotDeployAuctionStatus(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('spotDeployState', params, requestOptions);
+  }
+
+  getSpotMetadata(requestOptions?: RequestOptions): Promise<SpotMeta> {
+    return this.info('spotMeta', {}, requestOptions);
+  }
+
+  getSpotAssetContexts(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('spotMetaAndAssetCtxs', {}, requestOptions);
+  }
+
+  getSpotPairDeployAuctionStatus(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('spotPairDeployAuctionStatus', {}, requestOptions);
+  }
+
+  getSubAccounts(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('subAccounts', params, requestOptions);
+  }
+
+  getSubAccountsWithAllDexStates(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('subAccounts2', params, requestOptions);
+  }
+
+  getTokenDetails(
+    params: { tokenId: string },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('tokenDetails', params, requestOptions);
+  }
+
+  getTwapHistory(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('twapHistory', params, requestOptions);
+  }
+
+  getUserAbstraction(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userAbstraction', params, requestOptions);
+  }
+
+  getUserBorrowLendInterest(
+    params: GetUserBorrowLendInterestRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userBorrowLendInterest', params, requestOptions);
+  }
+
+  getUserDexAbstraction(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userDexAbstraction', params, requestOptions);
+  }
+
+  getUserFees(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userFees', params, requestOptions);
+  }
+
+  getUserFills(
+    params: GetUserFillsRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<UserFill[]> {
+    return this.accountInfo('userFills', params, requestOptions);
+  }
+
+  getUserFillsByTime(
+    params: GetUserFillsByTimeRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<UserFill[]> {
+    return this.accountInfo('userFillsByTime', params, requestOptions);
+  }
+
+  getUserFundingHistory(
+    params: GetUserFundingHistoryRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userFunding', params, requestOptions);
+  }
+
+  getUserNonFundingLedgerUpdates(
+    params: GetUserNonFundingLedgerUpdatesRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo(
+      'userNonFundingLedgerUpdates',
+      params,
+      requestOptions,
+    );
+  }
+
+  getUserRateLimit(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userRateLimit', params, requestOptions);
+  }
+
+  getUserRole(
+    params: UserRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<UserRoleResponse> {
+    return this.info('userRole', userRequest(params), requestOptions);
+  }
+
+  getMultiSigSigners(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userToMultiSigSigners', params, requestOptions);
+  }
+
+  getUserTwapSliceFills(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userTwapSliceFills', params, requestOptions);
+  }
+
+  getUserTwapSliceFillsByTime(
+    params: GetUserTwapSliceFillsByTimeRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userTwapSliceFillsByTime', params, requestOptions);
+  }
+
+  getUserVaultDeposits(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('userVaultEquities', params, requestOptions);
+  }
+
+  getValidatorL1Votes(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('validatorL1Votes', {}, requestOptions);
+  }
+
+  getValidatorSummaries(
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('validatorSummaries', {}, requestOptions);
+  }
+
+  getVaultDetails(
+    params: GetVaultDetailsRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info(
+      'vaultDetails',
+      normalizeAddresses(params),
+      requestOptions,
+    );
+  }
+
+  getVaultSummaries(requestOptions?: RequestOptions): Promise<InfoResponse> {
+    return this.info('vaultSummaries', {}, requestOptions);
+  }
+
+  getWebData2(
+    params: AccountRequest = {},
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.accountInfo('webData2', params, requestOptions);
+  }
+
+  getAlignedQuoteTokenStatus(
+    params: { token: number },
+    requestOptions?: RequestOptions,
+  ): Promise<InfoResponse> {
+    return this.info('alignedQuoteTokenInfo', params, requestOptions);
+  }
+
+  async submitOrder(
+    params: SubmitOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<OrderResponseData>> {
+    const action = await this.actionBuilder.actions.order(
+      params.orders,
+      params.grouping,
+    );
+    return this.submitRawL1Action(action, options);
+  }
+
+  async submitMarketOrder(
+    params: SubmitMarketOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<OrderResponseData>> {
+    if (params.side !== 'buy' && params.side !== 'sell') {
+      throw new TypeError('side must be "buy" or "sell".');
+    }
+    const maxSlippage = params.maxSlippage ?? DEFAULT_MARKET_ORDER_SLIPPAGE;
+    if (!Number.isFinite(maxSlippage) || maxSlippage < 0 || maxSlippage >= 1) {
+      throw new RangeError('maxSlippage must be at least 0 and less than 1.');
+    }
+    positiveDecimal(params.size, 'size');
+
+    const asset = await this.resolveAsset(params.symbol);
+    if (asset.szDecimals === undefined) {
+      throw new TypeError(
+        `Market order metadata is unavailable for "${asset.canonicalName}". Use a metadata-derived symbol instead of a numeric asset ID.`,
+      );
+    }
+
+    const dex =
+      asset.kind === 'hip3' ? asset.canonicalName.split(':', 1)[0] : undefined;
+    const mids = await this.getAllMids(
+      dex ? { dex } : {},
+      options.requestOptions,
+    );
+    const mid = mids[asset.canonicalName];
+    if (mid === undefined) {
+      throw new TypeError(
+        `Hyperliquid did not return a midpoint for "${asset.canonicalName}".`,
+      );
+    }
+
+    const isBuy = params.side === 'buy';
+
+    return this.submitOrder(
+      {
+        orders: [
+          {
+            a: asset.assetId,
+            b: isBuy,
+            ...(params.clientOrderId === undefined
+              ? {}
+              : { c: params.clientOrderId }),
+            p: marketLimitPrice(mid, isBuy, maxSlippage, asset),
+            r: params.reduceOnly ?? false,
+            s: floorDecimalPlaces(params.size, asset.szDecimals, 'size'),
+            t: { limit: { tif: 'Ioc' } },
+          },
+        ],
+      },
+      options,
+    );
+  }
+
+  async submitLimitOrder(
+    params: SubmitLimitOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<OrderResponseData>> {
+    if (params.side !== 'buy' && params.side !== 'sell') {
+      throw new TypeError('side must be "buy" or "sell".');
+    }
+    if (
+      params.timeInForce !== undefined &&
+      params.timeInForce !== 'GTC' &&
+      params.timeInForce !== 'IOC'
+    ) {
+      throw new TypeError('timeInForce must be "GTC" or "IOC".');
+    }
+    if (params.postOnly && params.timeInForce === 'IOC') {
+      throw new TypeError(
+        'postOnly cannot be combined with timeInForce "IOC".',
+      );
+    }
+
+    return this.submitOrder(
+      {
+        orders: [
+          {
+            a: params.symbol,
+            b: params.side === 'buy',
+            ...(params.clientOrderId === undefined
+              ? {}
+              : { c: params.clientOrderId }),
+            p: positiveDecimal(params.price, 'price'),
+            r: params.reduceOnly ?? false,
+            s: positiveDecimal(params.size, 'size'),
+            t: {
+              limit: {
+                tif: params.postOnly
+                  ? 'Alo'
+                  : params.timeInForce === 'IOC'
+                    ? 'Ioc'
+                    : 'Gtc',
+              },
+            },
+          },
+        ],
+      },
+      options,
+    );
+  }
+
+  async modifyOrder(
+    params: ModifyOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.submitRawL1Action(
+      await this.actionBuilder.actions.modify(params, params.alwaysPlace),
+      options,
+    );
+  }
+
+  async modifyOrders(
+    params: ModifyOrdersRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.submitRawL1Action(
+      await this.actionBuilder.actions.batchModify(
+        params.modifies,
+        params.alwaysPlace,
+      ),
+      options,
+    );
+  }
+
+  async cancelOrders(
+    params: CancelOrdersRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.submitRawL1Action(
+      await this.actionBuilder.actions.cancel(
+        params.cancels,
+        params.fastCancel,
+      ),
+      options,
+    );
+  }
+
+  async cancelOrdersByClientOrderId(
+    params: CancelOrdersByClientOrderIdRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.submitRawL1Action(
+      await this.actionBuilder.actions.cancelByCloid(
+        params.cancels,
+        params.fastCancel,
+      ),
+      options,
+    );
+  }
+
+  updateLeverage(
+    params: UpdateLeverageRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'updateLeverage',
+      {
+        asset: params.asset,
+        isCross: params.isCross,
+        leverage: params.leverage,
+      },
+      options,
+    );
+  }
+
+  updateIsolatedMargin(
+    params: UpdateIsolatedMarginRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('updateIsolatedMargin', params, options);
+  }
+
+  setIsolatedMarginLeverage(
+    params: SetIsolatedMarginLeverageRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'topUpIsolatedOnlyMargin',
+      { ...params, leverage: decimalToWire(params.leverage) },
+      options,
+    );
+  }
+
+  submitTwapOrder(
+    params: SubmitTwapOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('twapOrder', { twap: params }, options);
+  }
+
+  cancelTwapOrder(
+    params: CancelTwapOrderRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('twapCancel', params, options);
+  }
+
+  setCancelAllAfter(
+    params: { time?: number } = {},
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('scheduleCancel', params, options);
+  }
+
+  setReferrer(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+    this.referralAttempted = true;
+    const { referralCode } = this.actionBuilder.partnerConfiguration();
+    return this.l1('setReferrer', { code: referralCode }, options, true);
+  }
+
+  registerReferrer(
+    params: { code: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('registerReferrer', params, options);
+  }
+
+  async approveBuilderFee(
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    const partner = this.actionBuilder.partnerConfiguration();
+    const response = await this.userSigned(
+      'approveBuilderFee',
+      {
+        builder: partner.builder.b,
+        maxFeeRate: partner.approvalPercentage,
+      },
+      USER_SIGNED_ACTIONS.approveBuilderFee,
+      options,
+    );
+    if (response.status === 'ok') {
+      this.confirmBuilderFeeApproval();
+    }
+    return response;
+  }
+
+  approveApiWallet(
+    params: ApproveApiWalletRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'approveAgent',
+      {
+        agentAddress: params.agentAddress,
+        agentName: params.agentName ?? '',
+      },
+      USER_SIGNED_ACTIONS.approveAgent,
+      options,
+    );
+  }
+
+  sendUsd(
+    params: SendUsdRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'usdSend',
+      { ...params, amount: decimalToWire(params.amount), time: 0 },
+      USER_SIGNED_ACTIONS.usdSend,
+      options,
+    );
+  }
+
+  sendSpotAsset(
+    params: SendSpotAssetRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'spotSend',
+      { ...params, amount: decimalToWire(params.amount), time: 0 },
+      USER_SIGNED_ACTIONS.spotSend,
+      options,
+    );
+  }
+
+  withdrawUsd(
+    params: WithdrawUsdRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'withdraw3',
+      { ...params, amount: decimalToWire(params.amount), time: 0 },
+      USER_SIGNED_ACTIONS.withdraw,
+      options,
+    );
+  }
+
+  transferUsdBetweenSpotAndPerp(
+    params: TransferUsdBetweenSpotAndPerpRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'usdClassTransfer',
+      { ...params, amount: decimalOrSubaccountAmount(params.amount) },
+      USER_SIGNED_ACTIONS.usdClassTransfer,
+      options,
+    );
+  }
+
+  sendAsset(
+    params: SendAssetRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'sendAsset',
+      {
+        ...params,
+        amount: decimalToWire(params.amount),
+        fromSubAccount: params.fromSubAccount ?? '',
+      },
+      USER_SIGNED_ACTIONS.sendAsset,
+      options,
+    );
+  }
+
+  sendToEvmWithData(
+    params: SendToEvmWithDataRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'sendToEvmWithData',
+      { ...params, amount: decimalToWire(params.amount) },
+      USER_SIGNED_ACTIONS.sendToEvmWithData,
+      options,
+    );
+  }
+
+  sendAssetFromApiWallet(
+    params: SendAssetFromApiWalletRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'agentSendAsset',
+      {
+        ...params,
+        amount: decimalToWire(params.amount),
+        fromSubAccount: params.fromSubAccount ?? '',
+        nonce: 0,
+      },
+      options,
+    );
+  }
+
+  depositIntoStaking(
+    params: { wei: number },
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'cDeposit',
+      params,
+      USER_SIGNED_ACTIONS.cDeposit,
+      options,
+    );
+  }
+
+  withdrawFromStaking(
+    params: { wei: number },
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'cWithdraw',
+      params,
+      USER_SIGNED_ACTIONS.cWithdraw,
+      options,
+    );
+  }
+
+  delegateOrUndelegateStake(
+    params: DelegateOrUndelegateStakeRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'tokenDelegate',
+      params,
+      USER_SIGNED_ACTIONS.tokenDelegate,
+      options,
+    );
+  }
+
+  convertToMultiSigUser(
+    params: ConvertToMultiSigUserRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    const signers = JSON.stringify(
+      params.signers
+        ? {
+            authorizedUsers: params.signers.authorizedUsers.map((user) =>
+              normalizeAddresses(user),
+            ),
+            threshold: params.signers.threshold,
+          }
+        : null,
+    );
+
+    return this.userSigned(
+      'convertToMultiSigUser',
+      { signers },
+      USER_SIGNED_ACTIONS.convertToMultiSigUser,
+      options,
+    );
+  }
+
+  linkStakingAccount(
+    params: LinkStakingAccountRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'linkStakingUser',
+      params,
+      USER_SIGNED_ACTIONS.linkStakingUser,
+      options,
+    );
+  }
+
+  disableStakingTradingLink(
+    params: { tradingUser: string },
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'stakingLinkDisableTradingUser',
+      params,
+      USER_SIGNED_ACTIONS.stakingLinkDisableTradingUser,
+      options,
+    );
+  }
+
+  setUserPortfolioMargin(
+    params: UserToggleRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'userPortfolioMargin',
+      params,
+      USER_SIGNED_ACTIONS.userPortfolioMargin,
+      options,
+    );
+  }
+
+  setUserAbstraction(
+    params: SetUserAbstractionRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'userSetAbstraction',
+      params,
+      USER_SIGNED_ACTIONS.userSetAbstraction,
+      options,
+    );
+  }
+
+  setUserDexAbstraction(
+    params: UserToggleRequest,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.userSigned(
+      'userDexAbstraction',
+      params,
+      USER_SIGNED_ACTIONS.userDexAbstraction,
+      options,
+    );
+  }
+
+  enableApiWalletDexAbstraction(
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('agentEnableDexAbstraction', {}, options);
+  }
+
+  setApiWalletAbstraction(
+    params: { abstraction: 'i' | 'p' | 'u' },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('agentSetAbstraction', params, options);
+  }
+
+  executeBorrowLendOperation(
+    params: {
+      amount: string | null;
+      operation: 'borrow' | 'repay' | 'supply' | 'withdraw';
+      token: number;
+    },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'borrowLend',
+      {
+        ...params,
+        amount: params.amount === null ? null : decimalToWire(params.amount),
+      },
+      options,
+    );
+  }
+
+  claimRewards(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+    return this.l1('claimRewards', {}, options);
+  }
+
+  createSubAccount(
+    params: { name: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('createSubAccount', params, options);
+  }
+
+  createVault(
+    params: { description: string; initialUsd: number; name: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<string>> {
+    return this.l1('createVault', { ...params, nonce: 0 }, options) as Promise<
+      ExchangeResponse<string>
+    >;
+  }
+
+  setEvmBigBlocks(
+    params: { usingBigBlocks: boolean },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('evmUserModify', params, options);
+  }
+
+  finalizeEvmContract(
+    params: {
+      input:
+        | 'customStorageSlot'
+        | 'firstStorageSlot'
+        | { create: { nonce: number } };
+      token: number;
+    },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('finalizeEvmContract', params, options);
+  }
+
+  submitGossipPriorityBid(
+    params: { ip: string; maxGas: number; slotId: 0 | 1 },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('gossipPriorityBid', params, options);
+  }
+
+  transferHip3LiquidatorFunds(
+    params: { dex: string; isDeposit: boolean; ntl: number },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('hip3LiquidatorTransfer', params, options);
+  }
+
+  invalidateNonce(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+    return this.l1('noop', {}, options);
+  }
+
+  deployPerp(
+    params: DeployPerpRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('perpDeploy', params, options);
+  }
+
+  deploySpot(
+    params: DeploySpotRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('spotDeploy', params, options);
+  }
+
+  reserveAdditionalActions(
+    params: { weight: number },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('reserveRequestWeight', params, options);
+  }
+
+  setDisplayName(
+    params: { displayName: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('setDisplayName', params, options);
+  }
+
+  setSpotDusting(
+    params: { toggleSpotDusting: { optOut: boolean } },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('spotUser', params, options);
+  }
+
+  renameSubAccount(
+    params: { name: string; subAccountUser: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('subAccountModify', params, options);
+  }
+
+  transferSpotToOrFromSubAccount(
+    params: TransferSpotToOrFromSubAccountRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'subAccountSpotTransfer',
+      { ...params, amount: decimalToWire(params.amount) },
+      options,
+    );
+  }
+
+  transferUsdToOrFromSubAccount(
+    params: TransferUsdToOrFromSubAccountRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('subAccountTransfer', params, options);
+  }
+
+  transferVaultFunds(
+    params: TransferVaultFundsRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('vaultTransfer', params, options);
+  }
+
+  distributeVaultFunds(
+    params: { usd: number; vaultAddress: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('vaultDistribute', params, options);
+  }
+
+  modifyVault(
+    params: {
+      allowDeposits?: boolean | null;
+      alwaysCloseOnWithdraw?: boolean | null;
+      vaultAddress: string;
+    },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'vaultModify',
+      {
+        allowDeposits: params.allowDeposits ?? null,
+        alwaysCloseOnWithdraw: params.alwaysCloseOnWithdraw ?? null,
+        vaultAddress: params.vaultAddress,
+      },
+      options,
+    );
+  }
+
+  updateValidatorL1Stream(
+    params: { riskFreeRate: string },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1(
+      'validatorL1Stream',
+      { riskFreeRate: decimalToWire(params.riskFreeRate) },
+      options,
+    );
+  }
+
+  submitSignerAction(
+    params: { jailSelf: null } | { unjailSelf: null },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('CSignerAction', params, options);
+  }
+
+  submitValidatorAction(
+    params: Omit<JsonObject, 'type'>,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('CValidatorAction', params, options);
+  }
+
+  authorizeAqav2Role(
+    params: { role: 'technical' | 'treasury'; token: number },
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('authorizeAqav2Role', params, options);
+  }
+
+  submitUserOutcome(
+    params: SubmitUserOutcomeRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.l1('userOutcome', params, options);
+  }
+
+  private async accountInfo<T>(
+    type: string,
+    params: InfoParams,
+    requestOptions?: RequestOptions,
+  ): Promise<T> {
+    const { user: requestedUser, ...fields } = params as AccountRequest &
+      Record<string, unknown>;
+    const user = await this.resolveAccountAddress(
+      requestedUser,
+      requestOptions,
+    );
+
+    return this.info<T>(
+      type,
+      normalizeAddresses({ user, ...fields }),
+      requestOptions,
+    );
+  }
+
+  private async resolveAccountAddress(
+    requestedUser?: string,
+    requestOptions?: RequestOptions,
+  ): Promise<string> {
+    if (requestedUser !== undefined) {
+      return normalizeAddresses(requestedUser);
+    }
+
+    const configuredVault = this.actionBuilder.configuredVault();
+    if (configuredVault) {
+      return configuredVault;
+    }
+
+    const configuredAccount = this.actionBuilder.configuredAccount();
+    if (configuredAccount) {
+      return configuredAccount;
+    }
+
+    if (!this.actionBuilder.hasSigner()) {
+      throw new TypeError(
+        'Provide user, set accountAddress or vaultAddress, or configure privateKey or signer.',
+      );
+    }
+
+    return (await this.resolveSignerAccount(requestOptions)).accountAddress;
+  }
+
+  private resolveSignerAccount(
+    requestOptions?: RequestOptions,
+  ): Promise<SignerAccountResolution> {
+    if (!this.signerAccountPromise) {
+      this.signerAccountPromise = (async () => {
+        const signerAddress = await this.actionBuilder.signerAddress();
+        const configuredAccount = this.actionBuilder.configuredAccount();
+        if (configuredAccount) {
+          return {
+            accountAddress: configuredAccount,
+            signerAddress,
+          };
+        }
+
+        const role = await this.info<UserRoleResponse>(
+          'userRole',
+          { user: signerAddress },
+          requestOptions,
+        );
+        if (role.role === 'missing') {
+          throw new TypeError(
+            'The signer is not a Hyperliquid account on this network. Set accountAddress when using an API wallet.',
+          );
+        }
+
+        const accountAddress =
+          role.role === 'agent'
+            ? normalizeAddresses(role.data.user)
+            : role.role === 'subAccount'
+              ? normalizeAddresses(role.data.master)
+              : signerAddress;
+
+        return { accountAddress, role, signerAddress };
+      })().catch((error: unknown) => {
+        this.signerAccountPromise = undefined;
+        throw error;
+      });
+    }
+
+    return this.signerAccountPromise;
+  }
+
+  private info<T>(
+    type: string,
+    params: InfoParams,
+    requestOptions?: RequestOptions,
+  ): Promise<T> {
+    const fields = sanitizeObjectForWire({ ...params });
+    delete fields.type;
+
+    return this.submitRawInfoRequest<T>({ type, ...fields }, requestOptions);
+  }
+
+  private async infoCoin(coin: string): Promise<string> {
+    return coin.includes('/')
+      ? (await this.assetResolver.resolve(coin)).canonicalName
+      : coin;
+  }
+
+  private l1(
+    type: string,
+    params: object,
+    options: L1RequestOptions,
+    skipTradingHooks = false,
+  ): Promise<ExchangeResponse> {
+    const fields = { ...params } as JsonObject;
+    delete fields.type;
+    const action = { type, ...fields };
+    if (skipTradingHooks) {
+      return this.submitPreparedL1Action(action, options);
+    }
+    return this.submitRawL1Action(action, options);
+  }
+
+  private userSigned(
+    type: string,
+    params: object,
+    definition: UserSignedActionDefinition,
+    options: UserSignedRequestOptions,
+  ): Promise<ExchangeResponse> {
+    return this.submitRawUserSignedAction(
+      userSignedAction(type, params),
+      definition,
+      options,
+    );
+  }
+
+  private beforeTradingAction(type: unknown): void {
+    if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
+      return;
+    }
+
+    this.scheduleReferral(() => this.setReferrer());
+  }
+
+  private beforeMultiSigTradingAction(
+    type: unknown,
+    options: MultiSigL1RequestOptions | MultiSigUserSignedRequestOptions,
+  ): void {
+    if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
+      return;
+    }
+
+    const multiSigOptions = {
+      multiSigUser: options.multiSigUser,
+      signers: options.signers,
+    };
+    this.scheduleReferral(() =>
+      this.submitPreparedMultiSigL1Action(
+        {
+          type: 'setReferrer',
+          code: this.actionBuilder.partnerConfiguration().referralCode,
+        },
+        multiSigOptions,
+      ),
+    );
+  }
+
+  private async checkBuilderApproval(
+    resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
+  ): Promise<void> {
+    const owner = await resolveOwner();
+    this.builderApprovalOwner = owner;
+    if (!owner) {
+      this.builderApprovalState = 'unavailable';
+      return;
+    }
+
+    const partner = this.actionBuilder.partnerConfiguration();
+    const approvedFee = await this.getMaxBuilderFee({
+      builder: partner.builder.b,
+      user: owner.address,
+    });
+    if (
+      !Number.isFinite(approvedFee) ||
+      !Number.isInteger(approvedFee) ||
+      approvedFee < 0
+    ) {
+      throw new TypeError(
+        'Hyperliquid returned an invalid maxBuilderFee response.',
+      );
+    }
+    if (this.builderApprovalState === 'approved') {
+      return;
+    }
+    if (approvedFee >= partner.builder.f) {
+      this.confirmBuilderFeeApproval();
+      return;
+    }
+
+    this.builderApprovalState = 'unapproved';
+  }
+
+  private confirmBuilderFeeApproval(): void {
+    this.builderApprovalState = 'approved';
+    this.actionBuilder.confirmBuilderFeeApproval();
+  }
+
+  private async resolveBuilderApprovalOwner(): Promise<
+    BuilderApprovalOwner | undefined
+  > {
+    const resolution = await this.resolveSignerAccount();
+    if (!resolution.role) {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove:
+          this.actionBuilder.usesPrivateKeySigner() &&
+          resolution.accountAddress === resolution.signerAddress,
+      };
+    }
+
+    const { role } = resolution;
+    if (role.role === 'user') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: this.actionBuilder.usesPrivateKeySigner(),
+      };
+    }
+    if (role.role === 'agent') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: false,
+      };
+    }
+    if (role.role === 'subAccount') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: false,
+      };
+    }
+    return undefined;
+  }
+
+  private getBuilderApprovalCheck(
+    resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
+  ): Promise<void> {
+    if (
+      this.builderApprovalPromise ||
+      this.builderApprovalState === 'approved'
+    ) {
+      return this.builderApprovalPromise ?? Promise.resolve();
+    }
+
+    this.builderApprovalState = 'checking';
+    this.builderApprovalPromise = Promise.resolve()
+      .then(() => this.checkBuilderApproval(resolveOwner))
+      .catch(() => {
+        if (this.builderApprovalState !== 'approved') {
+          this.builderApprovalState = 'unavailable';
+        }
+      })
+      .then(() => {
+        this.handleBuilderApprovalResult();
+      });
+    return this.builderApprovalPromise;
+  }
+
+  private handleBuilderApprovalResult(): void {
+    if (!this.builderOrderStarted) {
+      return;
+    }
+    if (
+      this.builderApprovalState === 'unapproved' &&
+      this.builderApprovalOwner?.canAutoApprove
+    ) {
+      this.scheduleAutomaticBuilderApproval();
+      return;
+    }
+    this.warnForBuilderApproval();
+  }
+
+  private async prepareBuilderForTradingAction(
+    type: unknown,
+    resolveOwner: (() => Promise<BuilderApprovalOwner | undefined>) | undefined,
+  ): Promise<void> {
+    if (type !== 'order' || !resolveOwner) {
+      return;
+    }
+
+    this.builderOrderStarted = true;
+    this.warnForBuilderApproval();
+    if (this.builderApprovalState === 'approved') {
+      return;
+    }
+    await this.waitForBuilderApprovalCheck(
+      this.getBuilderApprovalCheck(resolveOwner),
+    );
+  }
+
+  private scheduleAutomaticBuilderApproval(): void {
+    if (this.builderAutoApprovalPromise) {
+      return;
+    }
+
+    this.builderAutoApprovalPromise = this.approveBuilderFee()
+      .then((response) => {
+        if (response.status !== 'ok') {
+          this.warnForBuilderApproval();
+        }
+      })
+      .catch(() => {
+        this.builderApprovalState = 'unapproved';
+        this.warnForBuilderApproval();
+      });
+  }
+
+  private waitForBuilderApprovalCheck(check: Promise<void>): Promise<void> {
+    this.builderPreflightDeadline ??=
+      Date.now() + BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS;
+    const remaining = this.builderPreflightDeadline - Date.now();
+    if (remaining <= 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+        resolve();
+      };
+
+      timer = setTimeout(finish, remaining);
+      void check.then(finish);
+    });
+  }
+
+  private scheduleReferral(submit: () => Promise<unknown>): void {
+    if (this.referralAttempted) {
+      return;
+    }
+
+    this.referralAttempted = true;
+    queueMicrotask(() => {
+      void submit().catch(() => undefined);
+    });
+  }
+
+  private warnForBuilderApproval(): void {
+    if (
+      this.builderApprovalState !== 'unapproved' &&
+      this.builderApprovalState !== 'unavailable'
+    ) {
+      return;
+    }
+
+    const status =
+      this.builderApprovalState === 'unapproved'
+        ? 'is missing or below the configured fee'
+        : 'could not be verified';
+    try {
+      console.warn(
+        `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Orders are being submitted without a builder fee. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future major version may require approval before trading.`,
+      );
+    } catch {
+      // A broken logger must not stop an order.
+    }
+  }
+
+  private async submitPreparedL1Action(
+    action: JsonObject,
+    options: L1RequestOptions,
+  ): Promise<ExchangeResponse> {
+    const envelope = await this.actionBuilder.prepareL1Action(action, options);
+    return this.post<ExchangeResponse>(
+      '/exchange',
+      envelope,
+      options.requestOptions,
+    );
+  }
+
+  private async submitPreparedMultiSigL1Action(
+    action: JsonObject,
+    options: MultiSigL1RequestOptions,
+  ): Promise<ExchangeResponse> {
+    const envelope = await this.actionBuilder.prepareMultiSigL1Action(
+      action,
+      options.signers,
+      options.multiSigUser,
+      options,
+    );
+    return this.post<ExchangeResponse>(
+      '/exchange',
+      envelope,
+      options.requestOptions,
+    );
+  }
+}
+
+export type { AssetIdentifier, Grouping, ModifyWireInput, OrderWireInput };
