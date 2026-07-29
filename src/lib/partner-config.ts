@@ -1,6 +1,6 @@
 import type { BuilderCode } from '../types/shared.types.js';
 
-export const SIEBLY_REFERRAL_CODE: string = 'SDK';
+export const SIEBLY_REFERRAL_CODE: string = 'SIEBLY';
 export const SIEBLY_BUILDER_ADDRESS: string =
   '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2';
 export const SIEBLY_BUILDER_FEE: number = 10;

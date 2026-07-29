@@ -109,7 +109,7 @@ describe('RestClient Exchange requests', () => {
         b: '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2',
         f: 10,
       },
-      referralCode: 'SDK',
+      referralCode: 'SIEBLY',
     });
   });
 
