@@ -7,16 +7,29 @@ import type {
 } from '../../types/websockets/ws-portable.js';
 import { HyperliquidWebSocketError } from './errors.js';
 
-type ConnectionEvent = 'close' | 'error' | 'message' | 'open' | 'reconnect';
+type ConnectionEvent =
+  'close' | 'error' | 'message' | 'open' | 'reconnected' | 'reconnecting';
 type ConnectionListener = (value?: unknown) => void;
 
 export interface WsConnectionOptions {
   autoReconnect?: boolean;
-  heartbeatIntervalMs?: number;
-  heartbeatTimeoutMs?: number;
-  maxReconnectDelayMs?: number;
-  reconnectDelayMs?: number;
+  maxReconnectTimeout?: number;
+  pingInterval?: number;
+  pongTimeout?: number;
+  reconnectTimeout?: number;
   webSocketConstructor?: WebSocketConstructor;
+}
+
+function nonNegativeFinite(
+  value: number | undefined,
+  fallback: number,
+  field: string,
+): number {
+  const resolved = value ?? fallback;
+  if (!Number.isFinite(resolved) || resolved < 0) {
+    throw new RangeError(`${field} must be a finite number at least 0.`);
+  }
+  return resolved;
 }
 
 function messageDataToString(
@@ -47,9 +60,9 @@ export class WsConnection {
 
   private hasOpened = false;
 
-  private readonly heartbeatIntervalMs: number;
+  private readonly pingInterval: number;
 
-  private readonly heartbeatTimeoutMs: number;
+  private readonly pongTimeout: number;
 
   private readonly listeners = new Map<
     ConnectionEvent,
@@ -58,11 +71,11 @@ export class WsConnection {
 
   private manuallyClosed = false;
 
-  private readonly maxReconnectDelayMs: number;
+  private readonly maxReconnectTimeout: number;
 
   private reconnectAttempts = 0;
 
-  private readonly reconnectDelayMs: number;
+  private readonly reconnectTimeout: number;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -77,10 +90,26 @@ export class WsConnection {
     options: WsConnectionOptions = {},
   ) {
     this.autoReconnect = options.autoReconnect !== false;
-    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
-    this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 10_000;
-    this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? 30_000;
-    this.reconnectDelayMs = options.reconnectDelayMs ?? 500;
+    this.pingInterval = nonNegativeFinite(
+      options.pingInterval,
+      30_000,
+      'pingInterval',
+    );
+    this.pongTimeout = nonNegativeFinite(
+      options.pongTimeout,
+      10_000,
+      'pongTimeout',
+    );
+    this.maxReconnectTimeout = nonNegativeFinite(
+      options.maxReconnectTimeout,
+      30_000,
+      'maxReconnectTimeout',
+    );
+    this.reconnectTimeout = nonNegativeFinite(
+      options.reconnectTimeout,
+      500,
+      'reconnectTimeout',
+    );
     this.WebSocketImpl =
       options.webSocketConstructor ??
       (DefaultWebSocket as unknown as WebSocketConstructor);
@@ -118,7 +147,7 @@ export class WsConnection {
         this.reconnectAttempts = 0;
         this.startHeartbeat();
         resolve();
-        this.emit(wasReconnect ? 'reconnect' : 'open');
+        this.emit(wasReconnect ? 'reconnected' : 'open');
       };
 
       socket.onmessage = (event) => {
@@ -181,7 +210,6 @@ export class WsConnection {
     if (!this.socket || !this.isOpen) {
       throw new HyperliquidWebSocketError(
         'The Hyperliquid WebSocket connection is not open.',
-        { request: payload },
       );
     }
     this.socket.send(JSON.stringify(payload));
@@ -219,7 +247,7 @@ export class WsConnection {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    if (this.heartbeatIntervalMs <= 0) {
+    if (this.pingInterval === 0) {
       return;
     }
 
@@ -228,7 +256,7 @@ export class WsConnection {
         this.socket?.send(JSON.stringify({ method: 'ping' }));
         this.armPongTimeout();
       }
-    }, this.heartbeatIntervalMs);
+    }, this.pingInterval);
   }
 
   private stopHeartbeat(): void {
@@ -240,13 +268,13 @@ export class WsConnection {
   }
 
   private armPongTimeout(): void {
-    if (this.heartbeatTimeoutMs <= 0 || this.pongTimer) {
+    if (this.pongTimeout === 0 || this.pongTimer) {
       return;
     }
     this.pongTimer = setTimeout(() => {
       this.pongTimer = undefined;
       this.socket?.close(4000, 'Heartbeat timeout');
-    }, this.heartbeatTimeoutMs);
+    }, this.pongTimeout);
   }
 
   private clearPongTimeout(): void {
@@ -277,13 +305,17 @@ export class WsConnection {
     }
 
     const delay = Math.min(
-      this.maxReconnectDelayMs,
-      this.reconnectDelayMs * 2 ** this.reconnectAttempts,
+      this.maxReconnectTimeout,
+      this.reconnectTimeout * 2 ** this.reconnectAttempts,
     );
     this.reconnectAttempts += 1;
+    this.emit('reconnecting', {
+      attempt: this.reconnectAttempts,
+      delay,
+    });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
-      void this.connect().catch(() => undefined);
+      void this.connect().catch((error) => this.emit('error', error));
     }, delay);
   }
 

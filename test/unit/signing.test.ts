@@ -4,8 +4,8 @@ import {
   actionHash,
   signL1Action,
   signUserSignedAction,
-  USER_SIGNED_ACTIONS,
-} from '../../src/index.js';
+} from '../../src/lib/signing.js';
+import { USER_SIGNED_ACTIONS } from '../../src/lib/user-signed-actions.js';
 
 const PRIVATE_KEY =
   '0x0123456789012345678901234567890123456789012345678901234567890123';

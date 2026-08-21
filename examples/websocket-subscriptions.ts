@@ -2,7 +2,7 @@ import { WebsocketClient } from '../src/index.js';
 
 const client = new WebsocketClient();
 
-client.on('error', ({ event }) => {
+client.on('exception', ({ event }) => {
   console.error('WebSocket error:', event);
 });
 

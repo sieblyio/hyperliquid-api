@@ -1,28 +1,35 @@
-import type { RestClientOptions } from '../shared.types.js';
+import type {
+  RestClientNetworkOptions,
+  RestClientOptions,
+} from '../shared.types.js';
 import type { WebSocketConstructor } from './ws-portable.js';
 
-export interface WebsocketClientOptions extends Pick<
-  RestClientOptions,
-  'assetCacheTtlMs' | 'baseUrl' | 'timeout'
-> {
+export interface WebsocketClientOptions {
+  assetCacheTtlMs?: number;
   autoReconnect?: boolean;
-  heartbeatIntervalMs?: number;
-  heartbeatTimeoutMs?: number;
-  maxReconnectDelayMs?: number;
-  reconnectDelayMs?: number;
+  baseUrl?: string;
+  maxReconnectTimeout?: number;
+  pingInterval?: number;
+  pongTimeout?: number;
+  reconnectTimeout?: number;
+  requestTimeoutMs?: number;
+  requestOptions?: RestClientNetworkOptions;
   testnet?: boolean;
   webSocketConstructor?: WebSocketConstructor;
   wsUrl?: string;
 }
 
 export type WebsocketAPIClientOptions = RestClientOptions &
-  Omit<WebsocketClientOptions, keyof RestClientOptions> & {
-    requestTimeoutMs?: number;
-  };
+  Omit<WebsocketClientOptions, keyof RestClientOptions>;
 
-export type WebsocketLifecycleEvent = 'close' | 'error' | 'open' | 'reconnect';
+export type WebsocketLifecycleEvent =
+  'close' | 'exception' | 'open' | 'reconnected' | 'reconnecting';
 
 export interface WebsocketLifecycleContext {
-  connectionKey: string;
+  wsKey: string;
   event?: unknown;
 }
+
+export type WebsocketLifecycleCallback = (
+  context: WebsocketLifecycleContext,
+) => void;

@@ -1,8 +1,5 @@
-import {
-  MonotonicNonceManager,
-  type NonceProvider,
-  RestClient,
-} from '../../src/index.js';
+import { type NonceProvider, RestClient } from '../../src/index.js';
+import { MonotonicNonceManager } from '../../src/lib/nonce-manager.js';
 
 const ADDRESS = '0x1111111111111111111111111111111111111111';
 
@@ -33,23 +30,17 @@ describe('MonotonicNonceManager', () => {
     const provider: NonceProvider = {
       nextNonce: jest.fn(async () => 99),
     };
-    const client = new RestClient({
+    class TestRestClient extends RestClient {
+      prepareNoop() {
+        return this.actionBuilder.prepareL1Action({ type: 'noop' });
+      }
+    }
+    const client = new TestRestClient({
       nonceProvider: provider,
       privateKey:
         '0x0123456789012345678901234567890123456789012345678901234567890123',
     });
-    jest.spyOn(client.actionBuilder, 'partnerConfiguration').mockReturnValue({
-      approvalPercentage: '0.01%',
-      builder: {
-        b: '0x1111111111111111111111111111111111111111',
-        f: 10,
-      },
-      referralCode: 'SIEBLY',
-    });
-
-    const envelope = await client.actionBuilder.prepareL1Action({
-      type: 'noop',
-    });
+    const envelope = await client.prepareNoop();
     expect(envelope.nonce).toBe(99);
     expect(provider.nextNonce).toHaveBeenCalledWith(
       '0x14791697260e4c9a71f18484c9f997b308e59325',

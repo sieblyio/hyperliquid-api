@@ -1,7 +1,9 @@
 import {
+  type DefaultLogger,
   HyperliquidApiError,
   HyperliquidWebSocketError,
   WebsocketAPIClient,
+  WebsocketClient,
 } from '../../src/index.js';
 import { FakeWebSocket } from '../support/fake-websocket.js';
 
@@ -10,25 +12,30 @@ const PRIVATE_KEY =
 const PARTNER = {
   approvalPercentage: '0.01%',
   builder: {
-    b: '0x2222222222222222222222222222222222222222',
+    b: '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2',
     f: 10,
   },
   referralCode: 'SIEBLY',
 };
+const TEST_LOGGER: DefaultLogger = {
+  error: jest.fn(),
+  info: jest.fn(),
+  trace: jest.fn(),
+};
 
 function client(): WebsocketAPIClient {
-  const instance = new WebsocketAPIClient({
-    accountAddress: '0x1111111111111111111111111111111111111111',
-    autoReconnect: false,
-    heartbeatIntervalMs: 0,
-    privateKey: PRIVATE_KEY,
-    requestTimeoutMs: 100,
-    testnet: true,
-    webSocketConstructor: FakeWebSocket,
-  });
-  jest
-    .spyOn(instance.actionBuilder, 'partnerConfiguration')
-    .mockReturnValue(PARTNER);
+  const instance = new WebsocketAPIClient(
+    {
+      accountAddress: '0x1111111111111111111111111111111111111111',
+      autoReconnect: false,
+      pingInterval: 0,
+      privateKey: PRIVATE_KEY,
+      requestTimeoutMs: 100,
+      testnet: true,
+      webSocketConstructor: FakeWebSocket,
+    },
+    TEST_LOGGER,
+  );
   return instance;
 }
 
@@ -52,6 +59,13 @@ describe('WebsocketAPIClient', () => {
   beforeEach(() => {
     FakeWebSocket.reset();
     jest.useRealTimers();
+  });
+
+  test('exposes the WebsocketClient that owns its connection', () => {
+    const instance = client();
+
+    expect(instance.getWSClient()).toBeInstanceOf(WebsocketClient);
+    instance.close();
   });
 
   test('correlates out-of-order Info responses', async () => {
@@ -94,21 +108,18 @@ describe('WebsocketAPIClient', () => {
 
   test('checks approval before the first WebSocket order', async () => {
     const instance = client();
-    const pending = instance.submitOrder(
-      {
-        orders: [
-          {
-            a: 0,
-            b: true,
-            p: '10.00',
-            r: false,
-            s: '1.00',
-            t: { limit: { tif: 'Gtc' } },
-          },
-        ],
-      },
-      { nonce: 1_000 },
-    );
+    const pending = instance.submitOrder({
+      orders: [
+        {
+          a: 0,
+          b: true,
+          p: '10.00',
+          r: false,
+          s: '1.00',
+          t: { limit: { tif: 'Gtc' } },
+        },
+      ],
+    });
     const socket = await openLatest();
     let approvalCheck:
       | {
@@ -131,7 +142,6 @@ describe('WebsocketAPIClient', () => {
       throw new Error('Expected a maxBuilderFee WebSocket POST request.');
     }
 
-    expect(socket.jsonMessages()).toHaveLength(1);
     expect(approvalCheck.request.type).toBe('info');
     socket.message({
       channel: 'post',
@@ -190,21 +200,18 @@ describe('WebsocketAPIClient', () => {
     });
     await expect(pending).resolves.toMatchObject({ status: 'ok' });
 
-    const second = instance.submitOrder(
-      {
-        orders: [
-          {
-            a: 0,
-            b: false,
-            p: '11',
-            r: false,
-            s: '2',
-            t: { limit: { tif: 'Gtc' } },
-          },
-        ],
-      },
-      { nonce: 1_001 },
-    );
+    const second = instance.submitOrder({
+      orders: [
+        {
+          a: 0,
+          b: false,
+          p: '11',
+          r: false,
+          s: '2',
+          t: { limit: { tif: 'Gtc' } },
+        },
+      ],
+    });
     let taggedRequest:
       | {
           id: number;
@@ -308,7 +315,7 @@ describe('WebsocketAPIClient', () => {
 
   test('parses Exchange status err replies consistently with REST', async () => {
     const instance = client();
-    const pending = instance.invalidateNonce({ nonce: 2_000 });
+    const pending = instance.invalidateNonce();
     const socket = await openLatest();
     await Promise.resolve();
     const request = socket

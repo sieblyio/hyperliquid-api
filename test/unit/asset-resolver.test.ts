@@ -1,4 +1,4 @@
-import { AssetResolver } from '../../src/index.js';
+import { AssetResolver } from '../../src/lib/asset-resolver.js';
 
 const RESPONSES: Record<string, unknown> = {
   allPerpMetas: [

@@ -14,20 +14,24 @@ import type {
   UserSignedActionOptions,
 } from '../shared.types.js';
 
-export interface L1RequestOptions extends L1ActionOptions {
-  requestOptions?: RequestOptions;
+export interface L1RequestOptions extends RequestOptions {
+  expiresAfter?: number;
+  vaultAddress?: string | null;
 }
 
-export interface UserSignedRequestOptions extends UserSignedActionOptions {
-  requestOptions?: RequestOptions;
-}
+export type UserSignedRequestOptions = RequestOptions;
 
-export interface MultiSigL1RequestOptions extends L1RequestOptions {
+export interface RawL1RequestOptions extends L1ActionOptions, RequestOptions {}
+
+export interface RawUserSignedRequestOptions
+  extends UserSignedActionOptions, RequestOptions {}
+
+export interface MultiSigL1RequestOptions extends RawL1RequestOptions {
   multiSigUser: string;
   signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
 }
 
-export interface MultiSigUserSignedRequestOptions extends UserSignedRequestOptions {
+export interface MultiSigUserSignedRequestOptions extends RawUserSignedRequestOptions {
   multiSigUser: string;
   signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
 }

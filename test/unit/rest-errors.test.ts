@@ -9,7 +9,7 @@ class ErrorTestClient extends RestClient {
 }
 
 describe('REST errors', () => {
-  test('turns status err responses into redacted typed errors', async () => {
+  test('turns status err responses into typed errors', async () => {
     const client = new ErrorTestClient();
     client.mockPost(async () => ({
       data: {
@@ -26,26 +26,13 @@ describe('REST errors', () => {
       response: {
         status: 'err',
         response: 'Rejected',
-        signature: '[REDACTED]',
+        signature: { r: 'secret-r', s: 'secret-s', v: 27 },
       },
       status: 200,
     });
   });
 
-  test('can return a raw status err response when exception parsing is disabled', async () => {
-    const client = new ErrorTestClient({ parseExceptions: false });
-    client.mockPost(async () => ({
-      data: { status: 'err', response: 'Rejected' },
-      status: 200,
-    }));
-
-    await expect(client.getAllMids()).resolves.toEqual({
-      status: 'err',
-      response: 'Rejected',
-    });
-  });
-
-  test('normalizes Axios failures and redacts nested signatures', async () => {
+  test('normalizes Axios failures without rewriting the response', async () => {
     const client = new ErrorTestClient();
     client.mockPost(async () => {
       throw {
@@ -76,8 +63,8 @@ describe('REST errors', () => {
       message: 'socket reset',
       response: {
         request: {
-          authorization: '[REDACTED]',
-          signature: '[REDACTED]',
+          authorization: 'Bearer secret',
+          signature: { r: 'secret-r', s: 'secret-s' },
         },
       },
       status: 503,

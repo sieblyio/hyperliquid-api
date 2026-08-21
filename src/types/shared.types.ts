@@ -47,10 +47,15 @@ export interface NonceProvider {
   nextNonce(signerAddress: string): Promise<number> | number;
 }
 
-export type RequestOptions = Omit<
+export type RestClientNetworkOptions = Omit<
   AxiosRequestConfig,
-  'data' | 'method' | 'url'
+  'baseURL' | 'data' | 'method' | 'url'
 >;
+
+export interface RequestOptions {
+  signal?: AbortSignal;
+  timeout?: number;
+}
 
 export interface RestClientOptions {
   accountAddress?: string;
@@ -59,11 +64,9 @@ export interface RestClientOptions {
   keepAlive?: boolean;
   keepAliveMsecs?: number;
   nonceProvider?: NonceProvider;
-  parseExceptions?: boolean;
   privateKey?: string;
   signer?: HyperliquidSigner;
   testnet?: boolean;
-  timeout?: number;
   vaultAddress?: string;
 }
 

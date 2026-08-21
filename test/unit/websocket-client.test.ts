@@ -1,7 +1,17 @@
 import { deflateSync, strToU8 } from 'fflate';
 
-import { HyperliquidWebSocketError, WebsocketClient } from '../../src/index.js';
+import {
+  type DefaultLogger,
+  HyperliquidWebSocketError,
+  WebsocketClient,
+} from '../../src/index.js';
 import { FakeWebSocket } from '../support/fake-websocket.js';
+
+const TEST_LOGGER: DefaultLogger = {
+  error: jest.fn(),
+  info: jest.fn(),
+  trace: jest.fn(),
+};
 
 async function subscribeAndOpen(
   client: WebsocketClient,
@@ -17,15 +27,19 @@ async function subscribeAndOpen(
 describe('WebsocketClient', () => {
   beforeEach(() => {
     FakeWebSocket.reset();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
   test('deduplicates subscriptions and unsubscribes only after the final callback', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      heartbeatIntervalMs: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
+    const client = new WebsocketClient(
+      {
+        autoReconnect: false,
+        pingInterval: 0,
+        webSocketConstructor: FakeWebSocket,
+      },
+      TEST_LOGGER,
+    );
     const first = jest.fn();
     const second = jest.fn();
     const firstHandle = await subscribeAndOpen(
@@ -64,11 +78,14 @@ describe('WebsocketClient', () => {
   });
 
   test('normalizes defaults for exact unsubscribe matching', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      heartbeatIntervalMs: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
+    const client = new WebsocketClient(
+      {
+        autoReconnect: false,
+        pingInterval: 0,
+        webSocketConstructor: FakeWebSocket,
+      },
+      TEST_LOGGER,
+    );
     const callback = jest.fn();
     await subscribeAndOpen(
       client,
@@ -110,7 +127,7 @@ describe('WebsocketClient', () => {
   test('preserves explicit null order book precision fields', async () => {
     const client = new WebsocketClient({
       autoReconnect: false,
-      heartbeatIntervalMs: 0,
+      pingInterval: 0,
       webSocketConstructor: FakeWebSocket,
     });
     await subscribeAndOpen(
@@ -141,7 +158,7 @@ describe('WebsocketClient', () => {
   test('isolates unscoped user callbacks on separate connections', async () => {
     const client = new WebsocketClient({
       autoReconnect: false,
-      heartbeatIntervalMs: 0,
+      pingInterval: 0,
       webSocketConstructor: FakeWebSocket,
     });
     const first = jest.fn();
@@ -180,7 +197,7 @@ describe('WebsocketClient', () => {
   test('filters shared-channel messages by coin, interval, dex, and user', async () => {
     const client = new WebsocketClient({
       autoReconnect: false,
-      heartbeatIntervalMs: 0,
+      pingInterval: 0,
       webSocketConstructor: FakeWebSocket,
     });
     const btc = jest.fn();
@@ -198,14 +215,17 @@ describe('WebsocketClient', () => {
   });
 
   test('decompresses fastAssetCtxs and reports malformed data', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      heartbeatIntervalMs: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
+    const client = new WebsocketClient(
+      {
+        autoReconnect: false,
+        pingInterval: 0,
+        webSocketConstructor: FakeWebSocket,
+      },
+      TEST_LOGGER,
+    );
     const callback = jest.fn();
     const onError = jest.fn();
-    client.on('error', onError);
+    client.on('exception', onError);
     await subscribeAndOpen(client, { type: 'fastAssetCtxs' }, callback);
     const payload = { BTC: { markPx: '100', midPx: '99' } };
     const compressed = Buffer.from(
@@ -225,14 +245,22 @@ describe('WebsocketClient', () => {
     expect(onError.mock.calls[0]?.[0].event).toBeInstanceOf(
       HyperliquidWebSocketError,
     );
+
+    FakeWebSocket.instances[0]?.message('not JSON');
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onError.mock.calls[1]?.[0].event).toMatchObject({
+      message: 'Hyperliquid returned a non-JSON WebSocket message.',
+      name: 'HyperliquidWebSocketError',
+    });
+    expect(TEST_LOGGER.error).toHaveBeenCalledTimes(2);
     client.close();
   });
 
   test('reconnects and resubscribes with bounded delay', async () => {
     jest.useFakeTimers();
     const client = new WebsocketClient({
-      heartbeatIntervalMs: 0,
-      reconnectDelayMs: 5,
+      pingInterval: 0,
+      reconnectTimeout: 5,
       webSocketConstructor: FakeWebSocket,
     });
     await subscribeAndOpen(client, { coin: 'BTC', type: 'bbo' }, jest.fn());
@@ -253,8 +281,8 @@ describe('WebsocketClient', () => {
     jest.useFakeTimers();
     const client = new WebsocketClient({
       autoReconnect: false,
-      heartbeatIntervalMs: 10,
-      heartbeatTimeoutMs: 5,
+      pingInterval: 10,
+      pongTimeout: 5,
       webSocketConstructor: FakeWebSocket,
     });
     const connecting = client.connect();
@@ -270,18 +298,21 @@ describe('WebsocketClient', () => {
   });
 
   test('isolates callback and lifecycle listener failures', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      heartbeatIntervalMs: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
+    const client = new WebsocketClient(
+      {
+        autoReconnect: false,
+        pingInterval: 0,
+        webSocketConstructor: FakeWebSocket,
+      },
+      TEST_LOGGER,
+    );
     const healthy = jest.fn();
     const onError = jest.fn();
     client.on('open', () => {
       throw new Error('listener failure');
     });
     client.on('open', healthy);
-    client.on('error', onError);
+    client.on('exception', onError);
     await subscribeAndOpen(client, { coin: 'BTC', type: 'trades' }, () => {
       throw new Error('callback failure');
     });
@@ -291,7 +322,7 @@ describe('WebsocketClient', () => {
     });
 
     expect(healthy).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]?.[0].event).toEqual(
+    expect(onError.mock.calls.map(([context]) => context.event)).toContainEqual(
       new Error('callback failure'),
     );
     client.close();
@@ -300,7 +331,7 @@ describe('WebsocketClient', () => {
   test('exposes numeric asset resolution and manual metadata refresh', async () => {
     const client = new WebsocketClient({
       autoReconnect: false,
-      heartbeatIntervalMs: 0,
+      pingInterval: 0,
       webSocketConstructor: FakeWebSocket,
     });
     await expect(client.resolveAsset(10_107)).resolves.toMatchObject({

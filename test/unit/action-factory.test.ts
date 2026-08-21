@@ -1,8 +1,6 @@
-import {
-  ActionFactory,
-  type AssetResolver,
-  type BuilderCode,
-} from '../../src/index.js';
+import type { BuilderCode } from '../../src/index.js';
+import { ActionFactory } from '../../src/lib/action-factory.js';
+import type { AssetResolver } from '../../src/lib/asset-resolver.js';
 
 const BUILDER: BuilderCode = {
   b: '0x1111111111111111111111111111111111111111',

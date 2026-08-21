@@ -15,6 +15,10 @@ class CaptureRestClient extends RestClient {
 
   responseFor?: (body: Record<string, unknown>) => unknown;
 
+  get testAssetResolver() {
+    return this.assetResolver;
+  }
+
   protected override async post<T>(
     path: string,
     body: unknown,
@@ -542,7 +546,7 @@ describe('RestClient Info requests', () => {
 
   test('resolves metadata-derived pair aliases for market data', async () => {
     const client = new CaptureRestClient();
-    jest.spyOn(client.assetResolver, 'resolve').mockResolvedValue({
+    jest.spyOn(client.testAssetResolver, 'resolve').mockResolvedValue({
       assetId: 10_107,
       canonicalName: '@107',
       kind: 'spot',
@@ -567,10 +571,10 @@ describe('RestClient Info requests', () => {
       szDecimals: 5,
     };
     const resolve = jest
-      .spyOn(client.assetResolver, 'resolve')
+      .spyOn(client.testAssetResolver, 'resolve')
       .mockResolvedValue(resolved);
     const refresh = jest
-      .spyOn(client.assetResolver, 'refresh')
+      .spyOn(client.testAssetResolver, 'refresh')
       .mockResolvedValue();
 
     await expect(client.resolveAsset('BTC')).resolves.toEqual(resolved);

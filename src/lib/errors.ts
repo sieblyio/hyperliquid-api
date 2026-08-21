@@ -20,30 +20,3 @@ export class HyperliquidApiError extends Error {
     this.status = options.status;
   }
 }
-
-const REDACTED_KEYS = new Set([
-  'authorization',
-  'privatekey',
-  'r',
-  's',
-  'signature',
-]);
-
-export function redactSensitiveValues(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactSensitiveValues);
-  }
-
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      REDACTED_KEYS.has(key.toLowerCase())
-        ? '[REDACTED]'
-        : redactSensitiveValues(entry),
-    ]),
-  );
-}

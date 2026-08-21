@@ -119,7 +119,7 @@ const result = await client.submitOrder({
 });
 ```
 
-For ordinary single orders, use the CEX-style convenience methods. They handle much of the complexity of sending orders to Hyperliquid's API
+For ordinary single orders, use the CEX-style convenience methods. They handle much of the complexity of sending orders to Hyperliquid's API.
 
 ```ts
 const marketOrder = await client.submitMarketOrder({
@@ -170,9 +170,15 @@ await client.submitOrder(
   },
   {
     expiresAfter: Date.now() + 10_000,
-    requestOptions: { timeout: 5_000 },
+    timeout: 5_000,
   },
 );
+```
+
+Per-request options are limited to `timeout`, `signal`, and the signing controls that apply to that method. Configure reusable Axios options once as the second constructor argument:
+
+```ts
+const client = new RestClient({ testnet: true }, { timeout: 5_000 });
 ```
 
 Set `vaultAddress` on the client or per request when signing for a vault or subaccount. The SDK lowercases all EVM addresses before signing.
@@ -252,8 +258,8 @@ import { WebsocketClient } from '@siebly/hyperliquid-api';
 
 const ws = new WebsocketClient();
 
-ws.on('reconnect', ({ connectionKey }) => {
-  console.log('Reconnected:', connectionKey);
+ws.on('reconnected', ({ wsKey }) => {
+  console.log('Reconnected:', wsKey);
 });
 
 const book = await ws.subscribe(
@@ -286,6 +292,19 @@ ws.close();
 
 `fastAssetCtxs` payloads are decompressed before the callback runs. User streams whose server events omit the user address are isolated on separate per-user connections.
 
+Inject a custom `DefaultLogger` if mroe control is desired via the second constructor argument:
+
+```ts
+const ws = new WebsocketClient(
+  {},
+  {
+    trace: (...params) => customLogger.debug(params),
+    info: (...params) => customLogger.info(params),
+    error: (...params) => customLogger.error(params),
+  },
+);
+```
+
 ## WebSocket POST requests
 
 `WebsocketAPIClient` has the same info and exchange methods as `RestClient`, but sends requests over Hyperliquid's correlated WebSocket POST protocol.
@@ -298,7 +317,7 @@ const mids = await client.getAllMids();
 client.close();
 ```
 
-Signed WebSocket actions use the same action factory, signer, nonce manager, referral behavior, and builder tagging as REST.
+The internal `WebsocketClient` used by the API Client can be accessed via `client.getWSClient()`, exposing lifecycle event emitters as well as raw `sendWSAPIRequest()` access (not recommended). If you're looking for standard subscribe & consume workflows, stick to the WebsocketClient.
 
 ## Raw methods
 

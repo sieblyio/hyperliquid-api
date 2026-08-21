@@ -1,17 +1,26 @@
 import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
-import { ActionBuilder } from './lib/action-builder.js';
+import { AccountResolver } from './lib/account-resolver.js';
 import type {
   AssetIdentifier,
   Grouping,
   ModifyWireInput,
   OrderWireInput,
 } from './lib/action-factory.js';
-import { AssetResolver, type ResolvedAsset } from './lib/asset-resolver.js';
-import { BaseRestClient } from './lib/BaseRestClient.js';
+import type { ResolvedAsset } from './lib/asset-resolver.js';
+import {
+  type ActionSubmissionOptions,
+  BaseRestClient,
+} from './lib/BaseRestClient.js';
 import { decimalToWire } from './lib/decimal.js';
 import { normalizeAddresses } from './lib/normalize-addresses.js';
+import {
+  decimalOrSubaccountAmount,
+  floorDecimalPlaces,
+  marketLimitPrice,
+  normalizeUserRequest,
+  positiveDecimal,
+} from './lib/request-utils.js';
 import { USER_SIGNED_ACTIONS } from './lib/user-signed-actions.js';
-import { sanitizeObjectForWire } from './lib/wire.js';
 import type {
   ApproveApiWalletRequest,
   CancelOrdersByClientOrderIdRequest,
@@ -25,8 +34,6 @@ import type {
   LinkStakingAccountRequest,
   ModifyOrderRequest,
   ModifyOrdersRequest,
-  MultiSigL1RequestOptions,
-  MultiSigUserSignedRequestOptions,
   SendAssetFromApiWalletRequest,
   SendAssetRequest,
   SendSpotAssetRequest,
@@ -88,8 +95,8 @@ import type {
 import type {
   JsonObject,
   RequestOptions,
+  RestClientNetworkOptions,
   RestClientOptions,
-  UserSignedActionDefinition,
 } from './types/shared.types.js';
 
 type InfoParams = object;
@@ -100,12 +107,6 @@ type BuilderApprovalState =
 interface BuilderApprovalOwner {
   address: string;
   canAutoApprove: boolean;
-}
-
-interface SignerAccountResolution {
-  accountAddress: string;
-  role?: UserRoleResponse;
-  signerAddress: string;
 }
 
 const BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS = 1_000;
@@ -122,221 +123,32 @@ const TRADING_ACTIONS = new Set([
   'twapOrder',
 ]);
 
-function userRequest<T extends UserRequest>(params: T): T {
-  return normalizeAddresses(params);
-}
-
-function userSignedAction(type: string, params: object): JsonObject {
-  const fields = normalizeAddresses(sanitizeObjectForWire({ ...params }));
-  delete fields.type;
-
-  return {
-    type,
-    ...fields,
-    ...('nonce' in fields || 'time' in fields ? {} : { nonce: 0 }),
-  };
-}
-
-function decimalOrSubaccountAmount(value: string): string {
-  const match = /^(.+?)\s+subaccount:(0x[0-9a-fA-F]{40})$/.exec(value);
-  if (!match) {
-    return decimalToWire(value);
-  }
-
-  return `${decimalToWire(match[1])} subaccount:${normalizeAddresses(match[2])}`;
-}
-
-function positiveDecimal(value: string, field: string): string {
-  const normalized = decimalToWire(value);
-  if (normalized === '0' || normalized.startsWith('-')) {
-    throw new RangeError(`${field} must be greater than zero.`);
-  }
-  return normalized;
-}
-
-function floorDecimalPlaces(
-  value: string,
-  decimalPlaces: number,
-  field: string,
-): string {
-  const normalized = positiveDecimal(value, field);
-  const [integer, fraction = ''] = normalized.split('.');
-  const truncatedFraction = fraction.slice(0, decimalPlaces);
-  const truncated = decimalToWire(
-    truncatedFraction ? `${integer}.${truncatedFraction}` : integer,
-  );
-  if (truncated === '0') {
-    throw new RangeError(
-      `${field} rounds to zero at ${decimalPlaces} decimal places.`,
-    );
-  }
-  return truncated;
-}
-
-function marketLimitPrice(
-  mid: string,
-  isBuy: boolean,
-  maxSlippage: number,
-  asset: ResolvedAsset,
-): string {
-  if (asset.szDecimals === undefined) {
-    throw new TypeError(
-      `Market order metadata is unavailable for "${asset.canonicalName}". Use a metadata-derived symbol instead of a numeric asset ID.`,
-    );
-  }
-
-  const midNumber = Number(mid);
-  if (!Number.isFinite(midNumber) || midNumber <= 0) {
-    throw new TypeError(
-      `Hyperliquid returned an invalid midpoint for "${asset.canonicalName}".`,
-    );
-  }
-
-  const maxPriceDecimals =
-    (asset.kind === 'spot' || asset.kind === 'outcome' ? 8 : 6) -
-    asset.szDecimals;
-  if (maxPriceDecimals < 0) {
-    throw new TypeError(
-      `Hyperliquid returned invalid size decimals for "${asset.canonicalName}".`,
-    );
-  }
-
-  const adjusted = midNumber * (isBuy ? 1 + maxSlippage : 1 - maxSlippage);
-  const fiveSignificantFigures = Number(adjusted.toPrecision(5));
-  return positiveDecimal(
-    fiveSignificantFigures.toFixed(maxPriceDecimals),
-    'Market order limit price',
-  );
-}
-
 export class RestClient extends BaseRestClient {
-  readonly actionBuilder: ActionBuilder;
-
-  readonly assetResolver: AssetResolver;
-
-  private builderAutoApprovalPromise: Promise<void> | undefined;
-
-  private builderApprovalOwner: BuilderApprovalOwner | undefined;
+  private readonly accountResolver: AccountResolver;
 
   private builderApprovalPromise: Promise<void> | undefined;
 
   private builderApprovalState: BuilderApprovalState = 'unchecked';
 
-  private builderOrderStarted = false;
-
   private builderPreflightDeadline: number | undefined;
 
   private referralAttempted = false;
 
-  private signerAccountPromise: Promise<SignerAccountResolution> | undefined;
-
-  constructor(options: RestClientOptions = {}) {
+  constructor(
+    options: RestClientOptions = {},
+    networkOptions: RestClientNetworkOptions = {},
+  ) {
     super(
       options.baseUrl ??
         (options.testnet === true ? TESTNET_API_URL : MAINNET_API_URL),
       options,
+      networkOptions,
     );
-    this.assetResolver = new AssetResolver(
-      (request) => this.submitRawInfoRequest(request),
-      options.assetCacheTtlMs,
+    this.accountResolver = new AccountResolver(
+      this.actionBuilder,
+      (user, requestOptions) =>
+        this.info<UserRoleResponse>('userRole', { user }, requestOptions),
     );
-    this.actionBuilder = new ActionBuilder(this.assetResolver, options);
-  }
-
-  submitRawInfoRequest<T = InfoResponse>(
-    request: InfoParams,
-    requestOptions?: RequestOptions,
-  ): Promise<T> {
-    return this.post<T>(
-      '/info',
-      sanitizeObjectForWire({ ...request }),
-      requestOptions,
-    );
-  }
-
-  async submitRawL1Action<T = ExchangeResponse>(
-    action: JsonObject,
-    options: L1RequestOptions = {},
-  ): Promise<T> {
-    const builderPreflight = this.prepareBuilderForTradingAction(
-      action.type,
-      this.actionBuilder.hasSigner()
-        ? () => this.resolveBuilderApprovalOwner()
-        : undefined,
-    );
-    this.beforeTradingAction(action.type);
-    await builderPreflight;
-    const envelope = await this.actionBuilder.prepareL1Action(action, options);
-    return this.post<T>('/exchange', envelope, options.requestOptions);
-  }
-
-  async submitRawUserSignedAction<T = ExchangeResponse>(
-    action: JsonObject,
-    definition: UserSignedActionDefinition,
-    options: UserSignedRequestOptions = {},
-  ): Promise<T> {
-    const builderPreflight = this.prepareBuilderForTradingAction(
-      action.type,
-      this.actionBuilder.hasSigner()
-        ? () => this.resolveBuilderApprovalOwner()
-        : undefined,
-    );
-    this.beforeTradingAction(action.type);
-    await builderPreflight;
-    const envelope = await this.actionBuilder.prepareUserSignedAction(
-      action,
-      definition,
-      options,
-    );
-    return this.post<T>('/exchange', envelope, options.requestOptions);
-  }
-
-  async submitMultiSigL1Action<T = ExchangeResponse>(
-    action: JsonObject,
-    options: MultiSigL1RequestOptions,
-  ): Promise<T> {
-    const builderPreflight = this.prepareBuilderForTradingAction(
-      action.type,
-      () =>
-        Promise.resolve({
-          address: normalizeAddresses(options.multiSigUser),
-          canAutoApprove: false,
-        }),
-    );
-    this.beforeMultiSigTradingAction(action.type, options);
-    await builderPreflight;
-    const envelope = await this.actionBuilder.prepareMultiSigL1Action(
-      action,
-      options.signers,
-      options.multiSigUser,
-      options,
-    );
-    return this.post<T>('/exchange', envelope, options.requestOptions);
-  }
-
-  async submitMultiSigUserSignedAction<T = ExchangeResponse>(
-    action: JsonObject,
-    definition: UserSignedActionDefinition,
-    options: MultiSigUserSignedRequestOptions,
-  ): Promise<T> {
-    const builderPreflight = this.prepareBuilderForTradingAction(
-      action.type,
-      () =>
-        Promise.resolve({
-          address: normalizeAddresses(options.multiSigUser),
-          canAutoApprove: false,
-        }),
-    );
-    this.beforeMultiSigTradingAction(action.type, options);
-    await builderPreflight;
-    const envelope = await this.actionBuilder.prepareMultiSigUserSignedAction(
-      action,
-      definition,
-      options.signers,
-      options.multiSigUser,
-      options,
-    );
-    return this.post<T>('/exchange', envelope, options.requestOptions);
   }
 
   resolveAsset(identifier: AssetIdentifier): Promise<ResolvedAsset> {
@@ -843,7 +655,7 @@ export class RestClient extends BaseRestClient {
     params: UserRequest,
     requestOptions?: RequestOptions,
   ): Promise<UserRoleResponse> {
-    return this.info('userRole', userRequest(params), requestOptions);
+    return this.info('userRole', normalizeUserRequest(params), requestOptions);
   }
 
   getMultiSigSigners(
@@ -946,10 +758,7 @@ export class RestClient extends BaseRestClient {
 
     const dex =
       asset.kind === 'hip3' ? asset.canonicalName.split(':', 1)[0] : undefined;
-    const mids = await this.getAllMids(
-      dex ? { dex } : {},
-      options.requestOptions,
-    );
+    const mids = await this.getAllMids(dex ? { dex } : {}, options);
     const mid = mids[asset.canonicalName];
     if (mid === undefined) {
       throw new TypeError(
@@ -1133,7 +942,7 @@ export class RestClient extends BaseRestClient {
   setReferrer(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
     this.referralAttempted = true;
     const { referralCode } = this.actionBuilder.partnerConfiguration();
-    return this.l1('setReferrer', { code: referralCode }, options, true);
+    return this.l1('setReferrer', { code: referralCode }, options);
   }
 
   registerReferrer(
@@ -1632,80 +1441,14 @@ export class RestClient extends BaseRestClient {
     requestedUser?: string,
     requestOptions?: RequestOptions,
   ): Promise<string> {
-    if (requestedUser !== undefined) {
-      return normalizeAddresses(requestedUser);
-    }
-
-    const configuredVault = this.actionBuilder.configuredVault();
-    if (configuredVault) {
-      return configuredVault;
-    }
-
-    const configuredAccount = this.actionBuilder.configuredAccount();
-    if (configuredAccount) {
-      return configuredAccount;
-    }
-
-    if (!this.actionBuilder.hasSigner()) {
-      throw new TypeError(
-        'Provide user, set accountAddress or vaultAddress, or configure privateKey or signer.',
-      );
-    }
-
-    return (await this.resolveSignerAccount(requestOptions)).accountAddress;
+    return this.accountResolver.resolveAccountAddress(
+      requestedUser,
+      requestOptions,
+    );
   }
 
-  private resolveSignerAccount(
-    requestOptions?: RequestOptions,
-  ): Promise<SignerAccountResolution> {
-    if (!this.signerAccountPromise) {
-      this.signerAccountPromise = (async () => {
-        const signerAddress = await this.actionBuilder.signerAddress();
-        const configuredAccount = this.actionBuilder.configuredAccount();
-        if (configuredAccount) {
-          return {
-            accountAddress: configuredAccount,
-            signerAddress,
-          };
-        }
-
-        const role = await this.info<UserRoleResponse>(
-          'userRole',
-          { user: signerAddress },
-          requestOptions,
-        );
-        if (role.role === 'missing') {
-          throw new TypeError(
-            'The signer is not a Hyperliquid account on this network. Set accountAddress when using an API wallet.',
-          );
-        }
-
-        const accountAddress =
-          role.role === 'agent'
-            ? normalizeAddresses(role.data.user)
-            : role.role === 'subAccount'
-              ? normalizeAddresses(role.data.master)
-              : signerAddress;
-
-        return { accountAddress, role, signerAddress };
-      })().catch((error: unknown) => {
-        this.signerAccountPromise = undefined;
-        throw error;
-      });
-    }
-
-    return this.signerAccountPromise;
-  }
-
-  private info<T>(
-    type: string,
-    params: InfoParams,
-    requestOptions?: RequestOptions,
-  ): Promise<T> {
-    const fields = sanitizeObjectForWire({ ...params });
-    delete fields.type;
-
-    return this.submitRawInfoRequest<T>({ type, ...fields }, requestOptions);
+  private resolveSignerAccount(requestOptions?: RequestOptions) {
+    return this.accountResolver.resolveSignerAccount(requestOptions);
   }
 
   private async infoCoin(coin: string): Promise<string> {
@@ -1714,98 +1457,114 @@ export class RestClient extends BaseRestClient {
       : coin;
   }
 
-  private l1(
-    type: string,
-    params: object,
-    options: L1RequestOptions,
-    skipTradingHooks = false,
-  ): Promise<ExchangeResponse> {
-    const fields = { ...params } as JsonObject;
-    delete fields.type;
-    const action = { type, ...fields };
-    if (skipTradingHooks) {
-      return this.submitPreparedL1Action(action, options);
-    }
-    return this.submitRawL1Action(action, options);
-  }
-
-  private userSigned(
-    type: string,
-    params: object,
-    definition: UserSignedActionDefinition,
-    options: UserSignedRequestOptions,
-  ): Promise<ExchangeResponse> {
-    return this.submitRawUserSignedAction(
-      userSignedAction(type, params),
-      definition,
-      options,
-    );
-  }
-
-  private beforeTradingAction(type: unknown): void {
+  protected override async beforeActionSubmission(
+    action: JsonObject,
+    options: ActionSubmissionOptions,
+  ): Promise<void> {
+    const { type } = action;
     if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
       return;
     }
 
-    this.scheduleReferral(() => this.setReferrer());
-  }
+    const isMultiSig = 'multiSigUser' in options;
+    if (isMultiSig) {
+      const referralOptions = {
+        multiSigUser: options.multiSigUser,
+        signers: options.signers,
+      };
+      this.scheduleReferral(() =>
+        this.submitMultiSigL1Action(
+          {
+            type: 'setReferrer',
+            code: this.actionBuilder.partnerConfiguration().referralCode,
+          },
+          referralOptions,
+        ),
+      );
+    } else {
+      this.scheduleReferral(() => this.setReferrer());
+    }
 
-  private beforeMultiSigTradingAction(
-    type: unknown,
-    options: MultiSigL1RequestOptions | MultiSigUserSignedRequestOptions,
-  ): void {
-    if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
+    if (type !== 'order') {
       return;
     }
 
-    const multiSigOptions = {
-      multiSigUser: options.multiSigUser,
-      signers: options.signers,
-    };
-    this.scheduleReferral(() =>
-      this.submitPreparedMultiSigL1Action(
-        {
-          type: 'setReferrer',
-          code: this.actionBuilder.partnerConfiguration().referralCode,
-        },
-        multiSigOptions,
-      ),
-    );
+    const resolveOwner = isMultiSig
+      ? () =>
+          Promise.resolve({
+            address: normalizeAddresses(options.multiSigUser),
+            canAutoApprove: false,
+          })
+      : this.actionBuilder.hasSigner()
+        ? () => this.resolveBuilderApprovalOwner()
+        : undefined;
+    if (!resolveOwner) {
+      return;
+    }
+
+    this.warnForBuilderApproval();
+    if (this.builderApprovalState === 'approved') {
+      return;
+    }
+    if (!this.builderApprovalPromise) {
+      this.builderApprovalState = 'checking';
+      this.builderApprovalPromise = this.checkBuilderApproval(resolveOwner);
+    }
+    await this.waitForBuilderApprovalCheck(this.builderApprovalPromise);
   }
 
   private async checkBuilderApproval(
     resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
   ): Promise<void> {
-    const owner = await resolveOwner();
-    this.builderApprovalOwner = owner;
-    if (!owner) {
-      this.builderApprovalState = 'unavailable';
-      return;
+    let owner: BuilderApprovalOwner | undefined;
+    try {
+      owner = await resolveOwner();
+      if (!owner) {
+        this.builderApprovalState = 'unavailable';
+      } else {
+        const partner = this.actionBuilder.partnerConfiguration();
+        const approvedFee = await this.getMaxBuilderFee({
+          builder: partner.builder.b,
+          user: owner.address,
+        });
+        if (
+          !Number.isFinite(approvedFee) ||
+          !Number.isInteger(approvedFee) ||
+          approvedFee < 0
+        ) {
+          throw new TypeError(
+            'Hyperliquid returned an invalid maxBuilderFee response.',
+          );
+        }
+        if (this.builderApprovalState === 'approved') {
+          return;
+        }
+        if (approvedFee >= partner.builder.f) {
+          this.confirmBuilderFeeApproval();
+          return;
+        }
+        this.builderApprovalState = 'unapproved';
+      }
+    } catch {
+      if (this.builderApprovalState !== 'approved') {
+        this.builderApprovalState = 'unavailable';
+      }
     }
 
-    const partner = this.actionBuilder.partnerConfiguration();
-    const approvedFee = await this.getMaxBuilderFee({
-      builder: partner.builder.b,
-      user: owner.address,
-    });
-    if (
-      !Number.isFinite(approvedFee) ||
-      !Number.isInteger(approvedFee) ||
-      approvedFee < 0
-    ) {
-      throw new TypeError(
-        'Hyperliquid returned an invalid maxBuilderFee response.',
-      );
-    }
-    if (this.builderApprovalState === 'approved') {
+    if (this.builderApprovalState === 'unapproved' && owner?.canAutoApprove) {
+      void this.approveBuilderFee()
+        .then((response) => {
+          if (response.status !== 'ok') {
+            this.warnForBuilderApproval();
+          }
+        })
+        .catch(() => {
+          this.builderApprovalState = 'unapproved';
+          this.warnForBuilderApproval();
+        });
       return;
     }
-    if (approvedFee >= partner.builder.f) {
-      this.confirmBuilderFeeApproval();
-      return;
-    }
-
-    this.builderApprovalState = 'unapproved';
+    this.warnForBuilderApproval();
   }
 
   private confirmBuilderFeeApproval(): void {
@@ -1846,79 +1605,6 @@ export class RestClient extends BaseRestClient {
       };
     }
     return undefined;
-  }
-
-  private getBuilderApprovalCheck(
-    resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
-  ): Promise<void> {
-    if (
-      this.builderApprovalPromise ||
-      this.builderApprovalState === 'approved'
-    ) {
-      return this.builderApprovalPromise ?? Promise.resolve();
-    }
-
-    this.builderApprovalState = 'checking';
-    this.builderApprovalPromise = Promise.resolve()
-      .then(() => this.checkBuilderApproval(resolveOwner))
-      .catch(() => {
-        if (this.builderApprovalState !== 'approved') {
-          this.builderApprovalState = 'unavailable';
-        }
-      })
-      .then(() => {
-        this.handleBuilderApprovalResult();
-      });
-    return this.builderApprovalPromise;
-  }
-
-  private handleBuilderApprovalResult(): void {
-    if (!this.builderOrderStarted) {
-      return;
-    }
-    if (
-      this.builderApprovalState === 'unapproved' &&
-      this.builderApprovalOwner?.canAutoApprove
-    ) {
-      this.scheduleAutomaticBuilderApproval();
-      return;
-    }
-    this.warnForBuilderApproval();
-  }
-
-  private async prepareBuilderForTradingAction(
-    type: unknown,
-    resolveOwner: (() => Promise<BuilderApprovalOwner | undefined>) | undefined,
-  ): Promise<void> {
-    if (type !== 'order' || !resolveOwner) {
-      return;
-    }
-
-    this.builderOrderStarted = true;
-    this.warnForBuilderApproval();
-    if (this.builderApprovalState === 'approved') {
-      return;
-    }
-    await this.waitForBuilderApprovalCheck(
-      this.getBuilderApprovalCheck(resolveOwner),
-    );
-  }
-
-  private scheduleAutomaticBuilderApproval(): void {
-    if (this.builderAutoApprovalPromise) {
-      return;
-    }
-
-    this.builderAutoApprovalPromise = this.approveBuilderFee()
-      .then((response) => {
-        if (response.status !== 'ok') {
-          this.warnForBuilderApproval();
-        }
-      })
-      .catch(() => {
-        this.builderApprovalState = 'unapproved';
-        this.warnForBuilderApproval();
-      });
   }
 
   private waitForBuilderApprovalCheck(check: Promise<void>): Promise<void> {
@@ -1972,37 +1658,8 @@ export class RestClient extends BaseRestClient {
         `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Orders are being submitted without a builder fee. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future major version may require approval before trading.`,
       );
     } catch {
-      // A broken logger must not stop an order.
+      // A broken console must not stop an order.
     }
-  }
-
-  private async submitPreparedL1Action(
-    action: JsonObject,
-    options: L1RequestOptions,
-  ): Promise<ExchangeResponse> {
-    const envelope = await this.actionBuilder.prepareL1Action(action, options);
-    return this.post<ExchangeResponse>(
-      '/exchange',
-      envelope,
-      options.requestOptions,
-    );
-  }
-
-  private async submitPreparedMultiSigL1Action(
-    action: JsonObject,
-    options: MultiSigL1RequestOptions,
-  ): Promise<ExchangeResponse> {
-    const envelope = await this.actionBuilder.prepareMultiSigL1Action(
-      action,
-      options.signers,
-      options.multiSigUser,
-      options,
-    );
-    return this.post<ExchangeResponse>(
-      '/exchange',
-      envelope,
-      options.requestOptions,
-    );
   }
 }
 

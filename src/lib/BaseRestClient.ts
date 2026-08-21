@@ -5,19 +5,38 @@ import axios, {
 } from 'axios';
 
 import { DEFAULT_REQUEST_TIMEOUT_MS } from '../constants.js';
-import type { RequestOptions } from '../types/shared.types.js';
-import { HyperliquidApiError, redactSensitiveValues } from './errors.js';
+import type {
+  L1RequestOptions,
+  MultiSigL1RequestOptions,
+  MultiSigUserSignedRequestOptions,
+  RawL1RequestOptions,
+  RawUserSignedRequestOptions,
+  UserSignedRequestOptions,
+} from '../types/request/exchange.types.js';
+import type { ExchangeResponse } from '../types/response/exchange.types.js';
+import type { InfoResponse } from '../types/response/info.types.js';
+import type {
+  JsonObject,
+  RequestOptions,
+  RestClientNetworkOptions,
+  RestClientOptions,
+  UserSignedActionDefinition,
+} from '../types/shared.types.js';
+import { ActionBuilder } from './action-builder.js';
+import { AssetResolver } from './asset-resolver.js';
+import { HyperliquidApiError } from './errors.js';
 import {
   configureHttpsKeepAlive,
   DEFAULT_REQUEST_HEADERS,
 } from './https-agent.js';
+import { buildUserSignedAction } from './request-utils.js';
+import { sanitizeObjectForWire } from './wire.js';
 
-export interface BaseRestClientOptions {
-  keepAlive?: boolean;
-  keepAliveMsecs?: number;
-  parseExceptions?: boolean;
-  timeout?: number;
-}
+export type ActionSubmissionOptions =
+  | MultiSigL1RequestOptions
+  | MultiSigUserSignedRequestOptions
+  | RawL1RequestOptions
+  | RawUserSignedRequestOptions;
 
 interface HyperliquidErrorResponse {
   response?: string;
@@ -35,19 +54,34 @@ function isHyperliquidErrorResponse(
   );
 }
 
-export abstract class BaseRestClient {
-  protected readonly axios: AxiosInstance;
+function transportOptions(options: RequestOptions): RequestOptions | undefined {
+  const requestOptions = {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+  };
+  return Object.keys(requestOptions).length === 0 ? undefined : requestOptions;
+}
 
-  protected readonly parseExceptions: boolean;
+export abstract class BaseRestClient {
+  protected readonly actionBuilder: ActionBuilder;
+
+  protected readonly assetResolver: AssetResolver;
+
+  protected readonly axios: AxiosInstance;
 
   protected constructor(
     readonly baseUrl: string,
-    options: BaseRestClientOptions = {},
+    options: RestClientOptions = {},
+    networkOptions: RestClientNetworkOptions = {},
   ) {
     const requestConfig: AxiosRequestConfig = {
+      ...networkOptions,
       baseURL: baseUrl,
-      headers: DEFAULT_REQUEST_HEADERS,
-      timeout: options.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      headers: {
+        ...DEFAULT_REQUEST_HEADERS,
+        ...networkOptions.headers,
+      },
+      timeout: networkOptions.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS,
     };
 
     if (options.keepAlive !== false) {
@@ -55,24 +89,123 @@ export abstract class BaseRestClient {
     }
 
     this.axios = axios.create(requestConfig);
-    this.parseExceptions = options.parseExceptions !== false;
+    this.assetResolver = new AssetResolver(
+      (request) => this.submitRawInfoRequest(request),
+      options.assetCacheTtlMs,
+    );
+    this.actionBuilder = new ActionBuilder(this.assetResolver, options);
+  }
+
+  submitRawInfoRequest<T = InfoResponse>(
+    request: object,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    return this.post<T>(
+      '/info',
+      sanitizeObjectForWire({ ...request }),
+      transportOptions(options),
+    );
+  }
+
+  async submitRawL1Action<T = ExchangeResponse>(
+    action: JsonObject,
+    options: RawL1RequestOptions = {},
+  ): Promise<T> {
+    await this.beforeActionSubmission(action, options);
+    const envelope = await this.actionBuilder.prepareL1Action(action, options);
+    return this.post<T>('/exchange', envelope, transportOptions(options));
+  }
+
+  async submitRawUserSignedAction<T = ExchangeResponse>(
+    action: JsonObject,
+    definition: UserSignedActionDefinition,
+    options: RawUserSignedRequestOptions = {},
+  ): Promise<T> {
+    await this.beforeActionSubmission(action, options);
+    const envelope = await this.actionBuilder.prepareUserSignedAction(
+      action,
+      definition,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, transportOptions(options));
+  }
+
+  async submitMultiSigL1Action<T = ExchangeResponse>(
+    action: JsonObject,
+    options: MultiSigL1RequestOptions,
+  ): Promise<T> {
+    await this.beforeActionSubmission(action, options);
+    const envelope = await this.actionBuilder.prepareMultiSigL1Action(
+      action,
+      options.signers,
+      options.multiSigUser,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, transportOptions(options));
+  }
+
+  async submitMultiSigUserSignedAction<T = ExchangeResponse>(
+    action: JsonObject,
+    definition: UserSignedActionDefinition,
+    options: MultiSigUserSignedRequestOptions,
+  ): Promise<T> {
+    await this.beforeActionSubmission(action, options);
+    const envelope = await this.actionBuilder.prepareMultiSigUserSignedAction(
+      action,
+      definition,
+      options.signers,
+      options.multiSigUser,
+      options,
+    );
+    return this.post<T>('/exchange', envelope, transportOptions(options));
+  }
+
+  protected info<T>(
+    type: string,
+    params: object,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    const fields = sanitizeObjectForWire({ ...params });
+    delete fields.type;
+    return this.submitRawInfoRequest<T>({ type, ...fields }, options);
+  }
+
+  protected l1(
+    type: string,
+    params: object,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    const fields = { ...params } as JsonObject;
+    delete fields.type;
+    const action = { type, ...fields };
+    return this.submitRawL1Action(action, options);
+  }
+
+  protected userSigned(
+    type: string,
+    params: object,
+    definition: UserSignedActionDefinition,
+    options: UserSignedRequestOptions = {},
+  ): Promise<ExchangeResponse> {
+    return this.submitRawUserSignedAction(
+      buildUserSignedAction(type, params),
+      definition,
+      options,
+    );
   }
 
   protected async post<T>(
     path: string,
     body: unknown,
-    requestOptions?: RequestOptions,
+    options: RequestOptions = {},
   ): Promise<T> {
     try {
-      const response = await this.axios.post<T>(path, body, requestOptions);
+      const response = await this.axios.post<T>(path, body, options);
 
-      if (this.parseExceptions && isHyperliquidErrorResponse(response.data)) {
+      if (isHyperliquidErrorResponse(response.data)) {
         throw new HyperliquidApiError(
           response.data.response || 'Hyperliquid rejected the request.',
-          {
-            response: redactSensitiveValues(response.data),
-            status: response.status,
-          },
+          { response: response.data, status: response.status },
         );
       }
 
@@ -83,15 +216,14 @@ export abstract class BaseRestClient {
       }
 
       if (isAxiosError(error)) {
-        const response = redactSensitiveValues(error.response?.data);
+        const response = error.response?.data;
         const responseMessage =
-          typeof error.response?.data === 'string'
-            ? error.response.data
-            : undefined;
+          typeof response === 'string' ? response : undefined;
 
         throw new HyperliquidApiError(
           responseMessage || error.message || 'Hyperliquid request failed.',
           {
+            cause: error,
             code: error.code,
             response,
             status: error.response?.status,
@@ -101,5 +233,14 @@ export abstract class BaseRestClient {
 
       throw error;
     }
+  }
+
+  protected beforeActionSubmission(
+    _action: JsonObject,
+    _options: ActionSubmissionOptions,
+  ): Promise<void> {
+    void _action;
+    void _options;
+    return Promise.resolve();
   }
 }

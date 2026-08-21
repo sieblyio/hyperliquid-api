@@ -2,11 +2,14 @@ import { Wallet } from 'ethers';
 
 import {
   type JsonObject,
+  type NonceProvider,
   RestClient,
+  type RestClientOptions,
   type SubmitLimitOrderRequest,
   type SubmitOrderRequest,
-  USER_SIGNED_ACTIONS,
 } from '../../src/index.js';
+import { getPartnerConfiguration } from '../../src/lib/partner-config.js';
+import { USER_SIGNED_ACTIONS } from '../../src/lib/user-signed-actions.js';
 
 interface CapturedRequest {
   body: unknown;
@@ -39,9 +42,29 @@ const ORDER_INPUT = {
 class CaptureRestClient extends RestClient {
   readonly requests: CapturedRequest[] = [];
 
+  readonly testNonceProvider: TestNonceProvider;
+
   behavior?: (action: JsonObject) => Promise<unknown>;
 
   infoBehavior?: (request: JsonObject) => Promise<unknown>;
+
+  constructor(options: RestClientOptions = {}) {
+    const nonceProvider = new TestNonceProvider();
+    super({ ...options, nonceProvider });
+    this.testNonceProvider = nonceProvider;
+  }
+
+  get testActionBuilder() {
+    return this.actionBuilder;
+  }
+
+  get testAssetResolver() {
+    return this.assetResolver;
+  }
+
+  setNextNonce(nonce: number): void {
+    this.testNonceProvider.setNext(nonce);
+  }
 
   protected override async post<T>(path: string, body: unknown): Promise<T> {
     this.requests.push({ body, path });
@@ -67,6 +90,18 @@ class CaptureRestClient extends RestClient {
   }
 }
 
+class TestNonceProvider implements NonceProvider {
+  private next = 1;
+
+  nextNonce(): number {
+    return this.next++;
+  }
+
+  setNext(nonce: number): void {
+    this.next = nonce;
+  }
+}
+
 function client(options: ConstructorParameters<typeof RestClient>[0] = {}) {
   const instance = new CaptureRestClient({
     accountAddress: OTHER_USER,
@@ -75,7 +110,7 @@ function client(options: ConstructorParameters<typeof RestClient>[0] = {}) {
     ...options,
   });
   jest
-    .spyOn(instance.actionBuilder, 'partnerConfiguration')
+    .spyOn(instance.testActionBuilder, 'partnerConfiguration')
     .mockReturnValue(PARTNER);
   return instance;
 }
@@ -95,15 +130,14 @@ function findAction(instance: CaptureRestClient, type: string): JsonObject {
 }
 
 async function settleBackgroundWork(): Promise<void> {
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 50; index += 1) {
     await Promise.resolve();
   }
 }
 
 describe('RestClient Exchange requests', () => {
   test('loads the configured Siebly partner values', () => {
-    const instance = new RestClient();
-    expect(instance.actionBuilder.partnerConfiguration()).toEqual({
+    expect(getPartnerConfiguration()).toEqual({
       approvalPercentage: '0.01%',
       builder: {
         b: '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2',
@@ -142,7 +176,7 @@ describe('RestClient Exchange requests', () => {
 
   test('submits a CEX-style market order as a protected IOC order', async () => {
     const instance = client();
-    jest.spyOn(instance.assetResolver, 'resolve').mockResolvedValue({
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
       assetId: 10_156,
       canonicalName: '@156',
       kind: 'spot',
@@ -158,15 +192,12 @@ describe('RestClient Exchange requests', () => {
       return {};
     };
 
-    await instance.submitMarketOrder(
-      {
-        clientOrderId: '0x00000000000000000000000000000001',
-        side: 'sell',
-        size: '52.68231957',
-        symbol: 'USOL/USDC',
-      },
-      { nonce: 950 },
-    );
+    await instance.submitMarketOrder({
+      clientOrderId: '0x00000000000000000000000000000001',
+      side: 'sell',
+      size: '52.68231957',
+      symbol: 'USOL/USDC',
+    });
 
     expect(
       instance.requests.find(
@@ -193,7 +224,7 @@ describe('RestClient Exchange requests', () => {
 
   test('loads the correct HIP-3 mids before a market order', async () => {
     const instance = client();
-    jest.spyOn(instance.assetResolver, 'resolve').mockResolvedValue({
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
       assetId: 110_000,
       canonicalName: 'xyz:COIN',
       kind: 'hip3',
@@ -209,15 +240,12 @@ describe('RestClient Exchange requests', () => {
       return {};
     };
 
-    await instance.submitMarketOrder(
-      {
-        maxSlippage: 0.1,
-        side: 'buy',
-        size: '1.2345',
-        symbol: 'xyz:COIN',
-      },
-      { nonce: 951 },
-    );
+    await instance.submitMarketOrder({
+      maxSlippage: 0.1,
+      side: 'buy',
+      size: '1.2345',
+      symbol: 'xyz:COIN',
+    });
 
     expect(
       instance.requests.find(
@@ -242,22 +270,19 @@ describe('RestClient Exchange requests', () => {
 
   test('submits CEX-style limit and post-only orders', async () => {
     const instance = client();
-    jest.spyOn(instance.assetResolver, 'resolve').mockResolvedValue({
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
       assetId: 0,
       canonicalName: 'BTC',
       kind: 'perp',
       szDecimals: 5,
     });
 
-    await instance.submitLimitOrder(
-      {
-        price: '100.00',
-        side: 'buy',
-        size: '1.2500',
-        symbol: 'BTC',
-      },
-      { nonce: 960 },
-    );
+    await instance.submitLimitOrder({
+      price: '100.00',
+      side: 'buy',
+      size: '1.2500',
+      symbol: 'BTC',
+    });
     expect(findAction(instance, 'order')).toMatchObject({
       orders: [
         {
@@ -271,17 +296,14 @@ describe('RestClient Exchange requests', () => {
       ],
     });
 
-    await instance.submitLimitOrder(
-      {
-        postOnly: true,
-        price: '101',
-        reduceOnly: true,
-        side: 'sell',
-        size: '2',
-        symbol: 'BTC',
-      },
-      { nonce: 961 },
-    );
+    await instance.submitLimitOrder({
+      postOnly: true,
+      price: '101',
+      reduceOnly: true,
+      side: 'sell',
+      size: '2',
+      symbol: 'BTC',
+    });
     expect(
       actions(instance)
         .filter((action) => action.type === 'order')
@@ -338,7 +360,7 @@ describe('RestClient Exchange requests', () => {
       } as unknown as SubmitLimitOrderRequest),
     ).rejects.toThrow('Invalid decimal string "1"');
 
-    jest.spyOn(instance.assetResolver, 'resolve').mockResolvedValue({
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
       assetId: 0,
       canonicalName: 'BTC',
       kind: 'perp',
@@ -358,6 +380,7 @@ describe('RestClient Exchange requests', () => {
 
   test('builds all typed trading actions with canonical asset IDs', async () => {
     const instance = client();
+    instance.setNextNonce(1_000);
     const commonOrder = {
       a: 0,
       b: true,
@@ -369,7 +392,7 @@ describe('RestClient Exchange requests', () => {
 
     await instance.submitOrder(
       { orders: [commonOrder], grouping: 'na' },
-      { expiresAfter: 2_000, nonce: 1_000, vaultAddress: OTHER_USER },
+      { expiresAfter: 2_000, vaultAddress: OTHER_USER },
     );
     const order = findAction(instance, 'order');
     expect(order).toEqual({
@@ -393,48 +416,43 @@ describe('RestClient Exchange requests', () => {
     )?.body as Record<string, unknown>;
     expect(orderEnvelope).toMatchObject({
       expiresAfter: 2_000,
-      nonce: 1_000,
       vaultAddress: OTHER_USER,
     });
 
-    await instance.modifyOrder(
-      { oid: 1, order: commonOrder, alwaysPlace: true },
-      { nonce: 1_001 },
-    );
+    await instance.modifyOrder({
+      oid: 1,
+      order: commonOrder,
+      alwaysPlace: true,
+    });
     expect(findAction(instance, 'modify')).toMatchObject({
       oid: 1,
       order: { a: 0, p: '100', s: '1.25' },
       a: true,
     });
 
-    await instance.modifyOrders(
-      { modifies: [{ oid: '0x01', order: commonOrder }], alwaysPlace: true },
-      { nonce: 1_002 },
-    );
+    await instance.modifyOrders({
+      modifies: [{ oid: '0x01', order: commonOrder }],
+      alwaysPlace: true,
+    });
     expect(findAction(instance, 'batchModify')).toMatchObject({
       modifies: [{ oid: '0x01', order: { a: 0 } }],
       a: true,
     });
 
-    await instance.cancelOrders(
-      { cancels: [{ a: 0, o: 4 }], fastCancel: true },
-      { nonce: 1_003 },
-    );
+    await instance.cancelOrders({
+      cancels: [{ a: 0, o: 4 }],
+      fastCancel: true,
+    });
     expect(findAction(instance, 'cancel')).toEqual({
       type: 'cancel',
       cancels: [{ a: 0, o: 4 }],
       f: true,
     });
 
-    await instance.cancelOrdersByClientOrderId(
-      {
-        cancels: [
-          { asset: 10_107, cloid: '0x00000000000000000000000000000001' },
-        ],
-        fastCancel: true,
-      },
-      { nonce: 1_004 },
-    );
+    await instance.cancelOrdersByClientOrderId({
+      cancels: [{ asset: 10_107, cloid: '0x00000000000000000000000000000001' }],
+      fastCancel: true,
+    });
     expect(findAction(instance, 'cancelByCloid')).toEqual({
       type: 'cancelByCloid',
       cancels: [
@@ -446,24 +464,19 @@ describe('RestClient Exchange requests', () => {
       f: true,
     });
 
-    await instance.updateLeverage(
-      { asset: 0, isCross: true, leverage: 3 },
-      { nonce: 1_005 },
-    );
-    await instance.updateIsolatedMargin(
-      { asset: 0, isBuy: true, ntli: 2 },
-      { nonce: 1_006 },
-    );
-    await instance.setIsolatedMarginLeverage(
-      { asset: 0, leverage: '2.500' },
-      { nonce: 1_007 },
-    );
-    await instance.submitTwapOrder(
-      { a: 0, b: true, m: 5, r: false, s: '1.500', t: true },
-      { nonce: 1_008 },
-    );
-    await instance.cancelTwapOrder({ a: 0, t: 7 }, { nonce: 1_009 });
-    await instance.setCancelAllAfter({ time: 4_000 }, { nonce: 1_010 });
+    await instance.updateLeverage({ asset: 0, isCross: true, leverage: 3 });
+    await instance.updateIsolatedMargin({ asset: 0, isBuy: true, ntli: 2 });
+    await instance.setIsolatedMarginLeverage({ asset: 0, leverage: '2.500' });
+    await instance.submitTwapOrder({
+      a: 0,
+      b: true,
+      m: 5,
+      r: false,
+      s: '1.500',
+      t: true,
+    });
+    await instance.cancelTwapOrder({ a: 0, t: 7 });
+    await instance.setCancelAllAfter({ time: 4_000 });
 
     expect(findAction(instance, 'updateLeverage')).toEqual({
       type: 'updateLeverage',
@@ -505,7 +518,9 @@ describe('RestClient Exchange requests', () => {
       type: string,
       expected: Record<string, unknown> = {},
     ): Promise<void> => {
-      await run(nonce++);
+      const value = nonce++;
+      instance.setNextNonce(value);
+      await run(value);
       expect(findAction(instance, type)).toMatchObject({
         type,
         hyperliquidChain: 'Testnet',
@@ -514,56 +529,42 @@ describe('RestClient Exchange requests', () => {
       });
     };
 
+    await check((_value) => instance.approveBuilderFee(), 'approveBuilderFee', {
+      builder: BUILDER,
+      maxFeeRate: '0.01%',
+    });
     await check(
-      (value) => instance.approveBuilderFee({ nonce: value }),
-      'approveBuilderFee',
-      { builder: BUILDER, maxFeeRate: '0.01%' },
-    );
-    await check(
-      (value) =>
-        instance.approveApiWallet(
-          { agentAddress: USER, agentName: null },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.approveApiWallet({ agentAddress: USER, agentName: null }),
       'approveAgent',
       { agentAddress: USER.toLowerCase(), agentName: '' },
     );
     await check(
-      (value) =>
-        instance.sendUsd(
-          { amount: '1.2300', destination: USER },
-          { nonce: value },
-        ),
+      (_value) => instance.sendUsd({ amount: '1.2300', destination: USER }),
       'usdSend',
       { amount: '1.23', destination: USER.toLowerCase(), time: 2_002 },
     );
     await check(
-      (value) =>
-        instance.sendSpotAsset(
-          { amount: '2.00', destination: USER, token: 'PURR:0x01' },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.sendSpotAsset({
+          amount: '2.00',
+          destination: USER,
+          token: 'PURR:0x01',
+        }),
       'spotSend',
       { amount: '2', destination: USER.toLowerCase(), token: 'PURR:0x01' },
     );
     await check(
-      (value) =>
-        instance.withdrawUsd(
-          { amount: '3.00', destination: USER },
-          { nonce: value },
-        ),
+      (_value) => instance.withdrawUsd({ amount: '3.00', destination: USER }),
       'withdraw3',
       { amount: '3', destination: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.transferUsdBetweenSpotAndPerp(
-          {
-            amount: `4.500 subaccount:${USER}`,
-            toPerp: true,
-          },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.transferUsdBetweenSpotAndPerp({
+          amount: `4.500 subaccount:${USER}`,
+          toPerp: true,
+        }),
       'usdClassTransfer',
       {
         amount: `4.5 subaccount:${USER.toLowerCase()}`,
@@ -571,17 +572,14 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (value) =>
-        instance.sendAsset(
-          {
-            amount: '5.00',
-            destination: USER,
-            destinationDex: 'xyz',
-            sourceDex: '',
-            token: 'USDC',
-          },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.sendAsset({
+          amount: '5.00',
+          destination: USER,
+          destinationDex: 'xyz',
+          sourceDex: '',
+          token: 'USDC',
+        }),
       'sendAsset',
       {
         amount: '5',
@@ -590,48 +588,45 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (value) =>
-        instance.sendToEvmWithData(
-          {
-            addressEncoding: 'hex',
-            amount: '6.0',
-            data: '0x',
-            destinationChainId: 1,
-            destinationRecipient: USER,
-            gasLimit: 100_000,
-            sourceDex: '',
-            token: 'USDC',
-          },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.sendToEvmWithData({
+          addressEncoding: 'hex',
+          amount: '6.0',
+          data: '0x',
+          destinationChainId: 1,
+          destinationRecipient: USER,
+          gasLimit: 100_000,
+          sourceDex: '',
+          token: 'USDC',
+        }),
       'sendToEvmWithData',
       { amount: '6', destinationRecipient: USER.toLowerCase() },
     );
     await check(
-      (value) => instance.depositIntoStaking({ wei: 7 }, { nonce: value }),
+      (_value) => instance.depositIntoStaking({ wei: 7 }),
       'cDeposit',
       { wei: 7 },
     );
     await check(
-      (value) => instance.withdrawFromStaking({ wei: 8 }, { nonce: value }),
+      (_value) => instance.withdrawFromStaking({ wei: 8 }),
       'cWithdraw',
       { wei: 8 },
     );
     await check(
-      (value) =>
-        instance.delegateOrUndelegateStake(
-          { isUndelegate: false, validator: USER, wei: 9 },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.delegateOrUndelegateStake({
+          isUndelegate: false,
+          validator: USER,
+          wei: 9,
+        }),
       'tokenDelegate',
       { validator: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.convertToMultiSigUser(
-          { signers: { authorizedUsers: [USER], threshold: 1 } },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.convertToMultiSigUser({
+          signers: { authorizedUsers: [USER], threshold: 1 },
+        }),
       'convertToMultiSigUser',
       {
         signers: JSON.stringify({
@@ -641,47 +636,33 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (value) =>
-        instance.linkStakingAccount(
-          { isFinalize: false, user: USER },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.linkStakingAccount({ isFinalize: false, user: USER }),
       'linkStakingUser',
       { user: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.disableStakingTradingLink(
-          { tradingUser: USER },
-          { nonce: value },
-        ),
+      (_value) => instance.disableStakingTradingLink({ tradingUser: USER }),
       'stakingLinkDisableTradingUser',
       { tradingUser: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.setUserPortfolioMargin(
-          { enabled: true, user: USER },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.setUserPortfolioMargin({ enabled: true, user: USER }),
       'userPortfolioMargin',
       { enabled: true, user: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.setUserAbstraction(
-          { abstraction: 'unifiedAccount', user: USER },
-          { nonce: value },
-        ),
+      (_value) =>
+        instance.setUserAbstraction({
+          abstraction: 'unifiedAccount',
+          user: USER,
+        }),
       'userSetAbstraction',
       { abstraction: 'unifiedAccount', user: USER.toLowerCase() },
     );
     await check(
-      (value) =>
-        instance.setUserDexAbstraction(
-          { enabled: true, user: USER },
-          { nonce: value },
-        ),
+      (_value) => instance.setUserDexAbstraction({ enabled: true, user: USER }),
       'userDexAbstraction',
       { enabled: true, user: USER.toLowerCase() },
     );
@@ -695,162 +676,132 @@ describe('RestClient Exchange requests', () => {
       run: (value: number) => Promise<unknown>,
       expected: Record<string, unknown> = {},
     ): Promise<void> => {
-      await run(nonce++);
+      const value = nonce++;
+      instance.setNextNonce(value);
+      await run(value);
       expect(findAction(instance, type)).toMatchObject({ type, ...expected });
     };
 
-    await check('setReferrer', (value) =>
-      instance.setReferrer({ nonce: value }),
+    await check('setReferrer', (_value) => instance.setReferrer());
+    await check('registerReferrer', (_value) =>
+      instance.registerReferrer({ code: 'MINE' }),
     );
-    await check('registerReferrer', (value) =>
-      instance.registerReferrer({ code: 'MINE' }, { nonce: value }),
+    await check('agentSendAsset', (_value) =>
+      instance.sendAssetFromApiWallet({
+        amount: '1.200',
+        destination: USER,
+        destinationDex: 'xyz',
+        sourceDex: '',
+        token: 'USDC',
+      }),
     );
-    await check('agentSendAsset', (value) =>
-      instance.sendAssetFromApiWallet(
-        {
-          amount: '1.200',
-          destination: USER,
-          destinationDex: 'xyz',
-          sourceDex: '',
-          token: 'USDC',
-        },
-        { nonce: value },
-      ),
+    await check('agentEnableDexAbstraction', (_value) =>
+      instance.enableApiWalletDexAbstraction(),
     );
-    await check('agentEnableDexAbstraction', (value) =>
-      instance.enableApiWalletDexAbstraction({ nonce: value }),
+    await check('agentSetAbstraction', (_value) =>
+      instance.setApiWalletAbstraction({ abstraction: 'u' }),
     );
-    await check('agentSetAbstraction', (value) =>
-      instance.setApiWalletAbstraction({ abstraction: 'u' }, { nonce: value }),
+    await check('borrowLend', (_value) =>
+      instance.executeBorrowLendOperation({
+        amount: '2.500',
+        operation: 'supply',
+        token: 0,
+      }),
     );
-    await check('borrowLend', (value) =>
-      instance.executeBorrowLendOperation(
-        { amount: '2.500', operation: 'supply', token: 0 },
-        { nonce: value },
-      ),
+    await check('claimRewards', (_value) => instance.claimRewards());
+    await check('createSubAccount', (_value) =>
+      instance.createSubAccount({ name: 'Desk' }),
     );
-    await check('claimRewards', (value) =>
-      instance.claimRewards({ nonce: value }),
+    await check('createVault', (_value) =>
+      instance.createVault({
+        description: 'Vault',
+        initialUsd: 10,
+        name: 'Desk',
+      }),
     );
-    await check('createSubAccount', (value) =>
-      instance.createSubAccount({ name: 'Desk' }, { nonce: value }),
+    await check('evmUserModify', (_value) =>
+      instance.setEvmBigBlocks({ usingBigBlocks: true }),
     );
-    await check('createVault', (value) =>
-      instance.createVault(
-        { description: 'Vault', initialUsd: 10, name: 'Desk' },
-        { nonce: value },
-      ),
+    await check('finalizeEvmContract', (_value) =>
+      instance.finalizeEvmContract({ input: 'firstStorageSlot', token: 1 }),
     );
-    await check('evmUserModify', (value) =>
-      instance.setEvmBigBlocks({ usingBigBlocks: true }, { nonce: value }),
+    await check('gossipPriorityBid', (_value) =>
+      instance.submitGossipPriorityBid({
+        ip: '127.0.0.1',
+        maxGas: 1,
+        slotId: 0,
+      }),
     );
-    await check('finalizeEvmContract', (value) =>
-      instance.finalizeEvmContract(
-        { input: 'firstStorageSlot', token: 1 },
-        { nonce: value },
-      ),
+    await check('hip3LiquidatorTransfer', (_value) =>
+      instance.transferHip3LiquidatorFunds({
+        dex: 'xyz',
+        isDeposit: true,
+        ntl: 2,
+      }),
     );
-    await check('gossipPriorityBid', (value) =>
-      instance.submitGossipPriorityBid(
-        { ip: '127.0.0.1', maxGas: 1, slotId: 0 },
-        { nonce: value },
-      ),
+    await check('noop', (_value) => instance.invalidateNonce());
+    await check('perpDeploy', (_value) =>
+      instance.deployPerp({ setFeeScale: { dex: 'xyz', scale: 1 } }),
     );
-    await check('hip3LiquidatorTransfer', (value) =>
-      instance.transferHip3LiquidatorFunds(
-        { dex: 'xyz', isDeposit: true, ntl: 2 },
-        { nonce: value },
-      ),
+    await check('spotDeploy', (_value) =>
+      instance.deploySpot({ enableQuoteToken: { token: 1 } }),
     );
-    await check('noop', (value) => instance.invalidateNonce({ nonce: value }));
-    await check('perpDeploy', (value) =>
-      instance.deployPerp(
-        { setFeeScale: { dex: 'xyz', scale: 1 } },
-        { nonce: value },
-      ),
+    await check('reserveRequestWeight', (_value) =>
+      instance.reserveAdditionalActions({ weight: 1 }),
     );
-    await check('spotDeploy', (value) =>
-      instance.deploySpot({ enableQuoteToken: { token: 1 } }, { nonce: value }),
+    await check('setDisplayName', (_value) =>
+      instance.setDisplayName({ displayName: 'Desk' }),
     );
-    await check('reserveRequestWeight', (value) =>
-      instance.reserveAdditionalActions({ weight: 1 }, { nonce: value }),
+    await check('spotUser', (_value) =>
+      instance.setSpotDusting({ toggleSpotDusting: { optOut: false } }),
     );
-    await check('setDisplayName', (value) =>
-      instance.setDisplayName({ displayName: 'Desk' }, { nonce: value }),
+    await check('subAccountModify', (_value) =>
+      instance.renameSubAccount({ name: 'Desk', subAccountUser: USER }),
     );
-    await check('spotUser', (value) =>
-      instance.setSpotDusting(
-        { toggleSpotDusting: { optOut: false } },
-        { nonce: value },
-      ),
+    await check('subAccountSpotTransfer', (_value) =>
+      instance.transferSpotToOrFromSubAccount({
+        amount: '1.200',
+        isDeposit: true,
+        subAccountUser: USER,
+        token: 'USDC',
+      }),
     );
-    await check('subAccountModify', (value) =>
-      instance.renameSubAccount(
-        { name: 'Desk', subAccountUser: USER },
-        { nonce: value },
-      ),
+    await check('subAccountTransfer', (_value) =>
+      instance.transferUsdToOrFromSubAccount({
+        isDeposit: true,
+        subAccountUser: USER,
+        usd: 1,
+      }),
     );
-    await check('subAccountSpotTransfer', (value) =>
-      instance.transferSpotToOrFromSubAccount(
-        {
-          amount: '1.200',
-          isDeposit: true,
-          subAccountUser: USER,
-          token: 'USDC',
-        },
-        { nonce: value },
-      ),
+    await check('vaultTransfer', (_value) =>
+      instance.transferVaultFunds({
+        isDeposit: true,
+        usd: 1,
+        vaultAddress: USER,
+      }),
     );
-    await check('subAccountTransfer', (value) =>
-      instance.transferUsdToOrFromSubAccount(
-        { isDeposit: true, subAccountUser: USER, usd: 1 },
-        { nonce: value },
-      ),
+    await check('vaultDistribute', (_value) =>
+      instance.distributeVaultFunds({ usd: 1, vaultAddress: USER }),
     );
-    await check('vaultTransfer', (value) =>
-      instance.transferVaultFunds(
-        { isDeposit: true, usd: 1, vaultAddress: USER },
-        { nonce: value },
-      ),
+    await check('vaultModify', (_value) =>
+      instance.modifyVault({ allowDeposits: true, vaultAddress: USER }),
     );
-    await check('vaultDistribute', (value) =>
-      instance.distributeVaultFunds(
-        { usd: 1, vaultAddress: USER },
-        { nonce: value },
-      ),
+    await check('validatorL1Stream', (_value) =>
+      instance.updateValidatorL1Stream({ riskFreeRate: '0.0500' }),
     );
-    await check('vaultModify', (value) =>
-      instance.modifyVault(
-        { allowDeposits: true, vaultAddress: USER },
-        { nonce: value },
-      ),
+    await check('CSignerAction', (_value) =>
+      instance.submitSignerAction({ unjailSelf: null }),
     );
-    await check('validatorL1Stream', (value) =>
-      instance.updateValidatorL1Stream(
-        { riskFreeRate: '0.0500' },
-        { nonce: value },
-      ),
+    await check('CValidatorAction', (_value) =>
+      instance.submitValidatorAction({ changeProfile: { name: 'Validator' } }),
     );
-    await check('CSignerAction', (value) =>
-      instance.submitSignerAction({ unjailSelf: null }, { nonce: value }),
+    await check('authorizeAqav2Role', (_value) =>
+      instance.authorizeAqav2Role({ role: 'technical', token: 1 }),
     );
-    await check('CValidatorAction', (value) =>
-      instance.submitValidatorAction(
-        { changeProfile: { name: 'Validator' } },
-        { nonce: value },
-      ),
-    );
-    await check('authorizeAqav2Role', (value) =>
-      instance.authorizeAqav2Role(
-        { role: 'technical', token: 1 },
-        { nonce: value },
-      ),
-    );
-    await check('userOutcome', (value) =>
-      instance.submitUserOutcome(
-        { splitOutcome: { amount: '1.500', outcome: 10 } },
-        { nonce: value },
-      ),
+    await check('userOutcome', (_value) =>
+      instance.submitUserOutcome({
+        splitOutcome: { amount: '1.500', outcome: 10 },
+      }),
     );
 
     expect(findAction(instance, 'setReferrer')).toMatchObject({
@@ -910,9 +861,9 @@ describe('RestClient Exchange requests', () => {
       return { response: { type: 'default' }, status: 'ok' };
     };
 
-    await expect(
-      instance.submitOrder(ORDER_INPUT, { nonce: 4_000 }),
-    ).resolves.toMatchObject({ status: 'ok' });
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
     expect(instance.requests[0]).toEqual({
       body: {
         builder: BUILDER,
@@ -929,9 +880,9 @@ describe('RestClient Exchange requests', () => {
 
     releaseApproval?.();
     await settleBackgroundWork();
-    await expect(
-      instance.submitOrder(ORDER_INPUT, { nonce: 4_001 }),
-    ).resolves.toMatchObject({ status: 'ok' });
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
 
     expect(
       actions(instance).filter((action) => action.type === 'approveBuilderFee'),
@@ -951,11 +902,11 @@ describe('RestClient Exchange requests', () => {
 
   test('checks a configured API wallet owner once and tags its first order', async () => {
     const instance = client({ accountAddress: OTHER_USER });
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_000 });
+    await instance.submitOrder(ORDER_INPUT);
     expect(findAction(instance, 'order')).toMatchObject({
       builder: PARTNER.builder,
     });
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_001 });
+    await instance.submitOrder(ORDER_INPUT);
 
     expect(
       actions(instance).filter((action) => action.type === 'approveBuilderFee'),
@@ -982,8 +933,8 @@ describe('RestClient Exchange requests', () => {
       return request.type === 'maxBuilderFee' ? checkPending : {};
     };
 
-    const first = instance.submitOrder(ORDER_INPUT, { nonce: 5_100 });
-    const second = instance.submitOrder(ORDER_INPUT, { nonce: 5_101 });
+    const first = instance.submitOrder(ORDER_INPUT);
+    const second = instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
     expect(
       actions(instance).filter((action) => action.type === 'order'),
@@ -1014,7 +965,7 @@ describe('RestClient Exchange requests', () => {
         ? new Promise<number>(() => undefined)
         : {};
 
-    const pending = instance.submitOrder(ORDER_INPUT, { nonce: 5_150 });
+    const pending = instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
     expect(
       actions(instance).filter((action) => action.type === 'order'),
@@ -1024,9 +975,9 @@ describe('RestClient Exchange requests', () => {
     await expect(pending).resolves.toMatchObject({ status: 'ok' });
     expect(findAction(instance, 'order')).not.toHaveProperty('builder');
 
-    await expect(
-      instance.submitOrder(ORDER_INPUT, { nonce: 5_151 }),
-    ).resolves.toMatchObject({ status: 'ok' });
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
     expect(
       actions(instance)
         .filter((action) => action.type === 'order')
@@ -1052,11 +1003,11 @@ describe('RestClient Exchange requests', () => {
       return request.type === 'maxBuilderFee' ? 0 : {};
     };
 
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_200 });
+    await instance.submitOrder(ORDER_INPUT);
     expect(findAction(instance, 'order')).not.toHaveProperty('builder');
     await settleBackgroundWork();
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_201 });
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_202 });
+    await instance.submitOrder(ORDER_INPUT);
+    await instance.submitOrder(ORDER_INPUT);
 
     expect(
       instance.requests
@@ -1096,7 +1047,7 @@ describe('RestClient Exchange requests', () => {
       testnet: true,
     });
     jest
-      .spyOn(instance.actionBuilder, 'partnerConfiguration')
+      .spyOn(instance.testActionBuilder, 'partnerConfiguration')
       .mockReturnValue(PARTNER);
     const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
     instance.infoBehavior = async (request) => {
@@ -1106,7 +1057,7 @@ describe('RestClient Exchange requests', () => {
       return request.type === 'maxBuilderFee' ? 0 : {};
     };
 
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_300 });
+    await instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
 
     expect(
@@ -1114,8 +1065,8 @@ describe('RestClient Exchange requests', () => {
     ).toHaveLength(0);
     expect(warning).toHaveBeenCalledTimes(1);
 
-    await instance.approveBuilderFee({ nonce: 5_301 });
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_302 });
+    await instance.approveBuilderFee();
+    await instance.submitOrder(ORDER_INPUT);
     expect(
       actions(instance).filter((action) => action.type === 'order')[1],
     ).toMatchObject({ builder: PARTNER.builder });
@@ -1132,9 +1083,9 @@ describe('RestClient Exchange requests', () => {
       return {};
     };
 
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_400 });
+    await instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_401 });
+    await instance.submitOrder(ORDER_INPUT);
 
     expect(
       actions(instance)
@@ -1156,11 +1107,11 @@ describe('RestClient Exchange requests', () => {
     instance.infoBehavior = async (request) =>
       request.type === 'maxBuilderFee' ? 0 : {};
 
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_450 });
+    await instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
-    await expect(
-      instance.submitOrder(ORDER_INPUT, { nonce: 5_451 }),
-    ).resolves.toMatchObject({ status: 'ok' });
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
     expect(warning).toHaveBeenCalledTimes(2);
     warning.mockRestore();
   });
@@ -1175,7 +1126,7 @@ describe('RestClient Exchange requests', () => {
     };
 
     await expect(
-      instance.cancelOrders({ cancels: [{ a: 0, o: 1 }] }, { nonce: 5_500 }),
+      instance.cancelOrders({ cancels: [{ a: 0, o: 1 }] }),
     ).resolves.toMatchObject({ status: 'ok' });
     await settleBackgroundWork();
     expect(
@@ -1186,8 +1137,8 @@ describe('RestClient Exchange requests', () => {
   test('does not repeat a manually attempted referral on a later trade', async () => {
     const instance = client();
 
-    await instance.setReferrer({ nonce: 5_550 });
-    await instance.submitOrder(ORDER_INPUT, { nonce: 5_551 });
+    await instance.setReferrer();
+    await instance.submitOrder(ORDER_INPUT);
     await settleBackgroundWork();
 
     expect(
@@ -1233,7 +1184,7 @@ describe('RestClient Exchange requests', () => {
   test('multisig actions keep the shared canonical signing path', async () => {
     const instance = client();
 
-    const signer = instance.actionBuilder;
+    const signer = instance.testActionBuilder;
     const wallet = Wallet.fromPhrase(
       'test test test test test test test test test test test junk',
     );
@@ -1248,7 +1199,7 @@ describe('RestClient Exchange requests', () => {
     const multiSig = findAction(instance, 'multiSig');
     expect(multiSig.signatureChainId).toBe('0x66eee');
     expect(multiSig.signatures).toHaveLength(2);
-    expect(signer).toBe(instance.actionBuilder);
+    expect(signer).toBe(instance.testActionBuilder);
 
     await instance.submitMultiSigUserSignedAction(
       {
@@ -1294,7 +1245,7 @@ describe('RestClient Exchange requests', () => {
   test('checks multisig approval before signing without automatic approval', async () => {
     const instance = new CaptureRestClient({ testnet: true });
     jest
-      .spyOn(instance.actionBuilder, 'partnerConfiguration')
+      .spyOn(instance.testActionBuilder, 'partnerConfiguration')
       .mockReturnValue(PARTNER);
     const signers = [
       new Wallet(PRIVATE_KEY),
