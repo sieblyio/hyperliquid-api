@@ -1,5 +1,4 @@
 import type { UserRoleResponse } from '../types/response/info.types.js';
-import type { RequestOptions } from '../types/shared.types.js';
 import type { ActionBuilder } from './action-builder.js';
 import { normalizeAddresses } from './normalize-addresses.js';
 
@@ -9,10 +8,7 @@ export interface SignerAccountResolution {
   signerAddress: string;
 }
 
-type UserRoleLoader = (
-  user: string,
-  options?: RequestOptions,
-) => Promise<UserRoleResponse>;
+type UserRoleLoader = (user: string) => Promise<UserRoleResponse>;
 
 export class AccountResolver {
   private signerAccountPromise: Promise<SignerAccountResolution> | undefined;
@@ -22,10 +18,7 @@ export class AccountResolver {
     private readonly loadUserRole: UserRoleLoader,
   ) {}
 
-  async resolveAccountAddress(
-    requestedUser?: string,
-    options?: RequestOptions,
-  ): Promise<string> {
+  async resolveAccountAddress(requestedUser?: string): Promise<string> {
     if (requestedUser !== undefined) {
       return normalizeAddresses(requestedUser);
     }
@@ -46,14 +39,12 @@ export class AccountResolver {
       );
     }
 
-    return (await this.resolveSignerAccount(options)).accountAddress;
+    return (await this.resolveSignerAccount()).accountAddress;
   }
 
-  resolveSignerAccount(
-    options?: RequestOptions,
-  ): Promise<SignerAccountResolution> {
+  resolveSignerAccount(): Promise<SignerAccountResolution> {
     if (!this.signerAccountPromise) {
-      this.signerAccountPromise = this.loadSignerAccount(options).catch(
+      this.signerAccountPromise = this.loadSignerAccount().catch(
         (error: unknown) => {
           this.signerAccountPromise = undefined;
           throw error;
@@ -64,16 +55,14 @@ export class AccountResolver {
     return this.signerAccountPromise;
   }
 
-  private async loadSignerAccount(
-    options?: RequestOptions,
-  ): Promise<SignerAccountResolution> {
+  private async loadSignerAccount(): Promise<SignerAccountResolution> {
     const signerAddress = await this.actionBuilder.signerAddress();
     const configuredAccount = this.actionBuilder.configuredAccount();
     if (configuredAccount) {
       return { accountAddress: configuredAccount, signerAddress };
     }
 
-    const role = await this.loadUserRole(signerAddress, options);
+    const role = await this.loadUserRole(signerAddress);
     if (role.role === 'missing') {
       throw new TypeError(
         'The signer is not a Hyperliquid account on this network. Set accountAddress when using an API wallet.',

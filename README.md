@@ -148,11 +148,11 @@ const postOnlyOrder = await client.submitLimitOrder({
 
 `submitMarketOrder()` uses Hyperliquid's immediate-or-cancel market order mechanism. It loads the current midpoint, applies the requested maximum slippage, rounds the protection price to Hyperliquid's rules, rounds size down to the asset's supported precision, and submits an IOC order that cannot rest on the book. `maxSlippage` defaults to `0.05`, meaning 5%. Spot size is always the base asset quantity.
 
-Both convenience methods support `clientOrderId` and `reduceOnly`. `submitLimitOrder()` defaults to `timeInForce: 'GTC'`; use `'IOC'` for immediate-or-cancel or `postOnly: true` for add-liquidity-only behavior. Use `submitOrder()` when submitting batches, TP/SL orders, or other native wire shapes.
+Both convenience methods support `clientOrderId` and `reduceOnly`. `submitMarketClose()` looks up the perpetual position, infers buy/sell from the signed size, and submits a reduce-only IOC order. Omit `size` to close the full position. `submitLimitOrder()` defaults to `timeInForce: 'GTC'`; use `'IOC'` for immediate-or-cancel or `postOnly: true` for add-liquidity-only behavior. Use `submitOrder()` when submitting batches, TP/SL orders, or other native wire shapes.
 
 Prices, sizes, amounts, and trigger prices are exact decimal strings. JavaScript numbers are not accepted for decimal fields.
 
-Pass request controls as the second argument:
+Pass signing controls as the second argument:
 
 ```ts
 await client.submitOrder(
@@ -170,12 +170,11 @@ await client.submitOrder(
   },
   {
     expiresAfter: Date.now() + 10_000,
-    timeout: 5_000,
   },
 );
 ```
 
-Per-request options are limited to `timeout`, `signal`, and the signing controls that apply to that method. Configure reusable Axios options once as the second constructor argument:
+Configure Axios once as the second constructor argument:
 
 ```ts
 const client = new RestClient({ testnet: true }, { timeout: 5_000 });
@@ -187,7 +186,7 @@ Account getters such as `getBalances()`, `getSpotBalances()`, `getPerpAccountSum
 
 ## Assets
 
-Asset inputs support official identifiers and aliases derived from live metadata. Trading actions also accept numeric asset IDs:
+Trading actions accept official identifiers, numeric asset IDs, and aliases derived from live metadata:
 
 - `BTC`
 - `@107`
@@ -202,6 +201,12 @@ const asset = await client.resolveAsset('HYPE/USDC');
 console.log(asset.assetId, asset.canonicalName);
 
 await client.refreshAssetMetadata();
+```
+
+Info and WebSocket `coin` fields follow official Python `name_to_coin`: exact metadata lookup, including pair aliases. `getOrderBook`, `getCandles`, `getFundingHistory`, and the `l2Book` / `trades` / `candle` / `bbo` / `activeAssetCtx` subscriptions rewrite `HYPE/USDC` to `@107`. `PURR/USDC` stays `PURR/USDC` because that is the universe name. Other info methods leave `coin` as-is.
+
+```ts
+const book = await client.getOrderBook({ coin: 'HYPE/USDC' });
 ```
 
 Spot, HIP-3, and outcome asset IDs follow Hyperliquid's current offset rules. The SDK does not add `-PERP` or `-SPOT` suffixes.

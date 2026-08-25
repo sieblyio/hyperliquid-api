@@ -49,6 +49,14 @@ const DEX_DEFAULT_SUBSCRIPTIONS = new Set([
   'twapStates',
 ]);
 
+const COIN_REMAP_SUBSCRIPTIONS = new Set([
+  'activeAssetCtx',
+  'bbo',
+  'candle',
+  'l2Book',
+  'trades',
+]);
+
 const USER_UNSCOPED_CHANNELS = new Set([
   'notification',
   'orderUpdates',
@@ -426,6 +434,10 @@ export class WebsocketClient extends BaseWebsocketClient {
     return this.metadataClient.resolveAsset(identifier);
   }
 
+  nameToCoin(name: string): Promise<string> {
+    return this.metadataClient.nameToCoin(name);
+  }
+
   refreshAssetMetadata(): Promise<void> {
     return this.metadataClient.refreshAssetMetadata();
   }
@@ -632,10 +644,12 @@ export class WebsocketClient extends BaseWebsocketClient {
     subscription: S,
   ): Promise<S> {
     const normalized = normalizeSubscriptionFields(subscription);
-    if ('coin' in normalized && normalized.coin.includes('/')) {
-      normalized.coin = (
-        await this.metadataClient.resolveAsset(normalized.coin)
-      ).canonicalName;
+    if (
+      'coin' in normalized &&
+      typeof normalized.coin === 'string' &&
+      COIN_REMAP_SUBSCRIPTIONS.has(normalized.type)
+    ) {
+      normalized.coin = await this.metadataClient.nameToCoin(normalized.coin);
     }
     return normalized;
   }

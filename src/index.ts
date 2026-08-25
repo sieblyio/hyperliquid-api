@@ -1,9 +1,13 @@
 export type {
+  AssetIdentifier,
   CancelByCloidWireInput,
   CancelWireInput,
+  Grouping,
   LimitOrderType,
+  ModifyWireInput,
   OrderType,
   OrderWire,
+  OrderWireInput,
   TriggerOrderType,
 } from './lib/action-factory.js';
 export type { ResolvedAsset } from './lib/asset-resolver.js';

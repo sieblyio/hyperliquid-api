@@ -4,7 +4,6 @@ import {
   type DefaultLogger as Logger,
 } from './lib/websocket/logger.js';
 import { RestClient } from './RestClient.js';
-import type { RequestOptions } from './types/shared.types.js';
 import type {
   WebsocketAPIClientOptions,
   WebsocketLifecycleCallback,
@@ -67,11 +66,7 @@ export class WebsocketAPIClient extends RestClient {
     this.close();
   }
 
-  protected override post<T>(
-    path: string,
-    body: unknown,
-    options: RequestOptions = {},
-  ): Promise<T> {
+  protected override post<T>(path: string, body: unknown): Promise<T> {
     const endpoint =
       path === '/info' ? 'info' : path === '/exchange' ? 'action' : undefined;
     if (!endpoint) {
@@ -82,6 +77,6 @@ export class WebsocketAPIClient extends RestClient {
       );
     }
 
-    return this.wsClient.sendWSAPIRequest<T>(endpoint, body, options);
+    return this.wsClient.sendWSAPIRequest<T>(endpoint, body);
   }
 }

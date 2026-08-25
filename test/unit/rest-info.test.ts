@@ -1,12 +1,7 @@
-import {
-  type HyperliquidSigner,
-  type RequestOptions,
-  RestClient,
-} from '../../src/index.js';
+import { type HyperliquidSigner, RestClient } from '../../src/index.js';
 
 interface CapturedRequest {
   body: unknown;
-  options?: RequestOptions;
   path: string;
 }
 
@@ -19,14 +14,9 @@ class CaptureRestClient extends RestClient {
     return this.assetResolver;
   }
 
-  protected override async post<T>(
-    path: string,
-    body: unknown,
-    options?: RequestOptions,
-  ): Promise<T> {
+  protected override async post<T>(path: string, body: unknown): Promise<T> {
     this.requests.push({
       body,
-      ...(options ? { options } : {}),
       path,
     });
     return (this.responseFor?.(body as Record<string, unknown>) ?? {}) as T;
@@ -122,6 +112,9 @@ describe('RestClient Info requests', () => {
 
   test('builds every parameterized Info request with the documented shape', async () => {
     const client = new CaptureRestClient();
+    jest
+      .spyOn(client.testAssetResolver, 'nameToCoin')
+      .mockImplementation(async (name) => name);
     const check = async (
       run: () => Promise<unknown>,
       expected: Record<string, unknown>,
@@ -381,15 +374,13 @@ describe('RestClient Info requests', () => {
     });
   });
 
-  test('passes request options and strips undefined values', async () => {
+  test('strips undefined values from Info requests', async () => {
     const client = new CaptureRestClient();
-    const signal = new AbortController().signal;
-    await client.getAllMids({ dex: undefined }, { signal, timeout: 250 });
+    await client.getAllMids({ dex: undefined });
 
     expect(client.requests).toEqual([
       {
         body: { type: 'allMids' },
-        options: { signal, timeout: 250 },
         path: '/info',
       },
     ]);
@@ -544,19 +535,48 @@ describe('RestClient Info requests', () => {
     ]);
   });
 
-  test('resolves metadata-derived pair aliases for market data', async () => {
+  test('rewrites info coins with official Python name_to_coin', async () => {
     const client = new CaptureRestClient();
-    jest.spyOn(client.testAssetResolver, 'resolve').mockResolvedValue({
-      assetId: 10_107,
-      canonicalName: '@107',
-      kind: 'spot',
-      szDecimals: 2,
-    });
+    jest
+      .spyOn(client.testAssetResolver, 'nameToCoin')
+      .mockImplementation(async (name) =>
+        name === 'HYPE/USDC' ? '@107' : name,
+      );
 
     await client.getOrderBook({ coin: 'HYPE/USDC' });
+    await client.getCandles({
+      coin: 'HYPE/USDC',
+      endTime: 2,
+      interval: '1m',
+      startTime: 1,
+    });
+    await client.getFundingHistory({ coin: 'HYPE/USDC', startTime: 1 });
+    await client.getActiveAssetData({ user: USER, coin: 'HYPE/USDC' });
+
     expect(client.requests).toEqual([
+      { body: { coin: '@107', type: 'l2Book' }, path: '/info' },
       {
-        body: { coin: '@107', type: 'l2Book' },
+        body: {
+          req: {
+            coin: '@107',
+            endTime: 2,
+            interval: '1m',
+            startTime: 1,
+          },
+          type: 'candleSnapshot',
+        },
+        path: '/info',
+      },
+      {
+        body: { coin: '@107', startTime: 1, type: 'fundingHistory' },
+        path: '/info',
+      },
+      {
+        body: {
+          coin: 'HYPE/USDC',
+          type: 'activeAssetData',
+          user: LOWER_USER,
+        },
         path: '/info',
       },
     ]);

@@ -9,14 +9,6 @@ import { FakeWebSocket } from '../support/fake-websocket.js';
 
 const PRIVATE_KEY =
   '0x0123456789012345678901234567890123456789012345678901234567890123';
-const PARTNER = {
-  approvalPercentage: '0.01%',
-  builder: {
-    b: '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2',
-    f: 10,
-  },
-  referralCode: 'SIEBLY',
-};
 const TEST_LOGGER: DefaultLogger = {
   error: jest.fn(),
   info: jest.fn(),
@@ -106,7 +98,7 @@ describe('WebsocketAPIClient', () => {
     instance.close();
   });
 
-  test('checks approval before the first WebSocket order', async () => {
+  test('posts a signed order over the WebSocket without a builder preflight', async () => {
     const instance = client();
     const pending = instance.submitOrder({
       orders: [
@@ -121,39 +113,6 @@ describe('WebsocketAPIClient', () => {
       ],
     });
     const socket = await openLatest();
-    let approvalCheck:
-      | {
-          id: number;
-          request: { payload: { type?: string }; type: string };
-        }
-      | undefined;
-    for (let attempt = 0; attempt < 50 && !approvalCheck; attempt += 1) {
-      await Promise.resolve();
-      approvalCheck = socket.jsonMessages().find(
-        (value) =>
-          (
-            value as {
-              request?: { payload?: { type?: string }; type?: string };
-            }
-          ).request?.payload?.type === 'maxBuilderFee',
-      ) as typeof approvalCheck;
-    }
-    if (!approvalCheck) {
-      throw new Error('Expected a maxBuilderFee WebSocket POST request.');
-    }
-
-    expect(approvalCheck.request.type).toBe('info');
-    socket.message({
-      channel: 'post',
-      data: {
-        id: approvalCheck.id,
-        response: {
-          payload: { data: PARTNER.builder.f },
-          type: 'info',
-        },
-      },
-    });
-
     let orderRequest:
       | {
           id: number;
@@ -162,6 +121,7 @@ describe('WebsocketAPIClient', () => {
               action: {
                 builder?: unknown;
                 orders: Array<{ p: string; s: string }>;
+                type: string;
               };
             };
           };
@@ -185,9 +145,10 @@ describe('WebsocketAPIClient', () => {
     }
 
     expect(orderRequest.request.payload.action).toMatchObject({
-      builder: PARTNER.builder,
       orders: [{ p: '10', s: '1' }],
+      type: 'order',
     });
+    expect(orderRequest.request.payload.action.builder).toBeUndefined();
     socket.message({
       channel: 'post',
       data: {
@@ -199,58 +160,6 @@ describe('WebsocketAPIClient', () => {
       },
     });
     await expect(pending).resolves.toMatchObject({ status: 'ok' });
-
-    const second = instance.submitOrder({
-      orders: [
-        {
-          a: 0,
-          b: false,
-          p: '11',
-          r: false,
-          s: '2',
-          t: { limit: { tif: 'Gtc' } },
-        },
-      ],
-    });
-    let taggedRequest:
-      | {
-          id: number;
-          request: {
-            payload: { action: { builder?: unknown; type: string } };
-          };
-        }
-      | undefined;
-    for (let attempt = 0; attempt < 50 && !taggedRequest; attempt += 1) {
-      await Promise.resolve();
-      const orderRequests = socket.jsonMessages().filter(
-        (value) =>
-          (
-            value as {
-              request?: {
-                payload?: { action?: { type?: string } };
-              };
-            }
-          ).request?.payload?.action?.type === 'order',
-      );
-      taggedRequest = orderRequests[1] as typeof taggedRequest;
-    }
-    if (!taggedRequest) {
-      throw new Error('Expected the second order WebSocket POST request.');
-    }
-    expect(taggedRequest.request.payload.action.builder).toEqual(
-      PARTNER.builder,
-    );
-    socket.message({
-      channel: 'post',
-      data: {
-        id: taggedRequest.id,
-        response: {
-          payload: { response: { type: 'default' }, status: 'ok' },
-          type: 'action',
-        },
-      },
-    });
-    await expect(second).resolves.toMatchObject({ status: 'ok' });
     instance.close();
   });
 
@@ -346,11 +255,19 @@ describe('WebsocketAPIClient', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      instance.getAllMids({}, { signal: controller.signal }),
+      instance.getWSClient().sendWSAPIRequest(
+        'info',
+        { type: 'allMids' },
+        {
+          signal: controller.signal,
+        },
+      ),
     ).rejects.toThrow('aborted');
     expect(FakeWebSocket.instances).toHaveLength(0);
 
-    const timedOut = instance.getAllMids({}, { timeout: 5 });
+    const timedOut = instance
+      .getWSClient()
+      .sendWSAPIRequest('info', { type: 'allMids' }, { timeout: 5 });
     await openLatest();
     const timeoutAssertion = expect(timedOut).rejects.toThrow(
       'timed out after 5 ms',

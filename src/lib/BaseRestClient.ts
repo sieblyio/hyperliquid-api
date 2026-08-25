@@ -17,7 +17,6 @@ import type { ExchangeResponse } from '../types/response/exchange.types.js';
 import type { InfoResponse } from '../types/response/info.types.js';
 import type {
   JsonObject,
-  RequestOptions,
   RestClientNetworkOptions,
   RestClientOptions,
   UserSignedActionDefinition,
@@ -31,12 +30,6 @@ import {
 } from './https-agent.js';
 import { buildUserSignedAction } from './request-utils.js';
 import { sanitizeObjectForWire } from './wire.js';
-
-export type ActionSubmissionOptions =
-  | MultiSigL1RequestOptions
-  | MultiSigUserSignedRequestOptions
-  | RawL1RequestOptions
-  | RawUserSignedRequestOptions;
 
 interface HyperliquidErrorResponse {
   response?: string;
@@ -52,14 +45,6 @@ function isHyperliquidErrorResponse(
     'status' in value &&
     value.status === 'err'
   );
-}
-
-function transportOptions(options: RequestOptions): RequestOptions | undefined {
-  const requestOptions = {
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
-  };
-  return Object.keys(requestOptions).length === 0 ? undefined : requestOptions;
 }
 
 export abstract class BaseRestClient {
@@ -96,24 +81,16 @@ export abstract class BaseRestClient {
     this.actionBuilder = new ActionBuilder(this.assetResolver, options);
   }
 
-  submitRawInfoRequest<T = InfoResponse>(
-    request: object,
-    options: RequestOptions = {},
-  ): Promise<T> {
-    return this.post<T>(
-      '/info',
-      sanitizeObjectForWire({ ...request }),
-      transportOptions(options),
-    );
+  submitRawInfoRequest<T = InfoResponse>(request: object): Promise<T> {
+    return this.post<T>('/info', sanitizeObjectForWire({ ...request }));
   }
 
   async submitRawL1Action<T = ExchangeResponse>(
     action: JsonObject,
     options: RawL1RequestOptions = {},
   ): Promise<T> {
-    await this.beforeActionSubmission(action, options);
     const envelope = await this.actionBuilder.prepareL1Action(action, options);
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitRawUserSignedAction<T = ExchangeResponse>(
@@ -121,27 +98,25 @@ export abstract class BaseRestClient {
     definition: UserSignedActionDefinition,
     options: RawUserSignedRequestOptions = {},
   ): Promise<T> {
-    await this.beforeActionSubmission(action, options);
     const envelope = await this.actionBuilder.prepareUserSignedAction(
       action,
       definition,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitMultiSigL1Action<T = ExchangeResponse>(
     action: JsonObject,
     options: MultiSigL1RequestOptions,
   ): Promise<T> {
-    await this.beforeActionSubmission(action, options);
     const envelope = await this.actionBuilder.prepareMultiSigL1Action(
       action,
       options.signers,
       options.multiSigUser,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitMultiSigUserSignedAction<T = ExchangeResponse>(
@@ -149,7 +124,6 @@ export abstract class BaseRestClient {
     definition: UserSignedActionDefinition,
     options: MultiSigUserSignedRequestOptions,
   ): Promise<T> {
-    await this.beforeActionSubmission(action, options);
     const envelope = await this.actionBuilder.prepareMultiSigUserSignedAction(
       action,
       definition,
@@ -157,17 +131,13 @@ export abstract class BaseRestClient {
       options.multiSigUser,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
-  protected info<T>(
-    type: string,
-    params: object,
-    options: RequestOptions = {},
-  ): Promise<T> {
+  protected info<T>(type: string, params: object): Promise<T> {
     const fields = sanitizeObjectForWire({ ...params });
     delete fields.type;
-    return this.submitRawInfoRequest<T>({ type, ...fields }, options);
+    return this.submitRawInfoRequest<T>({ type, ...fields });
   }
 
   protected l1(
@@ -194,13 +164,9 @@ export abstract class BaseRestClient {
     );
   }
 
-  protected async post<T>(
-    path: string,
-    body: unknown,
-    options: RequestOptions = {},
-  ): Promise<T> {
+  protected async post<T>(path: string, body: unknown): Promise<T> {
     try {
-      const response = await this.axios.post<T>(path, body, options);
+      const response = await this.axios.post<T>(path, body);
 
       if (isHyperliquidErrorResponse(response.data)) {
         throw new HyperliquidApiError(
@@ -233,14 +199,5 @@ export abstract class BaseRestClient {
 
       throw error;
     }
-  }
-
-  protected beforeActionSubmission(
-    _action: JsonObject,
-    _options: ActionSubmissionOptions,
-  ): Promise<void> {
-    void _action;
-    void _options;
-    return Promise.resolve();
   }
 }

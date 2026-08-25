@@ -42,7 +42,7 @@ const api = new WebsocketAPIClient(
 );
 
 void rest.getAllMids();
-void rest.getAllMids({}, { timeout: 1_000 });
+void rest.getAllMids({ dex: 'xyz' });
 void rest.getAccountAddress();
 void rest.getBalances();
 void rest.getSpotBalances();
@@ -61,13 +61,16 @@ void rest.submitOrder(
       },
     ],
   },
-  { expiresAfter: Date.now() + 1_000, timeout: 1_000 },
+  { expiresAfter: Date.now() + 1_000 },
 );
 void rest.submitMarketOrder({
   side: 'sell',
   size: '1',
   symbol: 'HYPE/USDC',
 });
+void rest.submitMarketClose({ symbol: 'ETH' });
+void rest.getOrderBook({ coin: 'HYPE/USDC' });
+void rest.nameToCoin('HYPE/USDC');
 void rest.submitLimitOrder({
   postOnly: true,
   price: '10',
