@@ -1,5 +1,4 @@
 import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
-import { AccountResolver } from './lib/account-resolver.js';
 import type { AssetIdentifier } from './lib/action-factory.js';
 import type { ResolvedAsset } from './lib/asset-resolver.js';
 import { BaseRestClient } from './lib/BaseRestClient.js';
@@ -119,8 +118,6 @@ function perpPositionCoin(
 }
 
 export class RestClient extends BaseRestClient {
-  private readonly accountResolver: AccountResolver;
-
   constructor(
     options: RestClientOptions = {},
     networkOptions: RestClientNetworkOptions = {},
@@ -130,9 +127,6 @@ export class RestClient extends BaseRestClient {
         (options.testnet === true ? TESTNET_API_URL : MAINNET_API_URL),
       options,
       networkOptions,
-    );
-    this.accountResolver = new AccountResolver(this.actionBuilder, (user) =>
-      this.info<UserRoleResponse>('userRole', { user }),
     );
   }
 
@@ -738,6 +732,7 @@ export class RestClient extends BaseRestClient {
   }
 
   setReferrer(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+    this.markReferralAttempted();
     const { referralCode } = this.actionBuilder.partnerConfiguration();
     return this.l1('setReferrer', { code: referralCode }, options);
   }
@@ -763,7 +758,7 @@ export class RestClient extends BaseRestClient {
       options,
     );
     if (response.status === 'ok') {
-      this.actionBuilder.confirmBuilderFeeApproval();
+      this.confirmBuilderFeeApproval();
     }
     return response;
   }

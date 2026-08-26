@@ -85,6 +85,9 @@ class CaptureRestClient extends RestClient {
       if (this.infoBehavior) {
         return (await this.infoBehavior(request)) as T;
       }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f as T;
+      }
       if (request.type === 'userRole') {
         return { role: 'user' } as T;
       }
@@ -126,6 +129,12 @@ function findAction(instance: CaptureRestClient, type: string): JsonObject {
   return action;
 }
 
+async function settleBackgroundWork(): Promise<void> {
+  for (let index = 0; index < 50; index += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('RestClient Exchange requests', () => {
   test('loads the configured Siebly partner values', () => {
     expect(getPartnerConfiguration()).toEqual({
@@ -138,13 +147,16 @@ describe('RestClient Exchange requests', () => {
     });
   });
 
-  test('rejects orders without a signer before posting', async () => {
+  test('does not run a builder preflight before the missing-signer error', async () => {
     const instance = new CaptureRestClient({ testnet: true });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(instance.submitOrder(ORDER_INPUT)).rejects.toThrow(
       'requires privateKey or an external signTypedData signer',
     );
     expect(instance.requests).toHaveLength(0);
+    expect(warning).not.toHaveBeenCalled();
+    warning.mockRestore();
   });
 
   test('reports the missing orders array instead of an internal map error', async () => {
@@ -174,6 +186,9 @@ describe('RestClient Exchange requests', () => {
       if (request.type === 'allMids') {
         return { '@156': '73.1605' };
       }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
+      }
       return {};
     };
 
@@ -190,6 +205,7 @@ describe('RestClient Exchange requests', () => {
       ),
     ).toEqual({ body: { type: 'allMids' }, path: '/info' });
     expect(findAction(instance, 'order')).toEqual({
+      builder: PARTNER.builder,
       grouping: 'na',
       orders: [
         {
@@ -217,6 +233,9 @@ describe('RestClient Exchange requests', () => {
     instance.infoBehavior = async (request) => {
       if (request.type === 'allMids') {
         return { 'xyz:COIN': '2' };
+      }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
       }
       return {};
     };
@@ -269,6 +288,9 @@ describe('RestClient Exchange requests', () => {
       if (request.type === 'allMids') {
         return { ETH: '3000' };
       }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
+      }
       return {};
     };
 
@@ -287,6 +309,7 @@ describe('RestClient Exchange requests', () => {
       path: '/info',
     });
     expect(findAction(instance, 'order')).toEqual({
+      builder: PARTNER.builder,
       grouping: 'na',
       orders: [
         {
@@ -319,6 +342,9 @@ describe('RestClient Exchange requests', () => {
       }
       if (request.type === 'allMids') {
         return { 'xyz:COIN': '2' };
+      }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
       }
       return {};
     };
@@ -468,6 +494,7 @@ describe('RestClient Exchange requests', () => {
         },
       ],
       grouping: 'na',
+      builder: PARTNER.builder,
     });
     const orderEnvelope = instance.requests.find(
       (request) =>
@@ -885,19 +912,325 @@ describe('RestClient Exchange requests', () => {
     });
   });
 
-  test('does not tag orders until approveBuilderFee succeeds', async () => {
-    const instance = client();
+  test('keeps referral passive and approves a private-key master in the background', async () => {
+    const instance = client({ accountAddress: USER });
+    instance.infoBehavior = async (request) =>
+      request.type === 'maxBuilderFee' ? 0 : {};
+    let releaseReferral: (() => void) | undefined;
+    const referralPending = new Promise<void>((resolve) => {
+      releaseReferral = resolve;
+    });
+    let releaseApproval: (() => void) | undefined;
+    let markApprovalStarted: (() => void) | undefined;
+    const approvalPending = new Promise<void>((resolve) => {
+      releaseApproval = resolve;
+    });
+    const approvalStarted = new Promise<void>((resolve) => {
+      markApprovalStarted = resolve;
+    });
+    instance.behavior = async (action) => {
+      if (action.type === 'approveBuilderFee') {
+        markApprovalStarted?.();
+        await approvalPending;
+      }
+      if (action.type === 'setReferrer') {
+        await referralPending;
+        return { response: { type: 'default' }, status: 'ok' };
+      }
+      return { response: { type: 'default' }, status: 'ok' };
+    };
+
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
+    expect(instance.requests[0]).toEqual({
+      body: {
+        builder: BUILDER,
+        type: 'maxBuilderFee',
+        user: USER.toLowerCase(),
+      },
+      path: '/info',
+    });
+    expect(findAction(instance, 'order')).not.toHaveProperty('builder');
+    await approvalStarted;
+    expect(
+      actions(instance).filter((action) => action.type === 'order'),
+    ).toHaveLength(1);
+
+    releaseApproval?.();
+    await settleBackgroundWork();
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
+
+    expect(
+      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
+    ).toHaveLength(1);
+    expect(
+      actions(instance).filter((action) => action.type === 'setReferrer'),
+    ).toHaveLength(1);
+    expect(
+      actions(instance).filter((action) => action.type === 'order'),
+    ).toHaveLength(2);
+    expect(
+      actions(instance).filter((entry) => entry.type === 'order')[1],
+    ).toMatchObject({ builder: PARTNER.builder });
+
+    releaseReferral?.();
+  });
+
+  test('checks a configured API wallet owner once and tags its first order', async () => {
+    const instance = client({ accountAddress: OTHER_USER });
+    await instance.submitOrder(ORDER_INPUT);
+    expect(findAction(instance, 'order')).toMatchObject({
+      builder: PARTNER.builder,
+    });
+    await instance.submitOrder(ORDER_INPUT);
+
+    expect(
+      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
+    ).toHaveLength(0);
+    expect(
+      actions(instance).filter((action) => action.type === 'order')[1],
+    ).toMatchObject({ builder: PARTNER.builder });
+    expect(
+      instance.requests.filter(
+        (request) =>
+          request.path === '/info' &&
+          (request.body as JsonObject).type === 'maxBuilderFee',
+      ),
+    ).toHaveLength(1);
+  });
+
+  test('coalesces the preflight check across concurrent first orders', async () => {
+    const instance = client({ accountAddress: OTHER_USER });
+    let releaseCheck: ((fee: number) => void) | undefined;
+    const checkPending = new Promise<number>((resolve) => {
+      releaseCheck = resolve;
+    });
+    instance.infoBehavior = async (request) => {
+      return request.type === 'maxBuilderFee' ? checkPending : {};
+    };
+
+    const first = instance.submitOrder(ORDER_INPUT);
+    const second = instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+    expect(
+      actions(instance).filter((action) => action.type === 'order'),
+    ).toHaveLength(0);
+    expect(
+      instance.requests.filter(
+        (request) =>
+          request.path === '/info' &&
+          (request.body as JsonObject).type === 'maxBuilderFee',
+      ),
+    ).toHaveLength(1);
+
+    releaseCheck?.(PARTNER.builder.f);
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(
+      actions(instance).filter((action) => action.type === 'order'),
+    ).toEqual([
+      expect.objectContaining({ builder: PARTNER.builder }),
+      expect.objectContaining({ builder: PARTNER.builder }),
+    ]);
+  });
+
+  test('falls through untagged when the preflight exceeds its budget', async () => {
+    jest.useFakeTimers();
+    const instance = client({ accountAddress: OTHER_USER });
+    instance.infoBehavior = async (request) =>
+      request.type === 'maxBuilderFee'
+        ? new Promise<number>(() => undefined)
+        : {};
+
+    const pending = instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+    expect(
+      actions(instance).filter((action) => action.type === 'order'),
+    ).toHaveLength(0);
+
+    await jest.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ status: 'ok' });
+    expect(findAction(instance, 'order')).not.toHaveProperty('builder');
+
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
+    expect(
+      actions(instance)
+        .filter((action) => action.type === 'order')
+        .every((action) => action.builder === undefined),
+    ).toBe(true);
+    expect(
+      instance.requests.filter(
+        (request) =>
+          request.path === '/info' &&
+          (request.body as JsonObject).type === 'maxBuilderFee',
+      ),
+    ).toHaveLength(1);
+    jest.useRealTimers();
+  });
+
+  test('discovers an agent owner and warns on every unapproved order', async () => {
+    const instance = client({ accountAddress: undefined });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'userRole') {
+        return { role: 'agent', data: { user: OTHER_USER.toUpperCase() } };
+      }
+      return request.type === 'maxBuilderFee' ? 0 : {};
+    };
+
     await instance.submitOrder(ORDER_INPUT);
     expect(findAction(instance, 'order')).not.toHaveProperty('builder');
+    await settleBackgroundWork();
+    await instance.submitOrder(ORDER_INPUT);
+    await instance.submitOrder(ORDER_INPUT);
+
+    expect(
+      instance.requests
+        .filter((request) => request.path === '/info')
+        .map((request) => request.body),
+    ).toEqual([
+      {
+        type: 'userRole',
+        user: USER.toLowerCase(),
+      },
+      {
+        type: 'maxBuilderFee',
+        user: OTHER_USER,
+        builder: BUILDER,
+      },
+    ]);
+    expect(
+      actions(instance)
+        .filter((action) => action.type === 'order')
+        .every((action) => action.builder === undefined),
+    ).toBe(true);
+    expect(
+      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
+    ).toHaveLength(0);
+    expect(warning).toHaveBeenCalledTimes(3);
+    expect(warning).toHaveBeenLastCalledWith(
+      expect.stringContaining(
+        'A future major version may require approval before trading.',
+      ),
+    );
+    warning.mockRestore();
+  });
+
+  test('does not prompt an external master signer automatically', async () => {
+    const instance = new CaptureRestClient({
+      signer: new Wallet(PRIVATE_KEY),
+      testnet: true,
+    });
+    jest
+      .spyOn(instance.testActionBuilder, 'partnerConfiguration')
+      .mockReturnValue(PARTNER);
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'userRole') {
+        return { role: 'user' };
+      }
+      return request.type === 'maxBuilderFee' ? 0 : {};
+    };
+
+    await instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+
+    expect(
+      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
+    ).toHaveLength(0);
+    expect(warning).toHaveBeenCalledTimes(1);
 
     await instance.approveBuilderFee();
     await instance.submitOrder(ORDER_INPUT);
     expect(
       actions(instance).filter((action) => action.type === 'order')[1],
     ).toMatchObject({ builder: PARTNER.builder });
+    warning.mockRestore();
   });
 
-  test('raw orders only keep a builder after approval', async () => {
+  test('omits the builder and warns when approval cannot be checked', async () => {
+    const instance = client({ accountAddress: OTHER_USER });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'maxBuilderFee') {
+        throw new Error('Info unavailable');
+      }
+      return {};
+    };
+
+    await instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+    await instance.submitOrder(ORDER_INPUT);
+
+    expect(
+      actions(instance)
+        .filter((action) => action.type === 'order')
+        .every((action) => action.builder === undefined),
+    ).toBe(true);
+    expect(warning).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('approval could not be verified'),
+    );
+    warning.mockRestore();
+  });
+
+  test('does not let a broken warning logger block an order', async () => {
+    const instance = client({ accountAddress: OTHER_USER });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {
+      throw new Error('logger failed');
+    });
+    instance.infoBehavior = async (request) =>
+      request.type === 'maxBuilderFee' ? 0 : {};
+
+    await instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
+    expect(warning).toHaveBeenCalledTimes(2);
+    warning.mockRestore();
+  });
+
+  test('swallows a failed background referral attempt', async () => {
+    const instance = client();
+    instance.behavior = async (action) => {
+      if (action.type === 'setReferrer') {
+        throw new Error('referral unavailable');
+      }
+      return { response: { type: 'default' }, status: 'ok' };
+    };
+
+    await expect(
+      instance.cancelOrders({ cancels: [{ a: 0, o: 1 }] }),
+    ).resolves.toMatchObject({ status: 'ok' });
+    await settleBackgroundWork();
+    expect(
+      actions(instance).filter((action) => action.type === 'setReferrer'),
+    ).toHaveLength(1);
+  });
+
+  test('does not repeat a manually attempted referral on a later trade', async () => {
+    const instance = client();
+
+    await instance.setReferrer();
+    await instance.submitOrder(ORDER_INPUT);
+    await settleBackgroundWork();
+
+    expect(
+      actions(instance).filter((action) => action.type === 'setReferrer'),
+    ).toEqual([
+      expect.objectContaining({
+        code: 'SIEBLY',
+        type: 'setReferrer',
+      }),
+    ]);
+  });
+
+  test('raw actions strip or replace builders based on the preflight result', async () => {
     const instance = client();
     const rawOrder = {
       type: 'order',
@@ -914,13 +1247,17 @@ describe('RestClient Exchange requests', () => {
       builder: { b: OTHER_USER, f: 0 },
     };
     await instance.submitRawL1Action(rawOrder, { nonce: 6_000 });
-    expect(findAction(instance, 'order')).not.toHaveProperty('builder');
+    expect(findAction(instance, 'order')).toMatchObject({
+      builder: PARTNER.builder,
+    });
 
-    await instance.approveBuilderFee();
-    await instance.submitRawL1Action(rawOrder, { nonce: 6_001 });
-    expect(
-      actions(instance).filter((action) => action.type === 'order')[1],
-    ).toMatchObject({ builder: PARTNER.builder });
+    const unapproved = client();
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    unapproved.infoBehavior = async (request) =>
+      request.type === 'maxBuilderFee' ? 0 : {};
+    await unapproved.submitRawL1Action(rawOrder, { nonce: 6_001 });
+    expect(findAction(unapproved, 'order')).not.toHaveProperty('builder');
+    warning.mockRestore();
   });
 
   test('multisig actions keep the shared canonical signing path', async () => {
@@ -982,5 +1319,86 @@ describe('RestClient Exchange requests', () => {
       signatureChainId: '0x66eee',
       time: 6_101,
     });
+  });
+
+  test('checks multisig approval before signing without automatic approval', async () => {
+    const instance = new CaptureRestClient({ testnet: true });
+    jest
+      .spyOn(instance.testActionBuilder, 'partnerConfiguration')
+      .mockReturnValue(PARTNER);
+    const signers = [
+      new Wallet(PRIVATE_KEY),
+      Wallet.fromPhrase(
+        'test test test test test test test test test test test junk',
+      ),
+    ] as const;
+
+    await expect(
+      instance.submitMultiSigL1Action(
+        {
+          type: 'order',
+          orders: [
+            {
+              a: 0,
+              b: true,
+              p: '1',
+              r: false,
+              s: '1',
+              t: { limit: { tif: 'Gtc' } },
+            },
+          ],
+        },
+        {
+          multiSigUser: OTHER_USER,
+          nonce: 7_000,
+          signers,
+        },
+      ),
+    ).resolves.toMatchObject({ status: 'ok' });
+    await settleBackgroundWork();
+
+    await expect(
+      instance.submitMultiSigL1Action(
+        {
+          type: 'order',
+          orders: [
+            {
+              a: 0,
+              b: false,
+              p: '2',
+              r: false,
+              s: '1',
+              t: { limit: { tif: 'Gtc' } },
+            },
+          ],
+        },
+        {
+          multiSigUser: OTHER_USER,
+          nonce: 7_001,
+          signers,
+        },
+      ),
+    ).resolves.toMatchObject({ status: 'ok' });
+
+    const innerTypes = actions(instance)
+      .filter((action) => action.type === 'multiSig')
+      .map(
+        (action) =>
+          (
+            action.payload as {
+              action: { builder?: unknown; type: string };
+            }
+          ).action,
+      );
+    expect(
+      innerTypes.filter((action) => action.type === 'approveBuilderFee'),
+    ).toHaveLength(0);
+    expect(
+      innerTypes.filter((action) => action.type === 'setReferrer'),
+    ).toHaveLength(1);
+    expect(innerTypes.filter((action) => action.type === 'order')).toEqual([
+      expect.objectContaining({ builder: PARTNER.builder }),
+      expect.objectContaining({ builder: PARTNER.builder }),
+    ]);
   });
 });
