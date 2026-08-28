@@ -1,4 +1,4 @@
-import { builderFeeToApprovalPercentage } from '../../src/lib/partner-config.js';
+import { builderFeeToApprovalPercentage } from '../../src/lib/request-utils.js';
 
 describe('builder fee approval percentage', () => {
   test.each([

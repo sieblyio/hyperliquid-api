@@ -153,6 +153,18 @@ export class AssetResolver {
     return resolved;
   }
 
+  // Official Python Info.name_to_coin: exact dict lookup, no case folding.
+  async nameToCoin(name: string): Promise<string> {
+    await this.ensureLoaded();
+    const resolved = this.aliases.get(name);
+    if (!resolved) {
+      throw new RangeError(
+        `Unknown Hyperliquid asset "${name}". Call refreshAssetMetadata() after a new listing.`,
+      );
+    }
+    return resolved.canonicalName;
+  }
+
   async refresh(): Promise<void> {
     if (this.refreshPromise) {
       return this.refreshPromise;
@@ -265,9 +277,15 @@ export class AssetResolver {
 
       aliases.set(spot.name, resolved);
       aliases.set(spot.name.toUpperCase(), resolved);
-      if (pairAlias) {
+      // Official Python: add BASE/QUOTE only when that key is not already a universe name.
+      if (pairAlias && !aliases.has(pairAlias)) {
         aliases.set(pairAlias, resolved);
-        aliases.set(pairAlias.toUpperCase(), resolved);
+      }
+      if (pairAlias) {
+        const pairUpper = pairAlias.toUpperCase();
+        if (!aliases.has(pairUpper)) {
+          aliases.set(pairUpper, resolved);
+        }
       }
     });
   }

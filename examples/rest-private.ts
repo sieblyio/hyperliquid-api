@@ -7,7 +7,7 @@ if (!privateKey) {
 
 const client = new RestClient({
   privateKey,
-  testnet: true,
+  testnet: false,
 });
 
 const balances = await client.getBalances();
@@ -15,16 +15,17 @@ console.log('Account:', balances.user);
 console.log('Spot balances:', balances.spot.balances);
 console.log('Perpetual positions:', balances.perp.assetPositions);
 
-const result = await client.submitLimitOrder(
+const opened = await client.submitMarketOrder(
   {
-    price: '50000',
     side: 'buy',
-    size: '0.001',
+    size: '0.005',
     symbol: 'BTC',
   },
   {
     expiresAfter: Date.now() + 10_000,
   },
 );
+console.log('opened:', opened);
 
-console.log(result);
+const closed = await client.submitMarketClose({ symbol: 'BTC' });
+console.log('closed:', closed);

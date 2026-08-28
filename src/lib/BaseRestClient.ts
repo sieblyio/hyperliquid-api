@@ -14,14 +14,17 @@ import type {
   UserSignedRequestOptions,
 } from '../types/request/exchange.types.js';
 import type { ExchangeResponse } from '../types/response/exchange.types.js';
-import type { InfoResponse } from '../types/response/info.types.js';
+import type {
+  InfoResponse,
+  UserRoleResponse,
+} from '../types/response/info.types.js';
 import type {
   JsonObject,
-  RequestOptions,
   RestClientNetworkOptions,
   RestClientOptions,
   UserSignedActionDefinition,
 } from '../types/shared.types.js';
+import { AccountResolver } from './account-resolver.js';
 import { ActionBuilder } from './action-builder.js';
 import { AssetResolver } from './asset-resolver.js';
 import { HyperliquidApiError } from './errors.js';
@@ -29,14 +32,37 @@ import {
   configureHttpsKeepAlive,
   DEFAULT_REQUEST_HEADERS,
 } from './https-agent.js';
+import { normalizeAddresses } from './normalize-addresses.js';
 import { buildUserSignedAction } from './request-utils.js';
+import { USER_SIGNED_ACTIONS } from './user-signed-actions.js';
 import { sanitizeObjectForWire } from './wire.js';
 
-export type ActionSubmissionOptions =
+type ActionSubmissionOptions =
   | MultiSigL1RequestOptions
   | MultiSigUserSignedRequestOptions
   | RawL1RequestOptions
   | RawUserSignedRequestOptions;
+
+type BuilderApprovalState =
+  'approved' | 'checking' | 'unapproved' | 'unavailable' | 'unchecked';
+
+interface BuilderApprovalOwner {
+  address: string;
+  canAutoApprove: boolean;
+}
+
+const BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS = 1_000;
+
+const TRADING_ACTIONS = new Set([
+  'batchModify',
+  'cancel',
+  'cancelByCloid',
+  'modify',
+  'order',
+  'scheduleCancel',
+  'twapCancel',
+  'twapOrder',
+]);
 
 interface HyperliquidErrorResponse {
   response?: string;
@@ -54,20 +80,22 @@ function isHyperliquidErrorResponse(
   );
 }
 
-function transportOptions(options: RequestOptions): RequestOptions | undefined {
-  const requestOptions = {
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
-  };
-  return Object.keys(requestOptions).length === 0 ? undefined : requestOptions;
-}
-
 export abstract class BaseRestClient {
+  protected readonly accountResolver: AccountResolver;
+
   protected readonly actionBuilder: ActionBuilder;
 
   protected readonly assetResolver: AssetResolver;
 
   protected readonly axios: AxiosInstance;
+
+  private builderApprovalPromise: Promise<void> | undefined;
+
+  private builderApprovalState: BuilderApprovalState = 'unchecked';
+
+  private builderPreflightDeadline: number | undefined;
+
+  private referralAttempted = false;
 
   protected constructor(
     readonly baseUrl: string,
@@ -94,17 +122,13 @@ export abstract class BaseRestClient {
       options.assetCacheTtlMs,
     );
     this.actionBuilder = new ActionBuilder(this.assetResolver, options);
+    this.accountResolver = new AccountResolver(this.actionBuilder, (user) =>
+      this.info<UserRoleResponse>('userRole', { user }),
+    );
   }
 
-  submitRawInfoRequest<T = InfoResponse>(
-    request: object,
-    options: RequestOptions = {},
-  ): Promise<T> {
-    return this.post<T>(
-      '/info',
-      sanitizeObjectForWire({ ...request }),
-      transportOptions(options),
-    );
+  submitRawInfoRequest<T = InfoResponse>(request: object): Promise<T> {
+    return this.post<T>('/info', sanitizeObjectForWire({ ...request }));
   }
 
   async submitRawL1Action<T = ExchangeResponse>(
@@ -113,7 +137,7 @@ export abstract class BaseRestClient {
   ): Promise<T> {
     await this.beforeActionSubmission(action, options);
     const envelope = await this.actionBuilder.prepareL1Action(action, options);
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitRawUserSignedAction<T = ExchangeResponse>(
@@ -127,7 +151,7 @@ export abstract class BaseRestClient {
       definition,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitMultiSigL1Action<T = ExchangeResponse>(
@@ -141,7 +165,7 @@ export abstract class BaseRestClient {
       options.multiSigUser,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
   async submitMultiSigUserSignedAction<T = ExchangeResponse>(
@@ -157,17 +181,13 @@ export abstract class BaseRestClient {
       options.multiSigUser,
       options,
     );
-    return this.post<T>('/exchange', envelope, transportOptions(options));
+    return this.post<T>('/exchange', envelope);
   }
 
-  protected info<T>(
-    type: string,
-    params: object,
-    options: RequestOptions = {},
-  ): Promise<T> {
+  protected info<T>(type: string, params: object): Promise<T> {
     const fields = sanitizeObjectForWire({ ...params });
     delete fields.type;
-    return this.submitRawInfoRequest<T>({ type, ...fields }, options);
+    return this.submitRawInfoRequest<T>({ type, ...fields });
   }
 
   protected l1(
@@ -194,13 +214,18 @@ export abstract class BaseRestClient {
     );
   }
 
-  protected async post<T>(
-    path: string,
-    body: unknown,
-    options: RequestOptions = {},
-  ): Promise<T> {
+  protected markReferralAttempted(): void {
+    this.referralAttempted = true;
+  }
+
+  protected confirmBuilderFeeApproval(): void {
+    this.builderApprovalState = 'approved';
+    this.actionBuilder.confirmBuilderFeeApproval();
+  }
+
+  protected async post<T>(path: string, body: unknown): Promise<T> {
     try {
-      const response = await this.axios.post<T>(path, body, options);
+      const response = await this.axios.post<T>(path, body);
 
       if (isHyperliquidErrorResponse(response.data)) {
         throw new HyperliquidApiError(
@@ -235,12 +260,220 @@ export abstract class BaseRestClient {
     }
   }
 
-  protected beforeActionSubmission(
-    _action: JsonObject,
-    _options: ActionSubmissionOptions,
+  private async beforeActionSubmission(
+    action: JsonObject,
+    options: ActionSubmissionOptions,
   ): Promise<void> {
-    void _action;
-    void _options;
-    return Promise.resolve();
+    const { type } = action;
+    if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
+      return;
+    }
+
+    const isMultiSig = 'multiSigUser' in options;
+    if (isMultiSig) {
+      const referralOptions = {
+        multiSigUser: options.multiSigUser,
+        signers: options.signers,
+      };
+      this.scheduleReferral(() =>
+        this.submitMultiSigL1Action(
+          {
+            type: 'setReferrer',
+            code: this.actionBuilder.partnerConfiguration().referralCode,
+          },
+          referralOptions,
+        ),
+      );
+    } else {
+      this.scheduleReferral(() =>
+        this.l1('setReferrer', {
+          code: this.actionBuilder.partnerConfiguration().referralCode,
+        }),
+      );
+    }
+
+    if (type !== 'order') {
+      return;
+    }
+
+    const resolveOwner = isMultiSig
+      ? () =>
+          Promise.resolve({
+            address: normalizeAddresses(options.multiSigUser),
+            canAutoApprove: false,
+          })
+      : this.actionBuilder.hasSigner()
+        ? () => this.resolveBuilderApprovalOwner()
+        : undefined;
+    if (!resolveOwner) {
+      return;
+    }
+
+    this.warnForBuilderApproval();
+    if (this.builderApprovalState === 'approved') {
+      return;
+    }
+    if (!this.builderApprovalPromise) {
+      this.builderApprovalState = 'checking';
+      this.builderApprovalPromise = this.checkBuilderApproval(resolveOwner);
+    }
+    await this.waitForBuilderApprovalCheck(this.builderApprovalPromise);
+  }
+
+  private async checkBuilderApproval(
+    resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
+  ): Promise<void> {
+    let owner: BuilderApprovalOwner | undefined;
+    try {
+      owner = await resolveOwner();
+      if (!owner) {
+        this.builderApprovalState = 'unavailable';
+      } else {
+        const partner = this.actionBuilder.partnerConfiguration();
+        const approvedFee = await this.info<number>(
+          'maxBuilderFee',
+          normalizeAddresses({
+            builder: partner.builder.b,
+            user: owner.address,
+          }),
+        );
+        if (
+          !Number.isFinite(approvedFee) ||
+          !Number.isInteger(approvedFee) ||
+          approvedFee < 0
+        ) {
+          throw new TypeError(
+            'Hyperliquid returned an invalid maxBuilderFee response.',
+          );
+        }
+        if (this.builderApprovalState === 'approved') {
+          return;
+        }
+        if (approvedFee >= partner.builder.f) {
+          this.confirmBuilderFeeApproval();
+          return;
+        }
+        this.builderApprovalState = 'unapproved';
+      }
+    } catch {
+      if (this.builderApprovalState !== 'approved') {
+        this.builderApprovalState = 'unavailable';
+      }
+    }
+
+    if (this.builderApprovalState === 'unapproved' && owner?.canAutoApprove) {
+      const partner = this.actionBuilder.partnerConfiguration();
+      void this.userSigned(
+        'approveBuilderFee',
+        {
+          builder: partner.builder.b,
+          maxFeeRate: partner.approvalPercentage,
+        },
+        USER_SIGNED_ACTIONS.approveBuilderFee,
+      )
+        .then((response) => {
+          if (response.status === 'ok') {
+            this.confirmBuilderFeeApproval();
+            return;
+          }
+          this.warnForBuilderApproval();
+        })
+        .catch(() => {
+          this.builderApprovalState = 'unapproved';
+          this.warnForBuilderApproval();
+        });
+      return;
+    }
+    this.warnForBuilderApproval();
+  }
+
+  private async resolveBuilderApprovalOwner(): Promise<
+    BuilderApprovalOwner | undefined
+  > {
+    const resolution = await this.accountResolver.resolveSignerAccount();
+    if (!resolution.role) {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove:
+          this.actionBuilder.usesPrivateKeySigner() &&
+          resolution.accountAddress === resolution.signerAddress,
+      };
+    }
+
+    const { role } = resolution;
+    if (role.role === 'user') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: this.actionBuilder.usesPrivateKeySigner(),
+      };
+    }
+    if (role.role === 'agent') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: false,
+      };
+    }
+    if (role.role === 'subAccount') {
+      return {
+        address: resolution.accountAddress,
+        canAutoApprove: false,
+      };
+    }
+    return undefined;
+  }
+
+  private waitForBuilderApprovalCheck(check: Promise<void>): Promise<void> {
+    this.builderPreflightDeadline ??=
+      Date.now() + BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS;
+    const remaining = this.builderPreflightDeadline - Date.now();
+    if (remaining <= 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+        resolve();
+      };
+
+      timer = setTimeout(finish, remaining);
+      void check.then(finish);
+    });
+  }
+
+  private scheduleReferral(submit: () => Promise<unknown>): void {
+    if (this.referralAttempted) {
+      return;
+    }
+
+    this.referralAttempted = true;
+    queueMicrotask(() => {
+      void submit().catch(() => undefined);
+    });
+  }
+
+  private warnForBuilderApproval(): void {
+    if (
+      this.builderApprovalState !== 'unapproved' &&
+      this.builderApprovalState !== 'unavailable'
+    ) {
+      return;
+    }
+
+    const status =
+      this.builderApprovalState === 'unapproved'
+        ? 'is missing or below the configured fee'
+        : 'could not be verified';
+    try {
+      console.warn(
+        `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Orders are being submitted without a builder fee. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future major version may require approval before trading.`,
+      );
+    } catch {
+      // A broken console must not stop an order.
+    }
   }
 }

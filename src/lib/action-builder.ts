@@ -15,7 +15,7 @@ import { normalizeAddresses } from './normalize-addresses.js';
 import {
   getPartnerConfiguration,
   type PartnerConfiguration,
-} from './partner-config.js';
+} from './request-utils.js';
 import {
   createPrivateKeySigner,
   getSignerAddress,

@@ -8,7 +8,7 @@ import {
   type SubmitLimitOrderRequest,
   type SubmitOrderRequest,
 } from '../../src/index.js';
-import { getPartnerConfiguration } from '../../src/lib/partner-config.js';
+import { getPartnerConfiguration } from '../../src/lib/request-utils.js';
 import { USER_SIGNED_ACTIONS } from '../../src/lib/user-signed-actions.js';
 
 interface CapturedRequest {
@@ -38,6 +38,18 @@ const ORDER_INPUT = {
     },
   ],
 };
+
+class TestNonceProvider implements NonceProvider {
+  private next = 1;
+
+  nextNonce(): number {
+    return this.next++;
+  }
+
+  setNext(nonce: number): void {
+    this.next = nonce;
+  }
+}
 
 class CaptureRestClient extends RestClient {
   readonly requests: CapturedRequest[] = [];
@@ -87,18 +99,6 @@ class CaptureRestClient extends RestClient {
       return (await this.behavior(action)) as T;
     }
     return { response: { type: 'default' }, status: 'ok' } as T;
-  }
-}
-
-class TestNonceProvider implements NonceProvider {
-  private next = 1;
-
-  nextNonce(): number {
-    return this.next++;
-  }
-
-  setNext(nonce: number): void {
-    this.next = nonce;
   }
 }
 
@@ -268,6 +268,111 @@ describe('RestClient Exchange requests', () => {
     });
   });
 
+  test('closes a short as a reduce-only buy using the position size', async () => {
+    const instance = client();
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
+      assetId: 1,
+      canonicalName: 'ETH',
+      kind: 'perp',
+      szDecimals: 4,
+    });
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'clearinghouseState') {
+        return {
+          assetPositions: [
+            { position: { coin: 'BTC', szi: '1' } },
+            { position: { coin: 'ETH', szi: '-0.05' } },
+          ],
+        };
+      }
+      if (request.type === 'allMids') {
+        return { ETH: '3000' };
+      }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
+      }
+      return {};
+    };
+
+    await instance.submitMarketClose({
+      clientOrderId: '0x00000000000000000000000000000001',
+      maxSlippage: 0.01,
+      symbol: 'ETH',
+    });
+
+    expect(
+      instance.requests.find(
+        ({ body }) => (body as JsonObject).type === 'clearinghouseState',
+      ),
+    ).toMatchObject({
+      body: { type: 'clearinghouseState' },
+      path: '/info',
+    });
+    expect(findAction(instance, 'order')).toEqual({
+      builder: PARTNER.builder,
+      grouping: 'na',
+      orders: [
+        {
+          a: 1,
+          b: true,
+          c: '0x00000000000000000000000000000001',
+          p: '3030',
+          r: true,
+          s: '0.05',
+          t: { limit: { tif: 'Ioc' } },
+        },
+      ],
+      type: 'order',
+    });
+  });
+
+  test('closes a HIP-3 long against that DEX and throws without a position', async () => {
+    const instance = client();
+    jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
+      assetId: 110_000,
+      canonicalName: 'xyz:COIN',
+      kind: 'hip3',
+      szDecimals: 3,
+    });
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'clearinghouseState') {
+        return {
+          assetPositions: [{ position: { coin: 'xyz:COIN', szi: '1.2345' } }],
+        };
+      }
+      if (request.type === 'allMids') {
+        return { 'xyz:COIN': '2' };
+      }
+      if (request.type === 'maxBuilderFee') {
+        return PARTNER.builder.f;
+      }
+      return {};
+    };
+
+    await instance.submitMarketClose({ size: '0.5', symbol: 'xyz:COIN' });
+    expect(
+      instance.requests.find(
+        ({ body }) => (body as JsonObject).type === 'clearinghouseState',
+      ),
+    ).toEqual({
+      body: { dex: 'xyz', type: 'clearinghouseState', user: OTHER_USER },
+      path: '/info',
+    });
+    expect(findAction(instance, 'order')).toMatchObject({
+      orders: [{ a: 110_000, b: false, r: true, s: '0.5' }],
+    });
+
+    instance.infoBehavior = async (request) => {
+      if (request.type === 'clearinghouseState') {
+        return { assetPositions: [] };
+      }
+      return {};
+    };
+    await expect(
+      instance.submitMarketClose({ symbol: 'xyz:COIN' }),
+    ).rejects.toThrow('No perpetual position found for "xyz:COIN"');
+  });
+
   test('submits CEX-style limit and post-only orders', async () => {
     const instance = client();
     jest.spyOn(instance.testAssetResolver, 'resolve').mockResolvedValue({
@@ -326,31 +431,12 @@ describe('RestClient Exchange requests', () => {
 
     await expect(
       instance.submitLimitOrder({
-        postOnly: true,
-        price: '10',
-        side: 'buy',
-        size: '1',
-        symbol: 'BTC',
-        timeInForce: 'IOC',
-      }),
-    ).rejects.toThrow('postOnly cannot be combined');
-    await expect(
-      instance.submitLimitOrder({
         price: '0',
         side: 'buy',
         size: '1',
         symbol: 'BTC',
       }),
     ).rejects.toThrow('price must be greater than zero');
-    await expect(
-      instance.submitLimitOrder({
-        price: '10',
-        side: 'buy',
-        size: '1',
-        symbol: 'BTC',
-        timeInForce: 'FOK',
-      } as unknown as SubmitLimitOrderRequest),
-    ).rejects.toThrow('timeInForce must be "GTC" or "IOC"');
     await expect(
       instance.submitLimitOrder({
         price: '10',
@@ -529,23 +615,22 @@ describe('RestClient Exchange requests', () => {
       });
     };
 
-    await check((_value) => instance.approveBuilderFee(), 'approveBuilderFee', {
+    await check(() => instance.approveBuilderFee(), 'approveBuilderFee', {
       builder: BUILDER,
       maxFeeRate: '0.01%',
     });
     await check(
-      (_value) =>
-        instance.approveApiWallet({ agentAddress: USER, agentName: null }),
+      () => instance.approveApiWallet({ agentAddress: USER, agentName: null }),
       'approveAgent',
       { agentAddress: USER.toLowerCase(), agentName: '' },
     );
     await check(
-      (_value) => instance.sendUsd({ amount: '1.2300', destination: USER }),
+      () => instance.sendUsd({ amount: '1.2300', destination: USER }),
       'usdSend',
       { amount: '1.23', destination: USER.toLowerCase(), time: 2_002 },
     );
     await check(
-      (_value) =>
+      () =>
         instance.sendSpotAsset({
           amount: '2.00',
           destination: USER,
@@ -555,12 +640,12 @@ describe('RestClient Exchange requests', () => {
       { amount: '2', destination: USER.toLowerCase(), token: 'PURR:0x01' },
     );
     await check(
-      (_value) => instance.withdrawUsd({ amount: '3.00', destination: USER }),
+      () => instance.withdrawUsd({ amount: '3.00', destination: USER }),
       'withdraw3',
       { amount: '3', destination: USER.toLowerCase() },
     );
     await check(
-      (_value) =>
+      () =>
         instance.transferUsdBetweenSpotAndPerp({
           amount: `4.500 subaccount:${USER}`,
           toPerp: true,
@@ -572,7 +657,7 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (_value) =>
+      () =>
         instance.sendAsset({
           amount: '5.00',
           destination: USER,
@@ -588,7 +673,7 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (_value) =>
+      () =>
         instance.sendToEvmWithData({
           addressEncoding: 'hex',
           amount: '6.0',
@@ -602,18 +687,14 @@ describe('RestClient Exchange requests', () => {
       'sendToEvmWithData',
       { amount: '6', destinationRecipient: USER.toLowerCase() },
     );
+    await check(() => instance.depositIntoStaking({ wei: 7 }), 'cDeposit', {
+      wei: 7,
+    });
+    await check(() => instance.withdrawFromStaking({ wei: 8 }), 'cWithdraw', {
+      wei: 8,
+    });
     await check(
-      (_value) => instance.depositIntoStaking({ wei: 7 }),
-      'cDeposit',
-      { wei: 7 },
-    );
-    await check(
-      (_value) => instance.withdrawFromStaking({ wei: 8 }),
-      'cWithdraw',
-      { wei: 8 },
-    );
-    await check(
-      (_value) =>
+      () =>
         instance.delegateOrUndelegateStake({
           isUndelegate: false,
           validator: USER,
@@ -623,7 +704,7 @@ describe('RestClient Exchange requests', () => {
       { validator: USER.toLowerCase() },
     );
     await check(
-      (_value) =>
+      () =>
         instance.convertToMultiSigUser({
           signers: { authorizedUsers: [USER], threshold: 1 },
         }),
@@ -636,24 +717,22 @@ describe('RestClient Exchange requests', () => {
       },
     );
     await check(
-      (_value) =>
-        instance.linkStakingAccount({ isFinalize: false, user: USER }),
+      () => instance.linkStakingAccount({ isFinalize: false, user: USER }),
       'linkStakingUser',
       { user: USER.toLowerCase() },
     );
     await check(
-      (_value) => instance.disableStakingTradingLink({ tradingUser: USER }),
+      () => instance.disableStakingTradingLink({ tradingUser: USER }),
       'stakingLinkDisableTradingUser',
       { tradingUser: USER.toLowerCase() },
     );
     await check(
-      (_value) =>
-        instance.setUserPortfolioMargin({ enabled: true, user: USER }),
+      () => instance.setUserPortfolioMargin({ enabled: true, user: USER }),
       'userPortfolioMargin',
       { enabled: true, user: USER.toLowerCase() },
     );
     await check(
-      (_value) =>
+      () =>
         instance.setUserAbstraction({
           abstraction: 'unifiedAccount',
           user: USER,
@@ -662,7 +741,7 @@ describe('RestClient Exchange requests', () => {
       { abstraction: 'unifiedAccount', user: USER.toLowerCase() },
     );
     await check(
-      (_value) => instance.setUserDexAbstraction({ enabled: true, user: USER }),
+      () => instance.setUserDexAbstraction({ enabled: true, user: USER }),
       'userDexAbstraction',
       { enabled: true, user: USER.toLowerCase() },
     );
@@ -682,11 +761,11 @@ describe('RestClient Exchange requests', () => {
       expect(findAction(instance, type)).toMatchObject({ type, ...expected });
     };
 
-    await check('setReferrer', (_value) => instance.setReferrer());
-    await check('registerReferrer', (_value) =>
+    await check('setReferrer', () => instance.setReferrer());
+    await check('registerReferrer', () =>
       instance.registerReferrer({ code: 'MINE' }),
     );
-    await check('agentSendAsset', (_value) =>
+    await check('agentSendAsset', () =>
       instance.sendAssetFromApiWallet({
         amount: '1.200',
         destination: USER,
@@ -695,70 +774,70 @@ describe('RestClient Exchange requests', () => {
         token: 'USDC',
       }),
     );
-    await check('agentEnableDexAbstraction', (_value) =>
+    await check('agentEnableDexAbstraction', () =>
       instance.enableApiWalletDexAbstraction(),
     );
-    await check('agentSetAbstraction', (_value) =>
+    await check('agentSetAbstraction', () =>
       instance.setApiWalletAbstraction({ abstraction: 'u' }),
     );
-    await check('borrowLend', (_value) =>
+    await check('borrowLend', () =>
       instance.executeBorrowLendOperation({
         amount: '2.500',
         operation: 'supply',
         token: 0,
       }),
     );
-    await check('claimRewards', (_value) => instance.claimRewards());
-    await check('createSubAccount', (_value) =>
+    await check('claimRewards', () => instance.claimRewards());
+    await check('createSubAccount', () =>
       instance.createSubAccount({ name: 'Desk' }),
     );
-    await check('createVault', (_value) =>
+    await check('createVault', () =>
       instance.createVault({
         description: 'Vault',
         initialUsd: 10,
         name: 'Desk',
       }),
     );
-    await check('evmUserModify', (_value) =>
+    await check('evmUserModify', () =>
       instance.setEvmBigBlocks({ usingBigBlocks: true }),
     );
-    await check('finalizeEvmContract', (_value) =>
+    await check('finalizeEvmContract', () =>
       instance.finalizeEvmContract({ input: 'firstStorageSlot', token: 1 }),
     );
-    await check('gossipPriorityBid', (_value) =>
+    await check('gossipPriorityBid', () =>
       instance.submitGossipPriorityBid({
         ip: '127.0.0.1',
         maxGas: 1,
         slotId: 0,
       }),
     );
-    await check('hip3LiquidatorTransfer', (_value) =>
+    await check('hip3LiquidatorTransfer', () =>
       instance.transferHip3LiquidatorFunds({
         dex: 'xyz',
         isDeposit: true,
         ntl: 2,
       }),
     );
-    await check('noop', (_value) => instance.invalidateNonce());
-    await check('perpDeploy', (_value) =>
+    await check('noop', () => instance.invalidateNonce());
+    await check('perpDeploy', () =>
       instance.deployPerp({ setFeeScale: { dex: 'xyz', scale: 1 } }),
     );
-    await check('spotDeploy', (_value) =>
+    await check('spotDeploy', () =>
       instance.deploySpot({ enableQuoteToken: { token: 1 } }),
     );
-    await check('reserveRequestWeight', (_value) =>
+    await check('reserveRequestWeight', () =>
       instance.reserveAdditionalActions({ weight: 1 }),
     );
-    await check('setDisplayName', (_value) =>
+    await check('setDisplayName', () =>
       instance.setDisplayName({ displayName: 'Desk' }),
     );
-    await check('spotUser', (_value) =>
+    await check('spotUser', () =>
       instance.setSpotDusting({ toggleSpotDusting: { optOut: false } }),
     );
-    await check('subAccountModify', (_value) =>
+    await check('subAccountModify', () =>
       instance.renameSubAccount({ name: 'Desk', subAccountUser: USER }),
     );
-    await check('subAccountSpotTransfer', (_value) =>
+    await check('subAccountSpotTransfer', () =>
       instance.transferSpotToOrFromSubAccount({
         amount: '1.200',
         isDeposit: true,
@@ -766,39 +845,39 @@ describe('RestClient Exchange requests', () => {
         token: 'USDC',
       }),
     );
-    await check('subAccountTransfer', (_value) =>
+    await check('subAccountTransfer', () =>
       instance.transferUsdToOrFromSubAccount({
         isDeposit: true,
         subAccountUser: USER,
         usd: 1,
       }),
     );
-    await check('vaultTransfer', (_value) =>
+    await check('vaultTransfer', () =>
       instance.transferVaultFunds({
         isDeposit: true,
         usd: 1,
         vaultAddress: USER,
       }),
     );
-    await check('vaultDistribute', (_value) =>
+    await check('vaultDistribute', () =>
       instance.distributeVaultFunds({ usd: 1, vaultAddress: USER }),
     );
-    await check('vaultModify', (_value) =>
+    await check('vaultModify', () =>
       instance.modifyVault({ allowDeposits: true, vaultAddress: USER }),
     );
-    await check('validatorL1Stream', (_value) =>
+    await check('validatorL1Stream', () =>
       instance.updateValidatorL1Stream({ riskFreeRate: '0.0500' }),
     );
-    await check('CSignerAction', (_value) =>
+    await check('CSignerAction', () =>
       instance.submitSignerAction({ unjailSelf: null }),
     );
-    await check('CValidatorAction', (_value) =>
+    await check('CValidatorAction', () =>
       instance.submitValidatorAction({ changeProfile: { name: 'Validator' } }),
     );
-    await check('authorizeAqav2Role', (_value) =>
+    await check('authorizeAqav2Role', () =>
       instance.authorizeAqav2Role({ role: 'technical', token: 1 }),
     );
-    await check('userOutcome', (_value) =>
+    await check('userOutcome', () =>
       instance.submitUserOutcome({
         splitOutcome: { amount: '1.500', outcome: 10 },
       }),

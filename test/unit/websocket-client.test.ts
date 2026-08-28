@@ -3,6 +3,7 @@ import { deflateSync, strToU8 } from 'fflate';
 import {
   type DefaultLogger,
   HyperliquidWebSocketError,
+  RestClient,
   WebsocketClient,
 } from '../../src/index.js';
 import { FakeWebSocket } from '../support/fake-websocket.js';
@@ -18,17 +19,32 @@ async function subscribeAndOpen(
   subscription: Parameters<WebsocketClient['subscribe']>[0],
   callback: (value: unknown) => void,
 ): Promise<Awaited<ReturnType<WebsocketClient['subscribe']>>> {
+  const before = FakeWebSocket.instances.length;
   const subscribing = client.subscribe(subscription, callback);
-  await Promise.resolve();
-  FakeWebSocket.instances.at(-1)?.open();
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await Promise.resolve();
+    if (FakeWebSocket.instances.length > before) {
+      FakeWebSocket.instances.at(-1)?.open();
+      break;
+    }
+  }
   return subscribing;
 }
 
 describe('WebsocketClient', () => {
+  let nameToCoin: jest.SpiedFunction<RestClient['nameToCoin']>;
+
   beforeEach(() => {
     FakeWebSocket.reset();
     jest.clearAllMocks();
     jest.useRealTimers();
+    nameToCoin = jest
+      .spyOn(RestClient.prototype, 'nameToCoin')
+      .mockImplementation(async (name) => name);
+  });
+
+  afterEach(() => {
+    nameToCoin.mockRestore();
   });
 
   test('deduplicates subscriptions and unsubscribes only after the final callback', async () => {
@@ -73,6 +89,56 @@ describe('WebsocketClient', () => {
     expect(socket?.jsonMessages()[1]).toEqual({
       method: 'unsubscribe',
       subscription: { coin: 'BTC', type: 'trades' },
+    });
+    client.close();
+  });
+
+  test('remaps coin subscriptions like the official Python SDK', async () => {
+    nameToCoin.mockImplementation(async (name) =>
+      name === 'HYPE/USDC' ? '@107' : name,
+    );
+    const options = {
+      autoReconnect: false,
+      pingInterval: 0,
+      webSocketConstructor: FakeWebSocket,
+    };
+    const callback = jest.fn();
+    const remapped: Parameters<WebsocketClient['subscribe']>[0][] = [
+      { coin: 'HYPE/USDC', type: 'l2Book' },
+      { coin: 'HYPE/USDC', type: 'trades' },
+      { coin: 'HYPE/USDC', interval: '1m', type: 'candle' },
+      { coin: 'HYPE/USDC', type: 'bbo' },
+      { coin: 'HYPE/USDC', type: 'activeAssetCtx' },
+    ];
+    for (const subscription of remapped) {
+      FakeWebSocket.reset();
+      const client = new WebsocketClient(options);
+      await subscribeAndOpen(client, subscription, callback);
+      expect(FakeWebSocket.instances[0]?.jsonMessages()[0]).toMatchObject({
+        method: 'subscribe',
+        subscription: { coin: '@107', type: subscription.type },
+      });
+      client.close();
+    }
+
+    FakeWebSocket.reset();
+    const client = new WebsocketClient(options);
+    await subscribeAndOpen(
+      client,
+      {
+        coin: 'HYPE/USDC',
+        type: 'activeAssetData',
+        user: '0x1111111111111111111111111111111111111111',
+      },
+      callback,
+    );
+    expect(FakeWebSocket.instances[0]?.jsonMessages()[0]).toEqual({
+      method: 'subscribe',
+      subscription: {
+        coin: 'HYPE/USDC',
+        type: 'activeAssetData',
+        user: '0x1111111111111111111111111111111111111111',
+      },
     });
     client.close();
   });
@@ -170,7 +236,13 @@ describe('WebsocketClient', () => {
       },
       first,
     );
-    await Promise.resolve();
+    for (
+      let attempt = 0;
+      attempt < 50 && !FakeWebSocket.instances[0];
+      attempt++
+    ) {
+      await Promise.resolve();
+    }
     FakeWebSocket.instances[0]?.open();
     await firstPromise;
     const secondPromise = client.subscribe(
@@ -180,7 +252,13 @@ describe('WebsocketClient', () => {
       },
       second,
     );
-    await Promise.resolve();
+    for (
+      let attempt = 0;
+      attempt < 50 && !FakeWebSocket.instances[1];
+      attempt++
+    ) {
+      await Promise.resolve();
+    }
     FakeWebSocket.instances[1]?.open();
     await secondPromise;
 

@@ -1,16 +1,7 @@
 import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
-import { AccountResolver } from './lib/account-resolver.js';
-import type {
-  AssetIdentifier,
-  Grouping,
-  ModifyWireInput,
-  OrderWireInput,
-} from './lib/action-factory.js';
+import type { AssetIdentifier } from './lib/action-factory.js';
 import type { ResolvedAsset } from './lib/asset-resolver.js';
-import {
-  type ActionSubmissionOptions,
-  BaseRestClient,
-} from './lib/BaseRestClient.js';
+import { BaseRestClient } from './lib/BaseRestClient.js';
 import { decimalToWire } from './lib/decimal.js';
 import { normalizeAddresses } from './lib/normalize-addresses.js';
 import {
@@ -42,6 +33,7 @@ import type {
   SetIsolatedMarginLeverageRequest,
   SetUserAbstractionRequest,
   SubmitLimitOrderRequest,
+  SubmitMarketCloseRequest,
   SubmitMarketOrderRequest,
   SubmitOrderRequest,
   SubmitTwapOrderRequest,
@@ -94,46 +86,38 @@ import type {
 } from './types/response/info.types.js';
 import type {
   JsonObject,
-  RequestOptions,
   RestClientNetworkOptions,
   RestClientOptions,
 } from './types/shared.types.js';
 
 type InfoParams = object;
 
-type BuilderApprovalState =
-  'approved' | 'checking' | 'unapproved' | 'unavailable' | 'unchecked';
-
-interface BuilderApprovalOwner {
-  address: string;
-  canAutoApprove: boolean;
-}
-
-const BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS = 1_000;
 const DEFAULT_MARKET_ORDER_SLIPPAGE = 0.05;
 
-const TRADING_ACTIONS = new Set([
-  'batchModify',
-  'cancel',
-  'cancelByCloid',
-  'modify',
-  'order',
-  'scheduleCancel',
-  'twapCancel',
-  'twapOrder',
-]);
+function hip3Dex(canonicalName: string): string | undefined {
+  return canonicalName.includes(':')
+    ? canonicalName.split(':', 1)[0]
+    : undefined;
+}
+
+function perpPositionCoin(
+  entry: unknown,
+): { coin: string; szi: string } | undefined {
+  if (!entry || typeof entry !== 'object' || !('position' in entry)) {
+    return undefined;
+  }
+  const position = (entry as { position: unknown }).position;
+  if (!position || typeof position !== 'object') {
+    return undefined;
+  }
+  const { coin, szi } = position as { coin?: unknown; szi?: unknown };
+  if (typeof coin !== 'string' || typeof szi !== 'string') {
+    return undefined;
+  }
+  return { coin, szi };
+}
 
 export class RestClient extends BaseRestClient {
-  private readonly accountResolver: AccountResolver;
-
-  private builderApprovalPromise: Promise<void> | undefined;
-
-  private builderApprovalState: BuilderApprovalState = 'unchecked';
-
-  private builderPreflightDeadline: number | undefined;
-
-  private referralAttempted = false;
-
   constructor(
     options: RestClientOptions = {},
     networkOptions: RestClientNetworkOptions = {},
@@ -144,585 +128,371 @@ export class RestClient extends BaseRestClient {
       options,
       networkOptions,
     );
-    this.accountResolver = new AccountResolver(
-      this.actionBuilder,
-      (user, requestOptions) =>
-        this.info<UserRoleResponse>('userRole', { user }, requestOptions),
-    );
   }
 
   resolveAsset(identifier: AssetIdentifier): Promise<ResolvedAsset> {
     return this.assetResolver.resolve(identifier);
   }
 
+  nameToCoin(name: string): Promise<string> {
+    return this.assetResolver.nameToCoin(name);
+  }
+
   refreshAssetMetadata(): Promise<void> {
     return this.assetResolver.refresh();
   }
 
-  getAccountAddress(requestOptions?: RequestOptions): Promise<string> {
-    return this.resolveAccountAddress(undefined, requestOptions);
+  getAccountAddress(): Promise<string> {
+    return this.resolveAccountAddress(undefined);
   }
 
-  getAllMids(
-    params: { dex?: string } = {},
-    requestOptions?: RequestOptions,
-  ): Promise<AllMidsResponse> {
-    return this.info('allMids', params, requestOptions);
+  getAllMids(params: { dex?: string } = {}): Promise<AllMidsResponse> {
+    return this.info('allMids', params);
   }
 
-  async getActiveAssetData(
+  getActiveAssetData(
     params: AccountRequest & { coin: string },
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo(
-      'activeAssetData',
-      {
-        ...params,
-        coin: await this.infoCoin(params.coin),
-      },
-      requestOptions,
-    );
+    return this.accountInfo('activeAssetData', params);
   }
 
-  getAllBorrowLendReserveStates(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('allBorrowLendReserveStates', {}, requestOptions);
+  getAllBorrowLendReserveStates(): Promise<InfoResponse> {
+    return this.info('allBorrowLendReserveStates', {});
   }
 
-  getAllPerpMetadata(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('allPerpMetas', {}, requestOptions);
+  getAllPerpMetadata(): Promise<InfoResponse> {
+    return this.info('allPerpMetas', {});
   }
 
-  getApprovedBuilders(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('approvedBuilders', params, requestOptions);
+  getApprovedBuilders(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('approvedBuilders', params);
   }
 
-  getBorrowLendReserveState(
-    params: { token: number },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('borrowLendReserveState', params, requestOptions);
+  getBorrowLendReserveState(params: { token: number }): Promise<InfoResponse> {
+    return this.info('borrowLendReserveState', params);
   }
 
-  getUserBorrowLendState(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('borrowLendUserState', params, requestOptions);
+  getUserBorrowLendState(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('borrowLendUserState', params);
   }
 
-  async getCandles(
-    params: GetCandlesRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<Candle[]> {
-    return this.info(
-      'candleSnapshot',
-      {
-        req: {
-          ...params,
-          coin: await this.infoCoin(params.coin),
-        },
-      },
-      requestOptions,
-    );
+  async getCandles(params: GetCandlesRequest): Promise<Candle[]> {
+    return this.info('candleSnapshot', {
+      req: { ...params, coin: await this.nameToCoin(params.coin) },
+    });
   }
 
   getPerpAccountSummary(
     params: AccountDexRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<PerpAccountSummaryResponse> {
-    return this.accountInfo('clearinghouseState', params, requestOptions);
+    return this.accountInfo('clearinghouseState', params);
   }
 
-  getStakingDelegations(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('delegations', params, requestOptions);
+  getStakingDelegations(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('delegations', params);
   }
 
-  getStakingHistory(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('delegatorHistory', params, requestOptions);
+  getStakingHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('delegatorHistory', params);
   }
 
-  getStakingRewards(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('delegatorRewards', params, requestOptions);
+  getStakingRewards(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('delegatorRewards', params);
   }
 
-  getStakingSummary(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('delegatorSummary', params, requestOptions);
+  getStakingSummary(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('delegatorSummary', params);
   }
 
-  getExchangeStatus(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('exchangeStatus', {}, requestOptions);
+  getExchangeStatus(): Promise<InfoResponse> {
+    return this.info('exchangeStatus', {});
   }
 
-  getExtraAgents(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('extraAgents', params, requestOptions);
+  getExtraAgents(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('extraAgents', params);
   }
 
-  getFrontendOpenOrders(
-    params: AccountDexRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<OpenOrder[]> {
-    return this.accountInfo('frontendOpenOrders', params, requestOptions);
+  getFrontendOpenOrders(params: AccountDexRequest = {}): Promise<OpenOrder[]> {
+    return this.accountInfo('frontendOpenOrders', params);
   }
 
   async getFundingHistory(
     params: GetFundingHistoryRequest,
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.info(
-      'fundingHistory',
-      {
-        ...params,
-        coin: await this.infoCoin(params.coin),
-      },
-      requestOptions,
-    );
+    return this.info('fundingHistory', {
+      ...params,
+      coin: await this.nameToCoin(params.coin),
+    });
   }
 
-  getGossipPriorityAuctionStatus(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('gossipPriorityAuctionStatus', {}, requestOptions);
+  getGossipPriorityAuctionStatus(): Promise<InfoResponse> {
+    return this.info('gossipPriorityAuctionStatus', {});
   }
 
-  getGossipRootIps(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('gossipRootIps', {}, requestOptions);
+  getGossipRootIps(): Promise<InfoResponse> {
+    return this.info('gossipRootIps', {});
   }
 
-  getOrderHistory(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('historicalOrders', params, requestOptions);
+  getOrderHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('historicalOrders', params);
   }
 
-  getVipStatus(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<boolean> {
-    return this.accountInfo('isVip', params, requestOptions);
+  getVipStatus(params: AccountRequest = {}): Promise<boolean> {
+    return this.accountInfo('isVip', params);
   }
 
   async getOrderBook(
     params: GetOrderBookRequest,
-    requestOptions?: RequestOptions,
   ): Promise<OrderBookResponse | null> {
-    return this.info(
-      'l2Book',
-      {
-        ...params,
-        coin: await this.infoCoin(params.coin),
-      },
-      requestOptions,
-    );
+    return this.info('l2Book', {
+      ...params,
+      coin: await this.nameToCoin(params.coin),
+    });
   }
 
-  getLeadingVaults(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('leadingVaults', params, requestOptions);
+  getLeadingVaults(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('leadingVaults', params);
   }
 
-  getLegalStatus(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('legalCheck', params, requestOptions);
+  getLegalStatus(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('legalCheck', params);
   }
 
-  getLiquidatablePositions(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('liquidatable', {}, requestOptions);
+  getLiquidatablePositions(): Promise<InfoResponse> {
+    return this.info('liquidatable', {});
   }
 
-  getMarginTable(
-    params: { id: number },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('marginTable', params, requestOptions);
+  getMarginTable(params: { id: number }): Promise<InfoResponse> {
+    return this.info('marginTable', params);
   }
 
-  getMaxBuilderFee(
-    params: GetMaxBuilderFeeRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<number> {
-    return this.accountInfo('maxBuilderFee', params, requestOptions);
+  getMaxBuilderFee(params: GetMaxBuilderFeeRequest): Promise<number> {
+    return this.accountInfo('maxBuilderFee', params);
   }
 
-  getMaxMarketOrderNotionals(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('maxMarketOrderNtls', {}, requestOptions);
+  getMaxMarketOrderNotionals(): Promise<InfoResponse> {
+    return this.info('maxMarketOrderNtls', {});
   }
 
-  getPerpMetadata(
-    params: { dex?: string } = {},
-    requestOptions?: RequestOptions,
-  ): Promise<PerpMeta> {
-    return this.info('meta', params, requestOptions);
+  getPerpMetadata(params: { dex?: string } = {}): Promise<PerpMeta> {
+    return this.info('meta', params);
   }
 
-  getPerpAssetContexts(
-    params: { dex?: string } = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('metaAndAssetCtxs', params, requestOptions);
+  getPerpAssetContexts(params: { dex?: string } = {}): Promise<InfoResponse> {
+    return this.info('metaAndAssetCtxs', params);
   }
 
-  getOpenOrders(
-    params: AccountDexRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<OpenOrder[]> {
-    return this.accountInfo('openOrders', params, requestOptions);
+  getOpenOrders(params: AccountDexRequest = {}): Promise<OpenOrder[]> {
+    return this.accountInfo('openOrders', params);
   }
 
-  getOrderStatus(
-    params: GetOrderStatusRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('orderStatus', params, requestOptions);
+  getOrderStatus(params: GetOrderStatusRequest): Promise<InfoResponse> {
+    return this.accountInfo('orderStatus', params);
   }
 
-  getOutcomeMetadata(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('outcomeMeta', {}, requestOptions);
+  getOutcomeMetadata(): Promise<InfoResponse> {
+    return this.info('outcomeMeta', {});
   }
 
-  async getPerpAnnotation(
-    params: { coin: string },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info(
-      'perpAnnotation',
-      { coin: await this.infoCoin(params.coin) },
-      requestOptions,
-    );
+  getPerpAnnotation(params: { coin: string }): Promise<InfoResponse> {
+    return this.info('perpAnnotation', params);
   }
 
-  getPerpCategories(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('perpCategories', {}, requestOptions);
+  getPerpCategories(): Promise<InfoResponse> {
+    return this.info('perpCategories', {});
   }
 
-  getConcisePerpAnnotations(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('perpConciseAnnotations', {}, requestOptions);
+  getConcisePerpAnnotations(): Promise<InfoResponse> {
+    return this.info('perpConciseAnnotations', {});
   }
 
-  getPerpDeployAuctionStatus(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('perpDeployAuctionStatus', {}, requestOptions);
+  getPerpDeployAuctionStatus(): Promise<InfoResponse> {
+    return this.info('perpDeployAuctionStatus', {});
   }
 
-  getPerpDexLimits(
-    params: { dex: string },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('perpDexLimits', params, requestOptions);
+  getPerpDexLimits(params: { dex: string }): Promise<InfoResponse> {
+    return this.info('perpDexLimits', params);
   }
 
-  getPerpDexStatus(
-    params: { dex: string },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('perpDexStatus', params, requestOptions);
+  getPerpDexStatus(params: { dex: string }): Promise<InfoResponse> {
+    return this.info('perpDexStatus', params);
   }
 
-  getPerpDexs(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('perpDexs', {}, requestOptions);
+  getPerpDexs(): Promise<InfoResponse> {
+    return this.info('perpDexs', {});
   }
 
-  getPerpsAtOpenInterestCap(
-    params: { dex?: string } = {},
-    requestOptions?: RequestOptions,
-  ): Promise<string[]> {
-    return this.info('perpsAtOpenInterestCap', params, requestOptions);
+  getPerpsAtOpenInterestCap(params: { dex?: string } = {}): Promise<string[]> {
+    return this.info('perpsAtOpenInterestCap', params);
   }
 
-  getPortfolio(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('portfolio', params, requestOptions);
+  getPortfolio(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('portfolio', params);
   }
 
   getPreTransferCheck(
     params: GetPreTransferCheckRequest,
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.info(
-      'preTransferCheck',
-      normalizeAddresses(params),
-      requestOptions,
-    );
+    return this.info('preTransferCheck', normalizeAddresses(params));
   }
 
-  getPredictedFundingRates(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('predictedFundings', {}, requestOptions);
+  getPredictedFundingRates(): Promise<InfoResponse> {
+    return this.info('predictedFundings', {});
   }
 
-  async getRecentTrades(
-    params: { coin: string },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info(
-      'recentTrades',
-      { coin: await this.infoCoin(params.coin) },
-      requestOptions,
-    );
+  getRecentTrades(params: { coin: string }): Promise<InfoResponse> {
+    return this.info('recentTrades', params);
   }
 
-  getReferralInfo(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('referral', params, requestOptions);
+  getReferralInfo(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('referral', params);
   }
 
-  getSettledOutcome(
-    params: { outcome: number },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('settledOutcome', params, requestOptions);
+  getSettledOutcome(params: { outcome: number }): Promise<InfoResponse> {
+    return this.info('settledOutcome', params);
   }
 
   async getBalances(
     params: AccountDexRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<AccountBalancesResponse> {
-    const user = await this.resolveAccountAddress(params.user, requestOptions);
+    const user = await this.resolveAccountAddress(params.user);
     const [perp, spot] = await Promise.all([
-      this.getPerpAccountSummary(
-        {
-          user,
-          ...(params.dex === undefined ? {} : { dex: params.dex }),
-        },
-        requestOptions,
-      ),
-      this.getSpotBalances({ user }, requestOptions),
+      this.getPerpAccountSummary({
+        user,
+        ...(params.dex === undefined ? {} : { dex: params.dex }),
+      }),
+      this.getSpotBalances({ user }),
     ]);
 
     return { perp, spot, user };
   }
 
-  getSpotBalances(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<SpotBalancesResponse> {
-    return this.accountInfo('spotClearinghouseState', params, requestOptions);
+  getSpotBalances(params: AccountRequest = {}): Promise<SpotBalancesResponse> {
+    return this.accountInfo('spotClearinghouseState', params);
   }
 
   getSpotDeployAuctionStatus(
     params: AccountRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo('spotDeployState', params, requestOptions);
+    return this.accountInfo('spotDeployState', params);
   }
 
-  getSpotMetadata(requestOptions?: RequestOptions): Promise<SpotMeta> {
-    return this.info('spotMeta', {}, requestOptions);
+  getSpotMetadata(): Promise<SpotMeta> {
+    return this.info('spotMeta', {});
   }
 
-  getSpotAssetContexts(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('spotMetaAndAssetCtxs', {}, requestOptions);
+  getSpotAssetContexts(): Promise<InfoResponse> {
+    return this.info('spotMetaAndAssetCtxs', {});
   }
 
-  getSpotPairDeployAuctionStatus(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('spotPairDeployAuctionStatus', {}, requestOptions);
+  getSpotPairDeployAuctionStatus(): Promise<InfoResponse> {
+    return this.info('spotPairDeployAuctionStatus', {});
   }
 
-  getSubAccounts(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('subAccounts', params, requestOptions);
+  getSubAccounts(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('subAccounts', params);
   }
 
   getSubAccountsWithAllDexStates(
     params: AccountRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo('subAccounts2', params, requestOptions);
+    return this.accountInfo('subAccounts2', params);
   }
 
-  getTokenDetails(
-    params: { tokenId: string },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('tokenDetails', params, requestOptions);
+  getTokenDetails(params: { tokenId: string }): Promise<InfoResponse> {
+    return this.info('tokenDetails', params);
   }
 
-  getTwapHistory(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('twapHistory', params, requestOptions);
+  getTwapHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('twapHistory', params);
   }
 
-  getUserAbstraction(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userAbstraction', params, requestOptions);
+  getUserAbstraction(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userAbstraction', params);
   }
 
   getUserBorrowLendInterest(
     params: GetUserBorrowLendInterestRequest,
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo('userBorrowLendInterest', params, requestOptions);
+    return this.accountInfo('userBorrowLendInterest', params);
   }
 
-  getUserDexAbstraction(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userDexAbstraction', params, requestOptions);
+  getUserDexAbstraction(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userDexAbstraction', params);
   }
 
-  getUserFees(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userFees', params, requestOptions);
+  getUserFees(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userFees', params);
   }
 
-  getUserFills(
-    params: GetUserFillsRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<UserFill[]> {
-    return this.accountInfo('userFills', params, requestOptions);
+  getUserFills(params: GetUserFillsRequest = {}): Promise<UserFill[]> {
+    return this.accountInfo('userFills', params);
   }
 
-  getUserFillsByTime(
-    params: GetUserFillsByTimeRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<UserFill[]> {
-    return this.accountInfo('userFillsByTime', params, requestOptions);
+  getUserFillsByTime(params: GetUserFillsByTimeRequest): Promise<UserFill[]> {
+    return this.accountInfo('userFillsByTime', params);
   }
 
   getUserFundingHistory(
     params: GetUserFundingHistoryRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo('userFunding', params, requestOptions);
+    return this.accountInfo('userFunding', params);
   }
 
   getUserNonFundingLedgerUpdates(
     params: GetUserNonFundingLedgerUpdatesRequest = {},
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo(
-      'userNonFundingLedgerUpdates',
-      params,
-      requestOptions,
-    );
+    return this.accountInfo('userNonFundingLedgerUpdates', params);
   }
 
-  getUserRateLimit(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userRateLimit', params, requestOptions);
+  getUserRateLimit(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userRateLimit', params);
   }
 
-  getUserRole(
-    params: UserRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<UserRoleResponse> {
-    return this.info('userRole', normalizeUserRequest(params), requestOptions);
+  getUserRole(params: UserRequest): Promise<UserRoleResponse> {
+    return this.info('userRole', normalizeUserRequest(params));
   }
 
-  getMultiSigSigners(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userToMultiSigSigners', params, requestOptions);
+  getMultiSigSigners(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userToMultiSigSigners', params);
   }
 
-  getUserTwapSliceFills(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userTwapSliceFills', params, requestOptions);
+  getUserTwapSliceFills(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userTwapSliceFills', params);
   }
 
   getUserTwapSliceFillsByTime(
     params: GetUserTwapSliceFillsByTimeRequest,
-    requestOptions?: RequestOptions,
   ): Promise<InfoResponse> {
-    return this.accountInfo('userTwapSliceFillsByTime', params, requestOptions);
+    return this.accountInfo('userTwapSliceFillsByTime', params);
   }
 
-  getUserVaultDeposits(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('userVaultEquities', params, requestOptions);
+  getUserVaultDeposits(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('userVaultEquities', params);
   }
 
-  getValidatorL1Votes(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('validatorL1Votes', {}, requestOptions);
+  getValidatorL1Votes(): Promise<InfoResponse> {
+    return this.info('validatorL1Votes', {});
   }
 
-  getValidatorSummaries(
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('validatorSummaries', {}, requestOptions);
+  getValidatorSummaries(): Promise<InfoResponse> {
+    return this.info('validatorSummaries', {});
   }
 
-  getVaultDetails(
-    params: GetVaultDetailsRequest,
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info(
-      'vaultDetails',
-      normalizeAddresses(params),
-      requestOptions,
-    );
+  getVaultDetails(params: GetVaultDetailsRequest): Promise<InfoResponse> {
+    return this.info('vaultDetails', normalizeAddresses(params));
   }
 
-  getVaultSummaries(requestOptions?: RequestOptions): Promise<InfoResponse> {
-    return this.info('vaultSummaries', {}, requestOptions);
+  getVaultSummaries(): Promise<InfoResponse> {
+    return this.info('vaultSummaries', {});
   }
 
-  getWebData2(
-    params: AccountRequest = {},
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.accountInfo('webData2', params, requestOptions);
+  getWebData2(params: AccountRequest = {}): Promise<InfoResponse> {
+    return this.accountInfo('webData2', params);
   }
 
-  getAlignedQuoteTokenStatus(
-    params: { token: number },
-    requestOptions?: RequestOptions,
-  ): Promise<InfoResponse> {
-    return this.info('alignedQuoteTokenInfo', params, requestOptions);
+  getAlignedQuoteTokenStatus(params: { token: number }): Promise<InfoResponse> {
+    return this.info('alignedQuoteTokenInfo', params);
   }
 
   async submitOrder(
@@ -740,9 +510,6 @@ export class RestClient extends BaseRestClient {
     params: SubmitMarketOrderRequest,
     options: L1RequestOptions = {},
   ): Promise<ExchangeResponse<OrderResponseData>> {
-    if (params.side !== 'buy' && params.side !== 'sell') {
-      throw new TypeError('side must be "buy" or "sell".');
-    }
     const maxSlippage = params.maxSlippage ?? DEFAULT_MARKET_ORDER_SLIPPAGE;
     if (!Number.isFinite(maxSlippage) || maxSlippage < 0 || maxSlippage >= 1) {
       throw new RangeError('maxSlippage must be at least 0 and less than 1.');
@@ -756,10 +523,10 @@ export class RestClient extends BaseRestClient {
       );
     }
 
-    const dex =
-      asset.kind === 'hip3' ? asset.canonicalName.split(':', 1)[0] : undefined;
-    const mids = await this.getAllMids(dex ? { dex } : {}, options);
-    const mid = mids[asset.canonicalName];
+    const dex = hip3Dex(asset.canonicalName);
+    const mid =
+      params.price ??
+      (await this.getAllMids(dex ? { dex } : {}))[asset.canonicalName];
     if (mid === undefined) {
       throw new TypeError(
         `Hyperliquid did not return a midpoint for "${asset.canonicalName}".`,
@@ -788,26 +555,51 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  async submitMarketClose(
+    params: SubmitMarketCloseRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<OrderResponseData>> {
+    const asset = await this.resolveAsset(params.symbol);
+    const dex = hip3Dex(asset.canonicalName);
+    const summary = await this.getPerpAccountSummary(dex ? { dex } : {});
+    const requested =
+      typeof params.symbol === 'string' ? params.symbol : asset.canonicalName;
+    const position = summary.assetPositions
+      .map(perpPositionCoin)
+      .find(
+        (item) =>
+          item?.coin === asset.canonicalName || item?.coin === requested,
+      );
+    if (!position) {
+      throw new TypeError(`No perpetual position found for "${requested}".`);
+    }
+
+    const size =
+      params.size ??
+      (position.szi.startsWith('-') ? position.szi.slice(1) : position.szi);
+
+    return this.submitMarketOrder(
+      {
+        ...(params.clientOrderId === undefined
+          ? {}
+          : { clientOrderId: params.clientOrderId }),
+        ...(params.maxSlippage === undefined
+          ? {}
+          : { maxSlippage: params.maxSlippage }),
+        ...(params.price === undefined ? {} : { price: params.price }),
+        reduceOnly: true,
+        side: position.szi.startsWith('-') ? 'buy' : 'sell',
+        size,
+        symbol: params.symbol,
+      },
+      options,
+    );
+  }
+
   async submitLimitOrder(
     params: SubmitLimitOrderRequest,
     options: L1RequestOptions = {},
   ): Promise<ExchangeResponse<OrderResponseData>> {
-    if (params.side !== 'buy' && params.side !== 'sell') {
-      throw new TypeError('side must be "buy" or "sell".');
-    }
-    if (
-      params.timeInForce !== undefined &&
-      params.timeInForce !== 'GTC' &&
-      params.timeInForce !== 'IOC'
-    ) {
-      throw new TypeError('timeInForce must be "GTC" or "IOC".');
-    }
-    if (params.postOnly && params.timeInForce === 'IOC') {
-      throw new TypeError(
-        'postOnly cannot be combined with timeInForce "IOC".',
-      );
-    }
-
     return this.submitOrder(
       {
         orders: [
@@ -940,7 +732,7 @@ export class RestClient extends BaseRestClient {
   }
 
   setReferrer(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
-    this.referralAttempted = true;
+    this.markReferralAttempted();
     const { referralCode } = this.actionBuilder.partnerConfiguration();
     return this.l1('setReferrer', { code: referralCode }, options);
   }
@@ -1418,249 +1210,15 @@ export class RestClient extends BaseRestClient {
     return this.l1('userOutcome', params, options);
   }
 
-  private async accountInfo<T>(
-    type: string,
-    params: InfoParams,
-    requestOptions?: RequestOptions,
-  ): Promise<T> {
+  private async accountInfo<T>(type: string, params: InfoParams): Promise<T> {
     const { user: requestedUser, ...fields } = params as AccountRequest &
       Record<string, unknown>;
-    const user = await this.resolveAccountAddress(
-      requestedUser,
-      requestOptions,
-    );
+    const user = await this.resolveAccountAddress(requestedUser);
 
-    return this.info<T>(
-      type,
-      normalizeAddresses({ user, ...fields }),
-      requestOptions,
-    );
+    return this.info<T>(type, normalizeAddresses({ user, ...fields }));
   }
 
-  private async resolveAccountAddress(
-    requestedUser?: string,
-    requestOptions?: RequestOptions,
-  ): Promise<string> {
-    return this.accountResolver.resolveAccountAddress(
-      requestedUser,
-      requestOptions,
-    );
-  }
-
-  private resolveSignerAccount(requestOptions?: RequestOptions) {
-    return this.accountResolver.resolveSignerAccount(requestOptions);
-  }
-
-  private async infoCoin(coin: string): Promise<string> {
-    return coin.includes('/')
-      ? (await this.assetResolver.resolve(coin)).canonicalName
-      : coin;
-  }
-
-  protected override async beforeActionSubmission(
-    action: JsonObject,
-    options: ActionSubmissionOptions,
-  ): Promise<void> {
-    const { type } = action;
-    if (typeof type !== 'string' || !TRADING_ACTIONS.has(type)) {
-      return;
-    }
-
-    const isMultiSig = 'multiSigUser' in options;
-    if (isMultiSig) {
-      const referralOptions = {
-        multiSigUser: options.multiSigUser,
-        signers: options.signers,
-      };
-      this.scheduleReferral(() =>
-        this.submitMultiSigL1Action(
-          {
-            type: 'setReferrer',
-            code: this.actionBuilder.partnerConfiguration().referralCode,
-          },
-          referralOptions,
-        ),
-      );
-    } else {
-      this.scheduleReferral(() => this.setReferrer());
-    }
-
-    if (type !== 'order') {
-      return;
-    }
-
-    const resolveOwner = isMultiSig
-      ? () =>
-          Promise.resolve({
-            address: normalizeAddresses(options.multiSigUser),
-            canAutoApprove: false,
-          })
-      : this.actionBuilder.hasSigner()
-        ? () => this.resolveBuilderApprovalOwner()
-        : undefined;
-    if (!resolveOwner) {
-      return;
-    }
-
-    this.warnForBuilderApproval();
-    if (this.builderApprovalState === 'approved') {
-      return;
-    }
-    if (!this.builderApprovalPromise) {
-      this.builderApprovalState = 'checking';
-      this.builderApprovalPromise = this.checkBuilderApproval(resolveOwner);
-    }
-    await this.waitForBuilderApprovalCheck(this.builderApprovalPromise);
-  }
-
-  private async checkBuilderApproval(
-    resolveOwner: () => Promise<BuilderApprovalOwner | undefined>,
-  ): Promise<void> {
-    let owner: BuilderApprovalOwner | undefined;
-    try {
-      owner = await resolveOwner();
-      if (!owner) {
-        this.builderApprovalState = 'unavailable';
-      } else {
-        const partner = this.actionBuilder.partnerConfiguration();
-        const approvedFee = await this.getMaxBuilderFee({
-          builder: partner.builder.b,
-          user: owner.address,
-        });
-        if (
-          !Number.isFinite(approvedFee) ||
-          !Number.isInteger(approvedFee) ||
-          approvedFee < 0
-        ) {
-          throw new TypeError(
-            'Hyperliquid returned an invalid maxBuilderFee response.',
-          );
-        }
-        if (this.builderApprovalState === 'approved') {
-          return;
-        }
-        if (approvedFee >= partner.builder.f) {
-          this.confirmBuilderFeeApproval();
-          return;
-        }
-        this.builderApprovalState = 'unapproved';
-      }
-    } catch {
-      if (this.builderApprovalState !== 'approved') {
-        this.builderApprovalState = 'unavailable';
-      }
-    }
-
-    if (this.builderApprovalState === 'unapproved' && owner?.canAutoApprove) {
-      void this.approveBuilderFee()
-        .then((response) => {
-          if (response.status !== 'ok') {
-            this.warnForBuilderApproval();
-          }
-        })
-        .catch(() => {
-          this.builderApprovalState = 'unapproved';
-          this.warnForBuilderApproval();
-        });
-      return;
-    }
-    this.warnForBuilderApproval();
-  }
-
-  private confirmBuilderFeeApproval(): void {
-    this.builderApprovalState = 'approved';
-    this.actionBuilder.confirmBuilderFeeApproval();
-  }
-
-  private async resolveBuilderApprovalOwner(): Promise<
-    BuilderApprovalOwner | undefined
-  > {
-    const resolution = await this.resolveSignerAccount();
-    if (!resolution.role) {
-      return {
-        address: resolution.accountAddress,
-        canAutoApprove:
-          this.actionBuilder.usesPrivateKeySigner() &&
-          resolution.accountAddress === resolution.signerAddress,
-      };
-    }
-
-    const { role } = resolution;
-    if (role.role === 'user') {
-      return {
-        address: resolution.accountAddress,
-        canAutoApprove: this.actionBuilder.usesPrivateKeySigner(),
-      };
-    }
-    if (role.role === 'agent') {
-      return {
-        address: resolution.accountAddress,
-        canAutoApprove: false,
-      };
-    }
-    if (role.role === 'subAccount') {
-      return {
-        address: resolution.accountAddress,
-        canAutoApprove: false,
-      };
-    }
-    return undefined;
-  }
-
-  private waitForBuilderApprovalCheck(check: Promise<void>): Promise<void> {
-    this.builderPreflightDeadline ??=
-      Date.now() + BUILDER_APPROVAL_PREFLIGHT_BUDGET_MS;
-    const remaining = this.builderPreflightDeadline - Date.now();
-    if (remaining <= 0) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const finish = () => {
-        if (timer) {
-          clearTimeout(timer);
-          timer = undefined;
-        }
-        resolve();
-      };
-
-      timer = setTimeout(finish, remaining);
-      void check.then(finish);
-    });
-  }
-
-  private scheduleReferral(submit: () => Promise<unknown>): void {
-    if (this.referralAttempted) {
-      return;
-    }
-
-    this.referralAttempted = true;
-    queueMicrotask(() => {
-      void submit().catch(() => undefined);
-    });
-  }
-
-  private warnForBuilderApproval(): void {
-    if (
-      this.builderApprovalState !== 'unapproved' &&
-      this.builderApprovalState !== 'unavailable'
-    ) {
-      return;
-    }
-
-    const status =
-      this.builderApprovalState === 'unapproved'
-        ? 'is missing or below the configured fee'
-        : 'could not be verified';
-    try {
-      console.warn(
-        `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Orders are being submitted without a builder fee. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future major version may require approval before trading.`,
-      );
-    } catch {
-      // A broken console must not stop an order.
-    }
+  private async resolveAccountAddress(requestedUser?: string): Promise<string> {
+    return this.accountResolver.resolveAccountAddress(requestedUser);
   }
 }
-
-export type { AssetIdentifier, Grouping, ModifyWireInput, OrderWireInput };

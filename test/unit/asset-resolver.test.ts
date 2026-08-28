@@ -16,9 +16,13 @@ const RESPONSES: Record<string, unknown> = {
   spotMeta: {
     tokens: [
       { index: 0, name: 'USDC', szDecimals: 6 },
+      { index: 1, name: 'PURR', szDecimals: 0 },
       { index: 150, name: 'HYPE', szDecimals: 2 },
     ],
-    universe: [{ index: 107, name: '@107', tokens: [150, 0] }],
+    universe: [
+      { index: 0, name: 'PURR/USDC', tokens: [1, 0] },
+      { index: 107, name: '@107', tokens: [150, 0] },
+    ],
   },
 };
 
@@ -119,5 +123,21 @@ describe('AssetResolver', () => {
     await expect(resolver.resolve('UNKNOWN')).rejects.toThrow(
       'Unknown Hyperliquid asset "UNKNOWN"',
     );
+  });
+
+  test('nameToCoin matches official Python Info.name_to_coin', async () => {
+    const resolver = new AssetResolver(async (request) => {
+      return RESPONSES[String(request.type)];
+    });
+
+    await expect(resolver.nameToCoin('BTC')).resolves.toBe('BTC');
+    await expect(resolver.nameToCoin('@107')).resolves.toBe('@107');
+    await expect(resolver.nameToCoin('HYPE/USDC')).resolves.toBe('@107');
+    await expect(resolver.nameToCoin('PURR/USDC')).resolves.toBe('PURR/USDC');
+    await expect(resolver.nameToCoin('xyz:COIN')).resolves.toBe('xyz:COIN');
+    await expect(resolver.nameToCoin('btc')).rejects.toThrow(
+      'Unknown Hyperliquid asset "btc"',
+    );
+    await expect(resolver.nameToCoin('UNKNOWN')).rejects.toThrow(RangeError);
   });
 });

@@ -346,11 +346,19 @@ describe('WebsocketAPIClient', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      instance.getAllMids({}, { signal: controller.signal }),
+      instance.getWSClient().sendWSAPIRequest(
+        'info',
+        { type: 'allMids' },
+        {
+          signal: controller.signal,
+        },
+      ),
     ).rejects.toThrow('aborted');
     expect(FakeWebSocket.instances).toHaveLength(0);
 
-    const timedOut = instance.getAllMids({}, { timeout: 5 });
+    const timedOut = instance
+      .getWSClient()
+      .sendWSAPIRequest('info', { type: 'allMids' }, { timeout: 5 });
     await openLatest();
     const timeoutAssertion = expect(timedOut).rejects.toThrow(
       'timed out after 5 ms',

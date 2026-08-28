@@ -10,21 +10,13 @@ import type {
   HyperliquidSigner,
   JsonObject,
   L1ActionOptions,
-  RequestOptions,
   UserSignedActionOptions,
 } from '../shared.types.js';
 
-export interface L1RequestOptions extends RequestOptions {
-  expiresAfter?: number;
-  vaultAddress?: string | null;
-}
-
-export type UserSignedRequestOptions = RequestOptions;
-
-export interface RawL1RequestOptions extends L1ActionOptions, RequestOptions {}
-
-export interface RawUserSignedRequestOptions
-  extends UserSignedActionOptions, RequestOptions {}
+export type L1RequestOptions = L1ActionOptions;
+export type UserSignedRequestOptions = UserSignedActionOptions;
+export type RawL1RequestOptions = L1ActionOptions;
+export type RawUserSignedRequestOptions = UserSignedActionOptions;
 
 export interface MultiSigL1RequestOptions extends RawL1RequestOptions {
   multiSigUser: string;
@@ -46,9 +38,18 @@ export type OrderSide = 'buy' | 'sell';
 export interface SubmitMarketOrderRequest {
   clientOrderId?: string;
   maxSlippage?: number;
+  price?: string;
   reduceOnly?: boolean;
   side: OrderSide;
   size: string;
+  symbol: AssetIdentifier;
+}
+
+export interface SubmitMarketCloseRequest {
+  clientOrderId?: string;
+  maxSlippage?: number;
+  price?: string;
+  size?: string;
   symbol: AssetIdentifier;
 }
 
