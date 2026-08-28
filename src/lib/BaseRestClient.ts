@@ -470,7 +470,7 @@ export abstract class BaseRestClient {
         : 'could not be verified';
     try {
       console.warn(
-        `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Orders are being submitted without a builder fee. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future major version may require approval before trading.`,
+        `[@siebly/hyperliquid-api] Siebly builder approval ${status}. Approve the builder from the main wallet with client.approveBuilderFee(). API wallets cannot grant this approval. A future update may require approval before trading. By approving our builder code, you are supporting the continued development & maintenance of our SDKs.`,
       );
     } catch {
       // A broken console must not stop an order.
