@@ -512,12 +512,6 @@ The approval remains valid until it is changed or revoked, so it should not be c
 
 ---
 
-## Used By
-
-[![Repository Users Preview Image](https://dependents.info/sieblyio/hyperliquid-api/image)](https://github.com/sieblyio/hyperliquid-api/network/dependents)
-
----
-
 <!-- template_contributions -->
 
 ### Contributions & Thanks
@@ -534,6 +528,7 @@ Have my projects helped you? Share the love, there are many ways you can show yo
   - Binance (receive a 20% fee discount!): https://accounts.binance.com/register?ref=OKFFGIJJ
   - HyperLiquid (receive a 4% fee discount!): https://app.hyperliquid.xyz/join/SIEBLY
   - Gate: https://www.gate.io/signup/NODESDKS?ref_type=103
+  - Kucoin (receive a 10% fee discount!): https://www.kucoin.com/r/broker/SIEBLYSDK <!--  OR https://www.kucoin.com/r/rf/CXEEUWJ3 -->
 
 <!-- template_contributions_end -->
 
