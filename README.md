@@ -490,13 +490,14 @@ The README, examples, and exported TypeScript types can be provided directly to 
 
 ## Referral & Builder Codes
 
+
 On the first order, cancellation, or modification from a client instance, the SDK passively attempts to set the `SIEBLY` referral code. It does not query the existing referral first, delay the triggering request, or retry repeatedly. If the account already has a referrer or the request fails, trading continues normally.
 
 Accounts without an existing referrer currently receive a 4% referral fee discount when `SIEBLY` is set. The referral also supports ongoing SDK maintenance. Referral rules are controlled by Hyperliquid; see the [referral terms](https://hyperliquid.gitbook.io/hyperliquid-docs/referrals) before trading.
 
 Orders include the fixed Siebly builder code only after the SDK confirms that the account's main wallet has approved it. If an approval check fails, the order continues without the builder code and the SDK emits a warning. When a main-wallet private key is configured and approval is missing, the SDK attempts approval in the background. API and agent wallets cannot grant builder approval themselves.
 
-Approve the builder once using the main account:
+Please consider approving our HyperLiquid builder address to further support our work. This approval must be signed by your Hyperliquid main wallet, not an API or agent wallet. Create a RestClient using your main-wallet private key or signer, then call `approveBuilderFee()` once. For example:
 
 ```typescript
 import { RestClient } from '@siebly/hyperliquid-api';
@@ -508,7 +509,7 @@ const masterClient = new RestClient({
 await masterClient.approveBuilderFee();
 ```
 
-The approval remains valid until it is changed or revoked, so it should not be called during every bot startup. The configured approval limit is 0.01%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
+The approval remains valid until it is changed or revoked, so it should not be called during every startup. The configured approval limit is 0.01%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
 
 ---
 
