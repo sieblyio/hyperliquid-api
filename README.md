@@ -1,37 +1,88 @@
 # Node.js & JavaScript SDK for Hyperliquid REST APIs & WebSockets
 
+[![Build & Test](https://github.com/sieblyio/hyperliquid-api/actions/workflows/e2etest.yml/badge.svg?branch=main)](https://github.com/sieblyio/hyperliquid-api/actions/workflows/e2etest.yml)
 [![npm version](https://img.shields.io/npm/v/%40siebly%2Fhyperliquid-api)][1]
 [![npm size](https://img.shields.io/bundlephobia/min/%40siebly%2Fhyperliquid-api/latest)][1]
 [![npm downloads](https://img.shields.io/npm/dt/%40siebly%2Fhyperliquid-api)][1]
 [![last commit](https://img.shields.io/github/last-commit/sieblyio/hyperliquid-api)][1]
 [![Telegram](https://img.shields.io/badge/chat-on%20telegram-blue.svg)](https://t.me/nodetraders)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sieblyio/hyperliquid-api)
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@siebly/hyperliquid-api">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/sieblyio/hyperliquid-api/blob/main/docs/images/logoDarkMode2.svg?raw=true#gh-dark-mode-only">
+      <img alt="SDK Logo" src="https://github.com/sieblyio/hyperliquid-api/blob/main/docs/images/logoBrightMode2.svg?raw=true#gh-light-mode-only">
+    </picture>
+  </a>
+</p>
 
 [1]: https://www.npmjs.com/package/@siebly/hyperliquid-api
 
-A TypeScript SDK for the current Hyperliquid REST and WebSocket APIs.
+Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs, WebSocket APIs & WebSocket Events:
 
-- One `RestClient` for public info requests and signed exchange actions
-- Typed WebSocket subscriptions with reconnect and resubscribe support
-- REST-style requests over WebSocket through `WebsocketAPIClient`
-- MessagePack L1 signing and user-signed EIP-712 actions
-- Private keys and portable `signTypedData` signers
-- Perpetuals, spot, HIP-3, outcomes, vaults, subaccounts, staking, deployer actions, multisig, validators, and borrow/lend
-- Dual ESM and CommonJS output
-- Browser-safe public REST and WebSocket use
+- Complete integration with all HyperLiquid REST APIs & WebSockets, including the WebSocket API.
+- Actively maintained with a modern, promise-driven interface.
+- TypeScript support with thorough type declarations for API requests and responses, including the WebSocket API.
+- JavaScript support. TypeScript is not required, but is definitely recommended.
+- Thorough automated tests covering requests, signing, WebSockets, types, and package consumers.
+- Proxy support via Axios integration.
+- Robust WebSocket consumer integration with configurable heartbeats & automatic reconnect then resubscribe workflows.
+  - Event-driven messaging.
+  - Smart WebSocket persistence.
+    - Automatically detect silent WebSocket disconnections through timed heartbeats.
+    - Automatically handle authentication.
+    - Emit a `reconnected` event when a dropped connection is restored.
+- WebSocket API integration, with two promise-driven approaches:
+  1. Import `WebsocketAPIClient` and use it like the REST API client. Call typed methods and await their responses.
+     - See [examples/websocket-api.ts](./examples/websocket-api.ts).
+  2. Use `sendWSAPIRequest(...)` directly when you need raw WebSocket POST access.
+     - The method connects requests to responses and returns a promise.
+- One `RestClient` for public market data, account information, trading, transfers, staking, vaults, subaccounts, deployer actions, multisig, validators, and borrow/lend.
+- MessagePack L1 signing and user-signed EIP-712 actions.
+- Private keys and portable `signTypedData` signers.
+- CEX-style helpers for market orders, limit orders, market closes, balances, and account summaries.
+- Perpetual, spot, HIP-3, and outcome asset resolution using official identifiers and metadata-derived aliases.
+- Dual ESM and CommonJS output.
+- Browser-safe public REST calls and public WebSocket subscriptions.
+- Active community support & collaboration in telegram: [Node.js Algo Traders](https://t.me/nodetraders).
 
-## Table of Contents
+# Table of Contents
+
+## Overview
 
 - [Installation](#installation)
 - [Documentation](#documentation)
+- [Issues & Discussion](#issues--discussion)
+- [Related Projects](#related-projects)
+
+## REST API Examples
+
 - [REST](#rest)
 - [Assets](#assets)
-- [Signing](#signing)
-- [WebSocket subscriptions](#websocket-subscriptions)
-- [WebSocket POST requests](#websocket-post-requests)
-- [Raw methods](#raw-methods)
-- [Browser usage](#browser-usage)
+- [Custom Signer](#custom-signer)
+
+## WebSocket Integration & Examples
+
+- [WebSockets](#websockets)
+- [WebSocket Subscriptions: Consuming Events](#websocket-subscriptions-consuming-events)
+- [WebSocket API - Sending Commands via WebSockets](#websocket-api---sending-commands-via-websockets)
+
+## Additional Features
+
+- [Logging](#logging)
+  - [Customise Logging](#customise-logging)
+  - [Debug HTTP Requests](#debug-http-requests)
+- [Raw Methods](#raw-methods)
+- [Browser Usage](#browser-usage)
+- [Use with LLMs & AI](#use-with-llms--ai)
 - [Used By](#used-by)
+
+## Contributing
+
 - [Contributions & Thanks](#contributions--thanks)
+
+---
 
 ## Installation
 
@@ -51,7 +102,38 @@ Node.js 24 or newer and npm 11 or newer are supported.
 - [WebSocket POST requests](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/post-requests)
 - [Builder codes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes)
 
-Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. The `examples` directory contains small implementation examples.
+Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for small implementation examples.
+
+## Issues & Discussion
+
+- Issues? Check the [issues tab](https://github.com/sieblyio/hyperliquid-api/issues).
+- Discuss & collaborate with other node devs? Join our [Node.js Algo Traders](https://t.me/nodetraders) engineering community on telegram.
+- Follow our announcement channel for real-time updates on [X/Twitter](https://x.com/sieblyio)
+
+<!-- template_related_projects -->
+
+## Related Projects
+
+Check out our JavaScript/TypeScript/Node.js SDKs & Projects:
+
+- Visit our website: [https://Siebly.io](https://siebly.io/)
+- Try our REST API & WebSocket SDKs published on npmjs:
+  - [Bybit JavaScript SDK: bybit-api](https://www.npmjs.com/package/bybit-api)
+  - [Hyperliquid JavaScript SDK: @siebly/hyperliquid-api](https://www.npmjs.com/package/@siebly/hyperliquid-api)
+  - [Kraken JavaScript SDK: @siebly/kraken-api](https://www.npmjs.com/package/@siebly/kraken-api)
+  - [OKX JavaScript SDK: okx-api](https://www.npmjs.com/package/okx-api)
+  - [Binance JavaScript SDK: binance](https://www.npmjs.com/package/binance)
+  - [Gate (gate.com) JavaScript SDK: gateio-api](https://www.npmjs.com/package/gateio-api)
+  - [Bitget JavaScript SDK: bitget-api](https://www.npmjs.com/package/bitget-api)
+  - [Kucoin JavaScript SDK: kucoin-api](https://www.npmjs.com/package/kucoin-api)
+  - [Coinbase JavaScript SDK: coinbase-api](https://www.npmjs.com/package/coinbase-api)
+  - [HTX JavaScript SDK: @siebly/htx-api](https://www.npmjs.com/package/@siebly/htx-api)
+- Try my misc utilities:
+  - [OrderBooks Node.js: orderbooks](https://www.npmjs.com/package/orderbooks)
+  - [Crypto Exchange Account State Cache: accountstate](https://www.npmjs.com/package/accountstate)
+- Check out my examples:
+  - [awesome-crypto-examples Node.js](https://github.com/sieblyio/awesome-crypto-examples)
+  <!-- template_related_projects_end -->
 
 ## REST
 
@@ -213,7 +295,7 @@ Spot, HIP-3, and outcome asset IDs follow Hyperliquid's current offset rules. Th
 
 Balance responses keep Hyperliquid's token names. For example, SOL shown in the portfolio UI is currently returned as `USOL` by the API.
 
-## Signing
+## Custom Signer
 
 You can provide an external signer instead of a private key:
 
@@ -254,7 +336,13 @@ If `accountAddress` is omitted, the first account getter or builder preflight re
 
 The nonce manager is shared by signer address across client instances. Supply `nonceProvider` when a process needs a different source of monotonic nonces.
 
-## WebSocket subscriptions
+## WebSockets
+
+Use `WebsocketClient` to subscribe to streaming updates. Use `WebsocketAPIClient` when you want the same promise-driven Info and Exchange methods as `RestClient`, sent over Hyperliquid's WebSocket POST protocol.
+
+Connections open when first needed. Heartbeats, reconnection, resubscription, request correlation, and connection cleanup are handled by the SDK.
+
+### WebSocket Subscriptions: Consuming Events
 
 `WebsocketClient` opens connections when needed, deduplicates matching subscriptions, sends heartbeats, reconnects, and resubscribes.
 
@@ -297,20 +385,7 @@ ws.close();
 
 `fastAssetCtxs` payloads are decompressed before the callback runs. User streams whose server events omit the user address are isolated on separate per-user connections.
 
-Inject a custom `DefaultLogger` if mroe control is desired via the second constructor argument:
-
-```ts
-const ws = new WebsocketClient(
-  {},
-  {
-    trace: (...params) => customLogger.debug(params),
-    info: (...params) => customLogger.info(params),
-    error: (...params) => customLogger.error(params),
-  },
-);
-```
-
-## WebSocket POST requests
+### WebSocket API - Sending Commands via WebSockets
 
 `WebsocketAPIClient` has the same info and exchange methods as `RestClient`, but sends requests over Hyperliquid's correlated WebSocket POST protocol.
 
@@ -322,9 +397,47 @@ const mids = await client.getAllMids();
 client.close();
 ```
 
-The internal `WebsocketClient` used by the API Client can be accessed via `client.getWSClient()`, exposing lifecycle event emitters as well as raw `sendWSAPIRequest()` access (not recommended). If you're looking for standard subscribe & consume workflows, stick to the WebsocketClient.
+Use `client.getWSClient()` to access the underlying `WebsocketClient`, including lifecycle events and raw `sendWSAPIRequest()` calls. Use `WebsocketClient` directly for subscribe and consume workflows.
 
-## Raw methods
+## Logging
+
+### Customise Logging
+
+Pass a custom logger as the second `WebsocketClient` or `WebsocketAPIClient` constructor argument. The logger must provide `trace`, `info`, and `error` methods. `DefaultLogger` keeps trace output disabled unless you override it.
+
+```ts
+import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
+
+const customLogger = {
+  ...DefaultLogger,
+  trace: (...params: unknown[]) => console.debug('trace', ...params),
+  info: (...params: unknown[]) => console.info('info', ...params),
+  error: (...params: unknown[]) => console.error('error', ...params),
+};
+
+const ws = new WebsocketClient({}, customLogger);
+```
+
+### Debug HTTP Requests
+
+REST requests are quiet by default. Axios-compatible network options can be passed once as the second `RestClient` constructor argument. One option is to route requests through a local debugging proxy. Avoid logging signed `/exchange` request bodies or private keys.
+
+```ts
+import { RestClient } from '@siebly/hyperliquid-api';
+
+const client = new RestClient(
+  { testnet: true },
+  {
+    proxy: {
+      host: '127.0.0.1',
+      port: 8080,
+      protocol: 'http',
+    },
+  },
+);
+```
+
+## Raw Methods
 
 Typed methods are preferred. Raw methods keep new Hyperliquid operations usable before the SDK adds a dedicated wrapper:
 
@@ -359,7 +472,7 @@ await client.submitRawUserSignedAction(
 
 Raw order actions follow the same approval check as typed orders. A caller-provided builder is removed, and the fixed package builder is included only after its approval has been confirmed. Raw methods do not bypass signing, address normalization, nonce handling, or partner attribution.
 
-## Browser usage
+## Browser Usage
 
 Modern bundlers can import the normal package entry. Public REST calls and public subscriptions are browser-safe.
 
@@ -369,16 +482,47 @@ import { RestClient, WebsocketClient } from '@siebly/hyperliquid-api';
 
 Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST access also depends on Hyperliquid's CORS policy.
 
-## Contributions & Thanks
+## Use with LLMs & AI
 
-Issues and pull requests are welcome.
+The README, examples, and exported TypeScript types can be provided directly to coding assistants as package context. A package-specific `llms.txt` file and endpoint map will be added separately.
 
-- [GitHub issues](https://github.com/sieblyio/hyperliquid-api/issues)
-- [Node.js Algo Traders community](https://t.me/nodetraders)
-- [Siebly SDKs and projects](https://siebly.io/?ref=gh)
-- [Sponsor ongoing maintenance](https://github.com/sponsors/tiagosiebler)
+---
 
-Have my projects helped you? Share the love, there are many ways you can show your thanks. This SDK automatically gives you a 4% discount on fees, if you don't yet have an existing referral set. Using this SDK will automatically set your referral if you don't have one yet. This is essential for the 4% discount on fees and supports our efforts to maintain & improve our SDKs, by giving us a percentage of the fees you pay to the exchange. Do support our maintenance efforts by sponsoring us on GitHub and signing up with our referral links:
+## Referral & Builder Codes
+
+On the first order, cancellation, or modification from a client instance, the SDK passively attempts to set the `SIEBLY` referral code. It does not query the existing referral first, delay the triggering request, or retry repeatedly. If the account already has a referrer or the request fails, trading continues normally.
+
+Accounts without an existing referrer currently receive a 4% referral fee discount when `SIEBLY` is set. The referral also supports ongoing SDK maintenance. Referral rules are controlled by Hyperliquid; see the [referral terms](https://hyperliquid.gitbook.io/hyperliquid-docs/referrals) before trading.
+
+Orders include the fixed Siebly builder code only after the SDK confirms that the account's main wallet has approved it. If an approval check fails, the order continues without the builder code and the SDK emits a warning. When a main-wallet private key is configured and approval is missing, the SDK attempts approval in the background. API and agent wallets cannot grant builder approval themselves.
+
+Approve the builder once using the main account:
+
+```typescript
+import { RestClient } from '@siebly/hyperliquid-api';
+
+const masterClient = new RestClient({
+  signer: mainWalletSigner,
+});
+
+await masterClient.approveBuilderFee();
+```
+
+The approval remains valid until it is changed or revoked, so it should not be called during every bot startup. The configured approval limit is 0.01%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
+
+---
+
+## Used By
+
+[![Repository Users Preview Image](https://dependents.info/sieblyio/hyperliquid-api/image)](https://github.com/sieblyio/hyperliquid-api/network/dependents)
+
+---
+
+<!-- template_contributions -->
+
+### Contributions & Thanks
+
+Have my projects helped you? Share the love, there are many ways you can show your thanks:
 
 - Star & share my projects.
 - Are my projects useful? Sponsor me on Github and support my effort to maintain & improve them: https://github.com/sponsors/tiagosiebler
@@ -391,30 +535,16 @@ Have my projects helped you? Share the love, there are many ways you can show yo
   - HyperLiquid (receive a 4% fee discount!): https://app.hyperliquid.xyz/join/SIEBLY
   - Gate: https://www.gate.io/signup/NODESDKS?ref_type=103
 
-Please consider approving our HyperLiquid builder address to further support our work. This approval must be signed by your Hyperliquid main wallet, not an API or agent wallet. Create a RestClient using your main-wallet private key or signer, then call `approveBuilderFee()` once. For example:
+<!-- template_contributions_end -->
 
-```typescript
-const masterClient = new RestClient({
-  signer: mainWalletSigner,
-});
+### Contributions & Pull Requests
 
-await masterClient.approveBuilderFee();
-```
-
-The approval remains valid until it is changed or revoked, so it should not be called during every bot startup. This is explicitly required by Hyperliquid’s [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes). The action itself is documented under the [exchange endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint).
-
-Referral and builder fee rules are controlled by Hyperliquid. See the [referral terms](https://hyperliquid.gitbook.io/hyperliquid-docs/referrals) and [builder-code rules](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) before trading.
-
-We're a team of developers doing our best to even the playing field to aspiring quants and algorithmic traders. Your support helps us continue and expand our efforts to help users such as yourself.
-
-## Used By
-
-[![Repository Users Preview Image](https://dependents.info/sieblyio/hyperliquid-api/image)](https://github.com/sieblyio/hyperliquid-api/network/dependents)
+Contributions are encouraged, I will review any incoming pull requests. See the [issues tab](https://github.com/sieblyio/hyperliquid-api/issues) for todo items.
 
 <!-- template_star_history -->
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=tiagosiebler/bybit-api,tiagosiebler/okx-api,tiagosiebler/binance,tiagosiebler/bitget-api,tiagosiebler/bitmart-api,tiagosiebler/gateio-api,tiagosiebler/kucoin-api,tiagosiebler/coinbase-api,tiagosiebler/orderbooks,tiagosiebler/accountstate,tiagosiebler/awesome-crypto-examples&type=Date)](https://star-history.com/#tiagosiebler/bybit-api&tiagosiebler/okx-api&tiagosiebler/binance&tiagosiebler/bitget-api&tiagosiebler/bitmart-api&tiagosiebler/gateio-api&tiagosiebler/kucoin-api&tiagosiebler/coinbase-api&tiagosiebler/orderbooks&tiagosiebler/accountstate&tiagosiebler/awesome-crypto-examples&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=sieblyio/bybit-api,sieblyio/okx-api,sieblyio/binance,sieblyio/bitget-api,sieblyio/bitmart-api,sieblyio/gateio-api,sieblyio/kucoin-api,sieblyio/coinbase-api,sieblyio/orderbooks,sieblyio/accountstate,sieblyio/awesome-crypto-examples&type=Date)](https://star-history.com/#sieblyio/bybit-api&sieblyio/okx-api&sieblyio/binance&sieblyio/bitget-api&sieblyio/bitmart-api&sieblyio/gateio-api&sieblyio/kucoin-api&sieblyio/coinbase-api&sieblyio/orderbooks&sieblyio/accountstate&sieblyio/awesome-crypto-examples&Date)
 
 <!-- template_star_history_end -->
