@@ -58,7 +58,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 
 ## REST API Examples
 
-- [REST](#rest)
+- [REST API](#rest-api)
 - [Assets](#assets)
 - [Custom Signer](#custom-signer)
 
@@ -135,7 +135,7 @@ Check out our JavaScript/TypeScript/Node.js SDKs & Projects:
   - [awesome-crypto-examples Node.js](https://github.com/sieblyio/awesome-crypto-examples)
   <!-- template_related_projects_end -->
 
-## REST
+## REST API
 
 Public info methods do not need credentials:
 
@@ -489,7 +489,6 @@ The README, examples, and exported TypeScript types can be provided directly to 
 ---
 
 ## Referral & Builder Codes
-
 
 On the first order, cancellation, or modification from a client instance, the SDK passively attempts to set the `SIEBLY` referral code. It does not query the existing referral first, delay the triggering request, or retry repeatedly. If the account already has a referrer or the request fails, trading continues normally.
 
