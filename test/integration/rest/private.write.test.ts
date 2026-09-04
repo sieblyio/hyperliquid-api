@@ -16,9 +16,14 @@ import {
 // A business error after the request is accepted (insufficient margin/balance,
 // must deposit, order never placed) proves the signature was valid.
 const privateKey = process.env.HYPERLIQUID_E2E_PRIVATE_KEY;
+// Optional. Set when the key is an API wallet: Info/preflight need the
+// master/sub address because userRole is missing for an unapproved agent.
+// Omit when the private key is the account itself (address is derived below).
 const accountAddress =
   process.env.HYPERLIQUID_E2E_ACCOUNT_ADDRESS ??
   (privateKey ? new Wallet(privateKey).address : undefined);
+// Optional. Subaccount/vault to exercise L1 writes with a vaultAddress
+// envelope field. Omit to skip that case.
 const vaultAddress = process.env.HYPERLIQUID_E2E_VAULT_ADDRESS;
 const describePrivate = privateKey ? describe : describe.skip;
 

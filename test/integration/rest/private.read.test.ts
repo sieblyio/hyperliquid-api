@@ -7,6 +7,9 @@ import { RestClient } from '../../../src/index.js';
 // An unused key has userRole "missing" until the first deposit, so we pass
 // accountAddress explicitly. Info still returns empty balances/orders.
 const privateKey = process.env.HYPERLIQUID_E2E_PRIVATE_KEY;
+// Optional. Set when the key is an API wallet: Info needs the master/sub
+// address because userRole is missing for an unapproved agent. Omit when the
+// private key is the account itself (address is derived below).
 const accountAddress =
   process.env.HYPERLIQUID_E2E_ACCOUNT_ADDRESS ??
   (privateKey ? new Wallet(privateKey).address : undefined);

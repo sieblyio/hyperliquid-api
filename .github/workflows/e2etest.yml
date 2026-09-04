@@ -44,6 +44,14 @@ jobs:
       - name: Test Public REST API Calls
         run: npm run test -- public.test.ts
 
+      # Private live tests. HYPERLIQUID_E2E_PRIVATE_KEY is required or those
+      # suites skip. The other two secrets are optional:
+      # - HYPERLIQUID_E2E_ACCOUNT_ADDRESS: master/sub address when the key is an
+      #   API wallet (agent). Info reads cannot resolve userRole for a missing
+      #   signer. Omit when the private key is the account itself; tests derive
+      #   that address from the key.
+      # - HYPERLIQUID_E2E_VAULT_ADDRESS: subaccount/vault to hit on L1 writes
+      #   via the vaultAddress envelope field. Omit to skip that one case.
       - name: Test Private Read API Calls
         run: npm run test -- private.read.test.ts
         env:
