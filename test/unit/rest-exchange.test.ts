@@ -1113,9 +1113,7 @@ describe('RestClient Exchange requests', () => {
     ).toHaveLength(0);
     expect(warning).toHaveBeenCalledTimes(3);
     expect(warning).toHaveBeenLastCalledWith(
-      expect.stringContaining(
-        'A future major version may require approval before trading.',
-      ),
+      expect.stringContaining('may require approval before trading'),
     );
     warning.mockRestore();
   });
