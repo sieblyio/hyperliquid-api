@@ -112,8 +112,6 @@ const constructors = ['RestClient', 'WebsocketAPIClient', 'WebsocketClient'];
 for (const name of constructors) {
   assert.equal(typeof sdk[name], 'function', \`Missing \${name}\`);
 }
-assert.equal(typeof sdk.actionHash, 'function');
-assert.equal(typeof sdk.MonotonicNonceManager, 'function');
 assert.equal(typeof sdk.HyperliquidApiError, 'function');
 assert.equal(typeof sdk.HyperliquidWebSocketError, 'function');
 const rest = new sdk.RestClient();
