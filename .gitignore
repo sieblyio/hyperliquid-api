@@ -5,6 +5,7 @@ hyperliquidref
 *.tgz
 .env
 .env.test
+localtest.sh
 .eslintcache
 .npm
 .tmp-packed*
