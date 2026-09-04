@@ -1,0 +1,111 @@
+name: Publish to NPM
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-npm:
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      IS_PRERELEASE: ${{ github.event.release.prerelease }}
+    steps:
+      - name: Checkout (no repo token persisted)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - name: Use pinned npm
+        run: npm install --global --ignore-scripts npm@11.12.0
+
+      - name: Verify exact repository npm policy
+        run: |
+          node <<'NODE'
+          const { readFileSync, readdirSync } = require('node:fs');
+          const { join, relative, sep } = require('node:path');
+
+          const npmrcFiles = [];
+
+          function findNpmrcFiles(directory) {
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+              if (entry.name === '.git' || entry.name === 'node_modules') {
+                continue;
+              }
+
+              const entryPath = join(directory, entry.name);
+              if (entry.name === '.npmrc') {
+                npmrcFiles.push(relative('.', entryPath).split(sep).join('/'));
+              } else if (entry.isDirectory()) {
+                findNpmrcFiles(entryPath);
+              }
+            }
+          }
+
+          findNpmrcFiles('.');
+          npmrcFiles.sort();
+
+          if (npmrcFiles.length !== 1 || npmrcFiles[0] !== '.npmrc') {
+            console.error(
+              `Expected only the root .npmrc; found: ${npmrcFiles.join(', ') || 'none'}`,
+            );
+            process.exit(1);
+          }
+
+          if (readFileSync('.npmrc', 'utf8') !== 'min-release-age=30\n') {
+            console.error('Root .npmrc must contain exactly: min-release-age=30');
+            process.exit(1);
+          }
+          NODE
+
+      - name: Guard publish target and release workflow
+        run: |
+          # Reject repository-level registry redirection.
+          node -e "const p=require('./package.json'); if(p.publishConfig?.registry){console.error('publishConfig.registry present - refuse to publish'); process.exit(1)}"
+          # Block release-time workflow or script changes.
+          SHA=$(git rev-list -n 1 "$RELEASE_TAG")
+          PARENT=$(git rev-list -n 1 "$SHA^")
+          git diff --name-only "$PARENT" "$SHA" | grep -E '^\\.github/(workflows|scripts)/' \
+            && { echo 'Workflow/scripts changed in release commit - refuse.'; exit 1; } || true
+
+      - name: Verify tag matches package version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG="${RELEASE_TAG#v}"
+          [[ "$PKG_VERSION" == "$TAG" ]] || { echo "Tag v$TAG != package.json $PKG_VERSION"; exit 1; }
+
+      - name: Install deps (no lifecycle scripts)
+        run: npm ci --ignore-scripts
+
+      - run: npm run clean
+      - run: npm run build
+
+      - name: Resolve dist-tag
+        id: dist
+        run: |
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        env:
+          NPM_CONFIG_PROVENANCE: true
+          DIST_TAG: ${{ steps.dist.outputs.tag }}
+        run: npm publish --access public --ignore-scripts --registry=https://registry.npmjs.org/ --provenance --tag "$DIST_TAG"
