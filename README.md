@@ -35,7 +35,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
     - Emit a `reconnected` event when a dropped connection is restored.
 - WebSocket API integration, with two promise-driven approaches:
   1. Import `WebsocketAPIClient` and use it like the REST API client. Call typed methods and await their responses.
-     - See [examples/websocket-api.ts](./examples/websocket-api.ts).
+     - See [examples/Websocket/WS-API/ws-api-client.ts](./examples/Websocket/WS-API/ws-api-client.ts).
   2. Use `sendWSAPIRequest(...)` directly when you need raw WebSocket POST access.
      - The method connects requests to responses and returns a promise.
 - One `RestClient` for public market data, account information, trading, transfers, staking, vaults, subaccounts, deployer actions, multisig, validators, and borrow/lend.
@@ -102,7 +102,7 @@ Node.js 24 or newer and npm 11 or newer are supported.
 - [WebSocket POST requests](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/post-requests)
 - [Builder codes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes)
 
-Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for small implementation examples.
+Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST, WebSocket, and WebSocket API samples.
 
 ## Issues & Discussion
 
