@@ -59,7 +59,7 @@ function firstRestingOid(
   return status && 'resting' in status ? status.resting.oid : undefined;
 }
 
-(async () => {
+async function main() {
   try {
     // Optional: open the WS API connection early so the first call is not a
     // cold start. connect() happens automatically on the first request.
@@ -100,4 +100,6 @@ function firstRestingOid(
   } finally {
     wsClient.close();
   }
-})();
+}
+
+main();

@@ -34,7 +34,7 @@ const px = isBuy ? '1100' : '9000';
 const triggerPx = isBuy ? '1000' : '8500';
 const slPx = isBuy ? '900' : '9500';
 
-(async () => {
+async function main() {
   try {
     const parent = await client.submitLimitOrder({
       price: px,
@@ -91,4 +91,6 @@ const slPx = isBuy ? '900' : '9500';
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

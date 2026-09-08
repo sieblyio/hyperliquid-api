@@ -36,7 +36,7 @@ function describeOrder(result: ExchangeResponse<OrderResponseData>): unknown {
   return result.response.data?.statuses;
 }
 
-(async () => {
+async function main() {
   try {
     const balances = await client.getBalances();
     console.log('account:', balances.user);
@@ -62,4 +62,6 @@ function describeOrder(result: ExchangeResponse<OrderResponseData>): unknown {
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

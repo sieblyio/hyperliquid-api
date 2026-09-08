@@ -38,7 +38,7 @@ function firstRestingOid(
   return status && 'resting' in status ? status.resting.oid : undefined;
 }
 
-(async () => {
+async function main() {
   try {
     const result = await client.submitLimitOrder({
       clientOrderId: cloid,
@@ -69,4 +69,6 @@ function firstRestingOid(
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

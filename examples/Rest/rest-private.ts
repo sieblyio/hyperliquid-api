@@ -26,7 +26,7 @@ const client = new RestClient({
   // testnet: true,
 });
 
-(async () => {
+async function main() {
   try {
     const address = await client.getAccountAddress();
     console.log('account address:', address);
@@ -52,4 +52,6 @@ const client = new RestClient({
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

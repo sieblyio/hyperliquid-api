@@ -31,7 +31,7 @@ function ethLeverage(entry: unknown): unknown {
   return position?.coin === 'ETH' ? position.leverage : undefined;
 }
 
-(async () => {
+async function main() {
   try {
     const summary = await client.getPerpAccountSummary();
     for (const entry of summary.assetPositions) {
@@ -75,4 +75,6 @@ function ethLeverage(entry: unknown): unknown {
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

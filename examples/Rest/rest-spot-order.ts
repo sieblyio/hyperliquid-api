@@ -36,7 +36,7 @@ function firstRestingOid(
   return status && 'resting' in status ? status.resting.oid : undefined;
 }
 
-(async () => {
+async function main() {
   try {
     const balances = await client.getSpotBalances();
     console.log('spot balances:', balances.balances);
@@ -74,4 +74,6 @@ function firstRestingOid(
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

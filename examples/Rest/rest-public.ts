@@ -13,7 +13,7 @@ const client = new RestClient();
 // Use testnet instead:
 // const client = new RestClient({ testnet: true });
 
-(async () => {
+async function main() {
   try {
     const status = await client.getExchangeStatus();
     console.log('exchange status:', status);
@@ -87,4 +87,6 @@ const client = new RestClient();
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

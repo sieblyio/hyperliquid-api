@@ -52,7 +52,7 @@ wsClient.on('exception', ({ event, wsKey }) => {
   console.error('ws exception:', wsKey, event);
 });
 
-(async () => {
+async function main() {
   try {
     const handles = [
       await wsClient.subscribe({ type: 'userEvents', user }, (event) => {
@@ -93,4 +93,6 @@ wsClient.on('exception', ({ event, wsKey }) => {
     console.error('subscribe failed: ', e);
     wsClient.close();
   }
-})();
+}
+
+main();

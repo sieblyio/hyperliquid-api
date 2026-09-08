@@ -21,7 +21,7 @@ const client = new RestClient({
   // testnet: true,
 });
 
-(async () => {
+async function main() {
   try {
     const openOrders = await client.getOpenOrders();
     if (openOrders.length === 0) {
@@ -45,4 +45,6 @@ const client = new RestClient({
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

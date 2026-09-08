@@ -28,7 +28,7 @@ function roundPrice(
   return Number(Number(px.toPrecision(5)).toFixed(decimals));
 }
 
-(async () => {
+async function main() {
   try {
     const meta = await client.getPerpMetadata();
     const szDecimals = Object.fromEntries(
@@ -55,4 +55,6 @@ function roundPrice(
   } catch (e) {
     console.error('request failed: ', e);
   }
-})();
+}
+
+main();

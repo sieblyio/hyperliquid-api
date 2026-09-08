@@ -45,7 +45,7 @@ wsClient.on('close', ({ wsKey }) => {
   console.log('ws closed:', wsKey);
 });
 
-(async () => {
+async function main() {
   try {
     const handles = [
       await wsClient.subscribe({ type: 'allMids' }, (update) => {
@@ -90,4 +90,6 @@ wsClient.on('close', ({ wsKey }) => {
     console.error('subscribe failed: ', e);
     wsClient.close();
   }
-})();
+}
+
+main();
