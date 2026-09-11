@@ -194,7 +194,7 @@ export interface OutcomeMetaUpdatesEvent {
 
 export interface UserFillsEvent {
   fills: UserFill[];
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   user: string;
 }
 
@@ -213,30 +213,30 @@ export interface UserFundingsEvent {
     time: number;
     usdc: string;
   }>;
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   user: string;
 }
 
 export interface UserHistoricalOrdersEvent {
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   orderHistory: unknown[];
   user: string;
 }
 
 export interface UserNonFundingLedgerUpdatesEvent {
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   nonFundingLedgerUpdates: unknown[];
   user: string;
 }
 
 export interface UserTwapHistoryEvent {
   history: unknown[];
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   user: string;
 }
 
 export interface UserTwapSliceFillsEvent {
-  isSnapshot?: true;
+  isSnapshot?: boolean;
   twapSliceFills: unknown[];
   user: string;
 }
@@ -296,68 +296,36 @@ export interface WebData3Event {
 export type GenericWebsocketEvent =
   Record<string, unknown> | unknown[] | string | number | boolean | null;
 
-export type WebsocketEventFor<S extends WebsocketSubscription> =
-  S['type'] extends 'allMids'
-    ? AllMidsEvent
-    : S['type'] extends 'activeAssetData'
-      ? ActiveAssetDataEvent
-      : S['type'] extends 'allDexsAssetCtxs'
-        ? AllDexsAssetCtxsEvent
-        : S['type'] extends 'allDexsClearinghouseState'
-          ? AllDexsClearinghouseStateEvent
-          : S['type'] extends 'assetCtxs'
-            ? AssetCtxsEvent
-            : S['type'] extends 'clearinghouseState'
-              ? ClearinghouseStateEvent
-              : S['type'] extends 'notification'
-                ? NotificationEvent
-                : S['type'] extends 'orderUpdates'
-                  ? OrderUpdateEvent[]
-                  : S['type'] extends 'spotState'
-                    ? SpotStateEvent
-                    : S['type'] extends 'trades'
-                      ? TradeEvent[]
-                      : S['type'] extends 'twapStates'
-                        ? TwapStatesEvent
-                        : S['type'] extends 'userEvents'
-                          ? UserEvent
-                          : S['type'] extends 'userFundings'
-                            ? UserFundingsEvent
-                            : S['type'] extends 'userHistoricalOrders'
-                              ? UserHistoricalOrdersEvent
-                              : S['type'] extends 'userNonFundingLedgerUpdates'
-                                ? UserNonFundingLedgerUpdatesEvent
-                                : S['type'] extends 'userTwapHistory'
-                                  ? UserTwapHistoryEvent
-                                  : S['type'] extends 'userTwapSliceFills'
-                                    ? UserTwapSliceFillsEvent
-                                    : S['type'] extends 'webData3'
-                                      ? WebData3Event
-                                      : S['type'] extends 'bbo'
-                                        ? BboEvent
-                                        : S['type'] extends 'candle'
-                                          ? Candle
-                                          : S['type'] extends 'fastAssetCtxs'
-                                            ? FastAssetCtxsEvent
-                                            : S['type'] extends 'outcomeMetaUpdates'
-                                              ? OutcomeMetaUpdatesEvent
-                                              : S['type'] extends 'spotAssetCtxs'
-                                                ? SpotAssetCtxsEvent
-                                                : S['type'] extends 'l2Book'
-                                                  ? OrderBookResponse
-                                                  : S['type'] extends 'userFills'
-                                                    ? UserFillsEvent
-                                                    : S['type'] extends 'openOrders'
-                                                      ? OpenOrdersEvent
-                                                      : S['type'] extends 'activeAssetCtx'
-                                                        ? AssetContextEvent
-                                                        : GenericWebsocketEvent;
-
-export type WebsocketCallback<S extends WebsocketSubscription> = (
-  data: WebsocketEventFor<S>,
-) => void;
-
-export interface WebsocketSubscriptionHandle<S extends WebsocketSubscription> {
-  readonly subscription: S;
-  unsubscribe(): Promise<void>;
+/** Payload types keyed by subscription type. Wire envelopes are defined in ws-events. */
+export interface WebsocketSubscriptionData {
+  activeAssetCtx: AssetContextEvent;
+  activeAssetData: ActiveAssetDataEvent;
+  allDexsAssetCtxs: AllDexsAssetCtxsEvent;
+  allDexsClearinghouseState: AllDexsClearinghouseStateEvent;
+  allMids: AllMidsEvent;
+  assetCtxs: AssetCtxsEvent;
+  bbo: BboEvent;
+  candle: Candle;
+  clearinghouseState: ClearinghouseStateEvent;
+  fastAssetCtxs: FastAssetCtxsEvent;
+  l2Book: OrderBookResponse;
+  notification: NotificationEvent;
+  openOrders: OpenOrdersEvent;
+  orderUpdates: OrderUpdateEvent[];
+  outcomeMetaUpdates: OutcomeMetaUpdatesEvent;
+  spotAssetCtxs: SpotAssetCtxsEvent;
+  spotState: SpotStateEvent;
+  trades: TradeEvent[];
+  twapStates: TwapStatesEvent;
+  userEvents: UserEvent;
+  userFills: UserFillsEvent;
+  userFundings: UserFundingsEvent;
+  userHistoricalOrders: UserHistoricalOrdersEvent;
+  userNonFundingLedgerUpdates: UserNonFundingLedgerUpdatesEvent;
+  userTwapHistory: UserTwapHistoryEvent;
+  userTwapSliceFills: UserTwapSliceFillsEvent;
+  webData3: WebData3Event;
 }
+
+export type WebsocketEventFor<S extends WebsocketSubscription> =
+  WebsocketSubscriptionData[S['type']];

@@ -43,7 +43,7 @@ All WebSocket examples live in [examples/Websocket](./Websocket/).
 
 #### Consumers
 
-These receive data from Hyperliquid WebSockets (market data, account updates). Data is delivered to the `subscribe()` callback. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the client.
+These receive data from Hyperliquid WebSockets (market data, account updates). Data emits through `on('message')` with the original `channel`, `data`, and `wsKey`. Subscription acknowledgements emit through `on('response')`. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the same client. Use `subscribe()` and `unsubscribe()` to manage one topic or an array independently of listeners.
 
 - `ws-public.ts` - Public mids, book, trades, candles, bbo, asset context.
 - `ws-private.ts` - Account streams: fills, order updates, open orders, notifications. Needs `HYPERLIQUID_ADDRESS`.

@@ -6,8 +6,7 @@ import {
 import { RestClient } from './RestClient.js';
 import type {
   WebsocketAPIClientOptions,
-  WebsocketLifecycleCallback,
-  WebsocketLifecycleEvent,
+  WebsocketClientEventMap,
 } from './types/websockets/ws-general.js';
 import { WebsocketClient } from './WebsocketClient.js';
 
@@ -30,27 +29,27 @@ export class WebsocketAPIClient extends RestClient {
     return this.wsClient.connect('api');
   }
 
-  on(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
+  on<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
   ): this {
-    this.wsClient.on(event, callback);
+    this.wsClient.on(event, listener);
     return this;
   }
 
-  once(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
+  once<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
   ): this {
-    this.wsClient.once(event, callback);
+    this.wsClient.once(event, listener);
     return this;
   }
 
-  off(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
+  off<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
   ): this {
-    this.wsClient.off(event, callback);
+    this.wsClient.off(event, listener);
     return this;
   }
 

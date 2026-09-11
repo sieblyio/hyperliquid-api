@@ -20,6 +20,7 @@ export * from './types/request/info.types.js';
 export * from './types/response/exchange.types.js';
 export * from './types/response/info.types.js';
 export * from './types/shared.types.js';
+export * from './types/websockets/ws-events.js';
 export * from './types/websockets/ws-general.js';
 export * from './types/websockets/ws-portable.js';
 export * from './types/websockets/ws-subscriptions.js';

@@ -6,15 +6,14 @@ import { DefaultLogger, WebsocketClient } from '../../src/index.js';
 /**
  * Public market-data subscriptions.
  *
- * Unlike Bybit/OKX/Binance, there is no wsClient.on('update'). Payloads are
- * delivered only to the subscribe() callback below. on() is lifecycle only:
- * open, reconnecting, reconnected, exception, close.
+ * Listen for data with on('message') and acknowledgements with on('response').
+ * Every event includes the connection's wsKey.
  *
  * npx tsx examples/Websocket/ws-public.ts
  */
 const logger = {
   ...DefaultLogger,
-  // Uncomment for a verbose view of heartbeats and reconnects:
+  // Uncomment to log connection lifecycle events:
   // trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
 };
 
@@ -37,59 +36,60 @@ wsClient.on('reconnected', (data) => {
   console.log('ws has reconnected ', data?.wsKey);
 });
 
-wsClient.on('exception', ({ event, wsKey }) => {
-  console.error('ws exception:', wsKey, event);
+wsClient.on('exception', ({ event, data, wsKey }) => {
+  console.error('ws exception:', wsKey, event ?? data);
 });
 
 wsClient.on('close', ({ wsKey }) => {
   console.log('ws closed:', wsKey);
 });
 
+wsClient.on('response', (event) => {
+  console.log('ws response:', event.wsKey, event.channel, event.data);
+});
+
+wsClient.on('message', (event) => {
+  switch (event.channel) {
+    case 'allMids':
+      console.log('allMids BTC:', event.data.mids.BTC);
+      break;
+    case 'l2Book':
+      console.log(
+        'Order book:',
+        event.wsKey,
+        event.data.coin,
+        event.data.levels,
+      );
+      break;
+    case 'trades':
+      console.log('Trades:', event.wsKey, event.data);
+      break;
+    default:
+      console.log('Market update:', event.wsKey, event.channel, event.data);
+  }
+});
+
 async function main() {
   try {
-    const handles = [
-      await wsClient.subscribe({ type: 'allMids' }, (update) => {
-        console.log('allMids BTC:', update.mids.BTC);
-      }),
-      await wsClient.subscribe({ type: 'l2Book', coin: 'ETH' }, (book) => {
-        console.log('ETH bid:', book.levels[0]?.[0]);
-      }),
-      await wsClient.subscribe({ type: 'trades', coin: 'BTC' }, (trades) => {
-        console.log('BTC trade:', trades[0]);
-      }),
-      await wsClient.subscribe(
-        { type: 'candle', coin: 'ETH', interval: '1m' },
-        (candle) => {
-          console.log('ETH candle:', candle);
-        },
-      ),
-      await wsClient.subscribe({ type: 'bbo', coin: 'ETH' }, (bbo) => {
-        console.log('ETH bbo:', bbo);
-      }),
-      await wsClient.subscribe(
-        { type: 'activeAssetCtx', coin: 'BTC' },
-        (ctx) => {
-          console.log('BTC ctx:', ctx);
-        },
-      ),
-      // Spot pair aliases remap the same way as REST info: HYPE/USDC -> @107.
-      await wsClient.subscribe(
-        { type: 'trades', coin: 'PURR/USDC' },
-        (trades) => {
-          console.log('PURR trade:', trades[0]);
-        },
-      ),
-    ];
+    await wsClient.subscribe([
+      { type: 'allMids' },
+      { type: 'l2Book', coin: 'ETH' },
+      { type: 'trades', coin: 'BTC' },
+      { type: 'candle', coin: 'ETH', interval: '1m' },
+      { type: 'bbo', coin: 'ETH' },
+      { type: 'activeAssetCtx', coin: 'BTC' },
+      // Native Spot universe names pass through without metadata requests.
+      { type: 'trades', coin: 'PURR/USDC' },
+    ]);
 
-    process.once('SIGINT', () => {
-      void Promise.all(handles.map((handle) => handle.unsubscribe())).finally(
-        () => wsClient.close(),
-      );
-    });
-  } catch (e) {
-    console.error('subscribe failed: ', e);
-    wsClient.close();
+    // For a readable alias, resolve it explicitly before subscribing:
+    // const coin = await wsClient.nameToCoin('HYPE/USDC');
+    // await wsClient.subscribe({ type: 'trades', coin });
+  } catch (error) {
+    console.error('subscribe failed:', error);
+    wsClient.closeAll();
   }
 }
 
-main();
+process.once('SIGINT', () => wsClient.closeAll());
+void main();

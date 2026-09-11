@@ -31,7 +31,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
   - Event-driven messaging.
   - Smart WebSocket persistence.
     - Automatically detect silent WebSocket disconnections through timed heartbeats.
-    - Automatically handle authentication.
+    - Restore cached subscriptions after reconnecting.
     - Emit a `reconnected` event when a dropped connection is restored.
 - WebSocket API integration, with two promise-driven approaches:
   1. Import `WebsocketAPIClient` and use it like the REST API client. Call typed methods and await their responses.
@@ -285,7 +285,7 @@ console.log(asset.assetId, asset.canonicalName);
 await client.refreshAssetMetadata();
 ```
 
-Info and WebSocket `coin` fields follow official Python `name_to_coin`: exact metadata lookup, including pair aliases. `getOrderBook`, `getCandles`, `getFundingHistory`, and the `l2Book` / `trades` / `candle` / `bbo` / `activeAssetCtx` subscriptions rewrite `HYPE/USDC` to `@107`. `PURR/USDC` stays `PURR/USDC` because that is the universe name. Other info methods leave `coin` as-is.
+The Info methods `getOrderBook`, `getCandles`, and `getFundingHistory` resolve readable pair aliases through metadata. Other Info methods and streaming subscriptions leave `coin` as-is. Use a native coin name such as `BTC`, `@107`, or `PURR/USDC` when subscribing, or call `nameToCoin('HYPE/USDC')` explicitly to resolve a readable alias first.
 
 ```ts
 const book = await client.getOrderBook({ coin: 'HYPE/USDC' });
@@ -355,35 +355,46 @@ ws.on('reconnected', ({ wsKey }) => {
   console.log('Reconnected:', wsKey);
 });
 
-const book = await ws.subscribe(
-  {
-    type: 'l2Book',
-    coin: 'BTC',
-    nSigFigs: 5,
-    mantissa: 1,
-    fast: true,
-  },
-  (update) => {
-    console.log(update.levels);
-  },
-);
+ws.on('message', (event) => {
+  if (event.channel === 'l2Book') {
+    console.log(event.wsKey, event.data.coin, event.data.levels);
+  } else if (event.channel === 'userFills') {
+    console.log(event.wsKey, event.data.user, event.data.fills);
+  }
+});
 
-const fills = await ws.subscribe(
-  {
-    type: 'userFills',
-    user: '0x1234567890123456789012345678901234567890',
-  },
-  (update) => {
-    console.log(update.fills);
-  },
-);
+ws.on('response', (event) => {
+  console.log('Acknowledgement:', event.wsKey, event.channel, event.data);
+});
 
-await book.unsubscribe();
-await fills.unsubscribe();
-ws.close();
+ws.on('exception', ({ wsKey, event, data }) => {
+  console.error('WebSocket exception:', wsKey, event ?? data);
+});
+
+const book = { type: 'l2Book', coin: 'BTC', nSigFigs: 5, mantissa: 1, fast: true } as const;
+const fills = { type: 'userFills', user: '0x1234567890123456789012345678901234567890' } as const;
+
+await ws.subscribe([book, fills]);
+
+// When these feeds are no longer needed:
+await ws.unsubscribe([book, fills]);
+ws.closeAll();
 ```
 
-`fastAssetCtxs` payloads are decompressed before the callback runs. User streams whose server events omit the user address are isolated on separate per-user connections.
+`subscribe()` and `unsubscribe()` manage topics independently of listeners and accept one topic or an array. The subscribe promise resolves after the socket opens and the request is sent; server acknowledgements emit through `response`. Incoming data emits once per wire message through `message`, preserving the upstream envelope and adding `wsKey`.
+
+`fastAssetCtxs` payloads are decompressed inside the event's `data` field. User streams whose server events omit the user address use separate connections with a `user:<address>` key. Other streams share `public`.
+
+Coin identifiers such as `BTC`, `@107`, `PURR/USDC`, and `xyz:NVDA` pass through without REST metadata requests. Resolve a readable alias explicitly when needed:
+
+```ts
+const coin = await ws.nameToCoin('HYPE/USDC');
+await ws.subscribe({ type: 'trades', coin });
+```
+
+`connectionTimeout` bounds connection attempts and defaults to 10,000 ms. Pings run every 30,000 ms with a 10,000 ms pong deadline. Set `pingInterval: 0` to disable pings or `pongTimeout: 0` to disable that deadline. Reconnect delays start at 500 ms and double up to 30,000 ms; configure `reconnectTimeout` and `maxReconnectTimeout` to change them, or set `autoReconnect: false` to disable recovery. Timeouts must be finite and positive; ping and reconnect controls also accept zero. Use `off()` or `removeAllListeners()` to remove listeners, and `close()` or `closeAll()` to close connections and clear their cached topics.
+
+The previous callback form of `subscribe(topic, callback)` and its returned subscription handles have been removed. Register a `message` listener and pass the original topic to `unsubscribe()` when migrating existing consumers.
 
 ### WebSocket API - Sending Commands via WebSockets
 

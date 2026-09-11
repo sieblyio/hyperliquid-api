@@ -11,6 +11,8 @@ import {
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { build } from 'esbuild';
+
 import { validateBrowserBundles } from './browser-bundle-validation.mjs';
 
 const repoRoot = path.resolve(
@@ -42,7 +44,8 @@ function runNode(args, cwd) {
   execFileSync(process.execPath, args, { cwd, stdio: 'inherit' });
 }
 
-const tempRoot = await mkdtemp(path.join(repoRoot, '.tmp-packed-smoke-'));
+await mkdir(path.join(repoRoot, 'tmp'), { recursive: true });
+const tempRoot = await mkdtemp(path.join(repoRoot, 'tmp', 'packed-smoke-'));
 const consumerRoot = path.join(tempRoot, 'consumer');
 npmCache = path.join(tempRoot, '.npm-cache');
 
@@ -62,8 +65,10 @@ try {
     'README.md',
     'package.json',
     'dist/cjs/lib/https-agent.browser.js',
+    'dist/cjs/lib/event-emitter.browser.js',
     'dist/cjs/package.json',
     'dist/mjs/lib/https-agent.browser.js',
+    'dist/mjs/lib/event-emitter.browser.js',
     'dist/mjs/package.json',
     'dist/mjs/index.d.ts',
   ]) {
@@ -117,11 +122,15 @@ assert.equal(typeof sdk.HyperliquidWebSocketError, 'function');
 const rest = new sdk.RestClient();
 assert.equal(typeof rest.getAllMids, 'function');
 assert.equal(typeof rest.submitOrder, 'function');
+const subscriptions = new sdk.WebsocketClient();
+assert.equal(subscriptions instanceof EventEmitter, true, 'Streaming client is not a Node EventEmitter');
+assert.equal(subscriptions.eventNames().length, 0);
 `;
   await Promise.all([
     writeFile(
       path.join(consumerRoot, 'esm.mjs'),
       `import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import * as sdk from '@siebly/hyperliquid-api';
 ${assertions}
 `,
@@ -129,6 +138,7 @@ ${assertions}
     writeFile(
       path.join(consumerRoot, 'commonjs.cjs'),
       `const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const sdk = require('@siebly/hyperliquid-api');
 ${assertions}
 `,
@@ -146,6 +156,46 @@ ${assertions}
   runNode(['esm.mjs'], consumerRoot);
   runNode(['commonjs.cjs'], consumerRoot);
 
+  for (const format of ['cjs', 'esm']) {
+    const extension = format === 'cjs' ? 'cjs' : 'mjs';
+    const fixturePath = `runtime.${extension}`;
+    await build({
+      absWorkingDir: consumerRoot,
+      entryPoints: ['src/browser-websocket.ts'],
+      outfile: fixturePath,
+      bundle: true,
+      platform: 'node',
+      packages: 'external',
+      format,
+    });
+    runNode(
+      [
+        '--input-type=module',
+        '-e',
+        `import('./${fixturePath}').then(module => module.exerciseWebsocket()).catch(error => { console.error(error); process.exitCode = 1; });`,
+      ],
+      consumerRoot,
+    );
+  }
+
+  for (const format of ['cjs', 'mjs']) {
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(
+          consumerRoot,
+          'node_modules/@siebly/hyperliquid-api/dist',
+          format,
+          'package.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.equal(
+      manifest.browser['./lib/event-emitter.js'],
+      './lib/event-emitter.browser.js',
+    );
+  }
+
   const { restBytes, websocketBytes } = await validateBrowserBundles({
     absWorkingDir: consumerRoot,
     nodePaths: [path.join(repoRoot, 'node_modules')],
@@ -158,6 +208,7 @@ ${assertions}
       noEmit: true,
       skipLibCheck: false,
       strict: true,
+      exactOptionalPropertyTypes: true,
       target: 'ES2022',
       types: [],
     },
