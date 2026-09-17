@@ -76,7 +76,6 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 - [Raw Methods](#raw-methods)
 - [Browser Usage](#browser-usage)
 - [Use with LLMs & AI](#use-with-llms--ai)
-- [Used By](#used-by)
 
 ## Contributing
 
@@ -371,8 +370,17 @@ ws.on('exception', ({ wsKey, event, data }) => {
   console.error('WebSocket exception:', wsKey, event ?? data);
 });
 
-const book = { type: 'l2Book', coin: 'BTC', nSigFigs: 5, mantissa: 1, fast: true } as const;
-const fills = { type: 'userFills', user: '0x1234567890123456789012345678901234567890' } as const;
+const book = {
+  type: 'l2Book',
+  coin: 'BTC',
+  nSigFigs: 5,
+  mantissa: 1,
+  fast: true,
+} as const;
+const fills = {
+  type: 'userFills',
+  user: '0x1234567890123456789012345678901234567890',
+} as const;
 
 await ws.subscribe([book, fills]);
 

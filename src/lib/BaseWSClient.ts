@@ -85,24 +85,24 @@ export abstract class BaseWebsocketClient<
       autoReconnect: options.autoReconnect !== false,
       connectionTimeout: finiteTimeout(
         options.connectionTimeout,
-        10_000,
+        1_000,
         'connectionTimeout',
       ),
       maxReconnectTimeout: finiteTimeout(
         options.maxReconnectTimeout,
-        30_000,
+        10_000,
         'maxReconnectTimeout',
         true,
       ),
       pingInterval: finiteTimeout(
         options.pingInterval,
-        30_000,
+        10_000,
         'pingInterval',
         true,
       ),
       pongTimeout: finiteTimeout(
         options.pongTimeout,
-        10_000,
+        1_000,
         'pongTimeout',
         true,
       ),
@@ -401,6 +401,7 @@ export abstract class BaseWebsocketClient<
     clearTimeout(state.activeConnectionTimer);
     state.activeConnectionTimer = undefined;
     state.connectionState = WsConnectionStateEnum.CONNECTED;
+
     try {
       this.requestTopics(wsKey, 'subscribe', this.wsStore.getTopics(wsKey));
     } catch (error) {
@@ -408,9 +409,11 @@ export abstract class BaseWebsocketClient<
       this.onWsDisconnect(wsKey, socket, error, error, true);
       return;
     }
+
     const eventType = state.hasOpened ? 'reconnected' : 'open';
     state.hasOpened = true;
     state.reconnectAttempts = 0;
+
     this.startHeartbeat(wsKey, socket, state);
     const pending = state.connectionInProgress;
     state.connectionInProgress = undefined;
@@ -556,6 +559,7 @@ export abstract class BaseWebsocketClient<
     if (this.options.pingInterval === 0) {
       return;
     }
+
     state.activePingTimer = setInterval(() => {
       if (!this.isCurrentConnection(wsKey, socket) || socket.readyState !== 1) {
         return;

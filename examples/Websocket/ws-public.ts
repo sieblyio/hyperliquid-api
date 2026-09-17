@@ -14,7 +14,7 @@ import { DefaultLogger, WebsocketClient } from '../../src/index.js';
 const logger = {
   ...DefaultLogger,
   // Uncomment to log connection lifecycle events:
-  // trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+  trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
 };
 
 const wsClient = new WebsocketClient(
@@ -65,7 +65,12 @@ wsClient.on('message', (event) => {
       console.log('Trades:', event.wsKey, event.data);
       break;
     default:
-      console.log('Market update:', event.wsKey, event.channel, event.data);
+      console.log(
+        `Market update (unhandled in switch case: "${event.channel}"):`,
+        event.wsKey,
+        event.channel,
+        event.data,
+      );
   }
 });
 
@@ -87,9 +92,7 @@ async function main() {
     // await wsClient.subscribe({ type: 'trades', coin });
   } catch (error) {
     console.error('subscribe failed:', error);
-    wsClient.closeAll();
   }
 }
 
-process.once('SIGINT', () => wsClient.closeAll());
-void main();
+main();
