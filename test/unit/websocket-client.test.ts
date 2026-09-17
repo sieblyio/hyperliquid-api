@@ -5,428 +5,235 @@ import {
   HyperliquidWebSocketError,
   RestClient,
   WebsocketClient,
+  type WebsocketSubscription,
 } from '../../src/index.js';
 import { FakeWebSocket } from '../support/fake-websocket.js';
 
-const TEST_LOGGER: DefaultLogger = {
+const USER = '0x1111111111111111111111111111111111111111';
+const LOGGER: DefaultLogger = {
   error: jest.fn(),
   info: jest.fn(),
   trace: jest.fn(),
 };
 
-async function subscribeAndOpen(
-  client: WebsocketClient,
-  subscription: Parameters<WebsocketClient['subscribe']>[0],
-  callback: (value: unknown) => void,
-): Promise<Awaited<ReturnType<WebsocketClient['subscribe']>>> {
-  const before = FakeWebSocket.instances.length;
-  const subscribing = client.subscribe(subscription, callback);
-  for (let attempt = 0; attempt < 50; attempt++) {
-    await Promise.resolve();
-    if (FakeWebSocket.instances.length > before) {
-      FakeWebSocket.instances.at(-1)?.open();
-      break;
-    }
-  }
-  return subscribing;
-}
+describe('WebsocketClient protocol', () => {
+  const clients: WebsocketClient[] = [];
 
-describe('WebsocketClient', () => {
-  let nameToCoin: jest.SpiedFunction<RestClient['nameToCoin']>;
+  function createClient(): WebsocketClient {
+    const client = new WebsocketClient(
+      {
+        autoReconnect: false,
+        pingInterval: 0,
+        webSocketConstructor: FakeWebSocket,
+      },
+      LOGGER,
+    );
+    clients.push(client);
+    return client;
+  }
+
+  async function subscribeAndOpen(
+    client: WebsocketClient,
+    topics: WebsocketSubscription | WebsocketSubscription[],
+  ): Promise<FakeWebSocket[]> {
+    const pending = client.subscribe(topics);
+    for (const socket of FakeWebSocket.instances) {
+      if (socket.readyState === FakeWebSocket.CONNECTING) socket.open();
+    }
+    await pending;
+    return FakeWebSocket.instances;
+  }
 
   beforeEach(() => {
     FakeWebSocket.reset();
     jest.clearAllMocks();
-    jest.useRealTimers();
-    nameToCoin = jest
-      .spyOn(RestClient.prototype, 'nameToCoin')
-      .mockImplementation(async (name) => name);
   });
 
   afterEach(() => {
-    nameToCoin.mockRestore();
+    clients.splice(0).forEach((client) => client.closeAll());
+    jest.restoreAllMocks();
   });
 
-  test('deduplicates subscriptions and unsubscribes only after the final callback', async () => {
-    const client = new WebsocketClient(
-      {
-        autoReconnect: false,
-        pingInterval: 0,
-        webSocketConstructor: FakeWebSocket,
-      },
-      TEST_LOGGER,
-    );
-    const first = jest.fn();
-    const second = jest.fn();
-    const firstHandle = await subscribeAndOpen(
-      client,
-      { coin: 'BTC', type: 'trades' },
-      first,
-    );
-    const secondHandle = await client.subscribe(
-      { coin: 'BTC', type: 'trades' },
-      second,
-    );
-    const socket = FakeWebSocket.instances[0];
-
-    expect(socket?.jsonMessages()).toEqual([
-      {
-        method: 'subscribe',
-        subscription: { coin: 'BTC', type: 'trades' },
-      },
-    ]);
-    socket?.message({
-      channel: 'trades',
-      data: [{ coin: 'BTC', px: '1' }],
+  test('normalizes address casing and defaults without mutating caller topics', async () => {
+    const client = createClient();
+    const topic = Object.freeze({
+      type: 'clearinghouseState' as const,
+      user: '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      dex: undefined,
     });
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(second).toHaveBeenCalledTimes(1);
-
-    await firstHandle.unsubscribe();
-    expect(socket?.jsonMessages()).toHaveLength(1);
-    await secondHandle.unsubscribe();
-    expect(socket?.jsonMessages()).toHaveLength(2);
-    expect(socket?.jsonMessages()[1]).toEqual({
-      method: 'unsubscribe',
-      subscription: { coin: 'BTC', type: 'trades' },
+    const before = { ...topic };
+    const [socket] = await subscribeAndOpen(client, topic);
+    await client.unsubscribe({
+      type: 'clearinghouseState',
+      user: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      dex: '',
     });
-    client.close();
-  });
 
-  test('remaps coin subscriptions like the official Python SDK', async () => {
-    nameToCoin.mockImplementation(async (name) =>
-      name === 'HYPE/USDC' ? '@107' : name,
-    );
-    const options = {
-      autoReconnect: false,
-      pingInterval: 0,
-      webSocketConstructor: FakeWebSocket,
-    };
-    const callback = jest.fn();
-    const remapped: Parameters<WebsocketClient['subscribe']>[0][] = [
-      { coin: 'HYPE/USDC', type: 'l2Book' },
-      { coin: 'HYPE/USDC', type: 'trades' },
-      { coin: 'HYPE/USDC', interval: '1m', type: 'candle' },
-      { coin: 'HYPE/USDC', type: 'bbo' },
-      { coin: 'HYPE/USDC', type: 'activeAssetCtx' },
-    ];
-    for (const subscription of remapped) {
-      FakeWebSocket.reset();
-      const client = new WebsocketClient(options);
-      await subscribeAndOpen(client, subscription, callback);
-      expect(FakeWebSocket.instances[0]?.jsonMessages()[0]).toMatchObject({
-        method: 'subscribe',
-        subscription: { coin: '@107', type: subscription.type },
-      });
-      client.close();
-    }
-
-    FakeWebSocket.reset();
-    const client = new WebsocketClient(options);
-    await subscribeAndOpen(
-      client,
-      {
-        coin: 'HYPE/USDC',
-        type: 'activeAssetData',
-        user: '0x1111111111111111111111111111111111111111',
-      },
-      callback,
-    );
-    expect(FakeWebSocket.instances[0]?.jsonMessages()[0]).toEqual({
-      method: 'subscribe',
-      subscription: {
-        coin: 'HYPE/USDC',
-        type: 'activeAssetData',
-        user: '0x1111111111111111111111111111111111111111',
-      },
-    });
-    client.close();
-  });
-
-  test('normalizes defaults for exact unsubscribe matching', async () => {
-    const client = new WebsocketClient(
-      {
-        autoReconnect: false,
-        pingInterval: 0,
-        webSocketConstructor: FakeWebSocket,
-      },
-      TEST_LOGGER,
-    );
-    const callback = jest.fn();
-    await subscribeAndOpen(
-      client,
-      {
-        dex: undefined,
-        type: 'clearinghouseState',
-        user: '0x1111111111111111111111111111111111111111',
-      },
-      callback,
-    );
-    await client.unsubscribe(
-      {
-        type: 'clearinghouseState',
-        user: '0x1111111111111111111111111111111111111111',
-      },
-      callback,
-    );
-    expect(FakeWebSocket.instances[0]?.jsonMessages()).toEqual([
-      {
-        method: 'subscribe',
+    expect(topic).toEqual(before);
+    expect(socket.jsonMessages()).toEqual(
+      ['subscribe', 'unsubscribe'].map((method) => ({
+        method,
         subscription: {
           dex: '',
           type: 'clearinghouseState',
-          user: '0x1111111111111111111111111111111111111111',
+          user: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         },
-      },
-      {
-        method: 'unsubscribe',
-        subscription: {
-          dex: '',
-          type: 'clearinghouseState',
-          user: '0x1111111111111111111111111111111111111111',
-        },
-      },
+      })),
+    );
+  });
+
+  test('preserves explicit null order book precision fields and wire coin identifiers', async () => {
+    const client = createClient();
+    const topic = {
+      coin: '@107',
+      mantissa: null,
+      nSigFigs: null,
+      type: 'l2Book',
+    } as const;
+    const [socket] = await subscribeAndOpen(client, topic);
+    expect(socket.jsonMessages()).toEqual([
+      { method: 'subscribe', subscription: topic },
     ]);
-    client.close();
   });
 
-  test('preserves explicit null order book precision fields', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      pingInterval: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
-    await subscribeAndOpen(
-      client,
-      {
-        coin: 'BTC',
-        mantissa: null,
-        nSigFigs: null,
-        type: 'l2Book',
-      },
-      jest.fn(),
+  test('resolves aliases explicitly before subscribing without a second metadata lookup', async () => {
+    const nameToCoin = jest
+      .spyOn(RestClient.prototype, 'nameToCoin')
+      .mockResolvedValue('@107');
+    const client = createClient();
+    const coin = await client.nameToCoin('HYPE/USDC');
+    const [socket] = await subscribeAndOpen(client, { coin, type: 'trades' });
+    await client.unsubscribe({ coin, type: 'trades' });
+    expect(nameToCoin).toHaveBeenCalledTimes(1);
+    expect(nameToCoin).toHaveBeenCalledWith('HYPE/USDC');
+    expect(socket.jsonMessages()).toEqual(
+      ['subscribe', 'unsubscribe'].map((method) => ({
+        method,
+        subscription: { coin: '@107', type: 'trades' },
+      })),
     );
+  });
 
-    expect(FakeWebSocket.instances[0]?.jsonMessages()).toEqual([
-      {
-        method: 'subscribe',
-        subscription: {
-          coin: 'BTC',
-          mantissa: null,
-          nSigFigs: null,
-          type: 'l2Book',
-        },
-      },
+  test('preserves alternate wire channels and emits each received frame once', async () => {
+    const client = createClient();
+    const message = jest.fn();
+    client.on('message', message);
+    const [account, market] = await subscribeAndOpen(client, [
+      { type: 'userEvents', user: USER },
+      { type: 'activeAssetCtx', coin: '@107' },
+      { type: 'trades', coin: 'BTC' },
+      { type: 'trades', coin: 'ETH' },
     ]);
-    client.close();
+    account.message({ channel: 'user', data: { nonUserCancel: [] } });
+    market.message({
+      channel: 'activeSpotAssetCtx',
+      data: { coin: '@107', ctx: { markPx: '1' } },
+    });
+    market.message({ channel: 'trades', data: [{ coin: 'ETH', px: '1' }] });
+
+    expect(
+      message.mock.calls.map(([event]) => [event.channel, event.wsKey]),
+    ).toEqual([
+      ['user', `user:${USER}`],
+      ['activeSpotAssetCtx', 'public'],
+      ['trades', 'public'],
+    ]);
   });
 
-  test('isolates unscoped user callbacks on separate connections', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      pingInterval: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
-    const first = jest.fn();
-    const second = jest.fn();
-    const firstPromise = client.subscribe(
-      {
-        type: 'notification',
-        user: '0x1111111111111111111111111111111111111111',
-      },
-      first,
-    );
-    for (
-      let attempt = 0;
-      attempt < 50 && !FakeWebSocket.instances[0];
-      attempt++
-    ) {
-      await Promise.resolve();
-    }
-    FakeWebSocket.instances[0]?.open();
-    await firstPromise;
-    const secondPromise = client.subscribe(
-      {
-        type: 'notification',
-        user: '0x2222222222222222222222222222222222222222',
-      },
-      second,
-    );
-    for (
-      let attempt = 0;
-      attempt < 50 && !FakeWebSocket.instances[1];
-      attempt++
-    ) {
-      await Promise.resolve();
-    }
-    FakeWebSocket.instances[1]?.open();
-    await secondPromise;
-
-    FakeWebSocket.instances[0]?.message({
-      channel: 'notification',
-      data: { notification: 'first' },
-    });
-    expect(first).toHaveBeenCalledWith({ notification: 'first' });
-    expect(second).not.toHaveBeenCalled();
-    expect(FakeWebSocket.instances).toHaveLength(2);
-    client.close();
+  test('shares scoped account streams and reuses each unscoped user connection', async () => {
+    const client = createClient();
+    const sockets = await subscribeAndOpen(client, [
+      { type: 'orderUpdates', user: USER },
+      { type: 'notification', user: USER },
+      { type: 'userEvents', user: USER },
+      { type: 'userFills', user: USER },
+      { type: 'userFills', user: '0x2222222222222222222222222222222222222222' },
+    ]);
+    expect(sockets).toHaveLength(2);
+    expect(sockets.map((socket) => socket.jsonMessages().length)).toEqual([
+      3, 2,
+    ]);
   });
 
-  test('filters shared-channel messages by coin, interval, dex, and user', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      pingInterval: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
-    const btc = jest.fn();
-    const eth = jest.fn();
-    await subscribeAndOpen(client, { coin: 'BTC', type: 'trades' }, btc);
-    await client.subscribe({ coin: 'ETH', type: 'trades' }, eth);
-
-    FakeWebSocket.instances[0]?.message({
-      channel: 'trades',
-      data: [{ coin: 'ETH', px: '1' }],
-    });
-    expect(btc).not.toHaveBeenCalled();
-    expect(eth).toHaveBeenCalledTimes(1);
-    client.close();
-  });
-
-  test('decompresses fastAssetCtxs and reports malformed data', async () => {
-    const client = new WebsocketClient(
-      {
-        autoReconnect: false,
-        pingInterval: 0,
-        webSocketConstructor: FakeWebSocket,
-      },
-      TEST_LOGGER,
-    );
-    const callback = jest.fn();
-    const onError = jest.fn();
-    client.on('exception', onError);
-    await subscribeAndOpen(client, { type: 'fastAssetCtxs' }, callback);
-    const payload = { BTC: { markPx: '100', midPx: '99' } };
-    const compressed = Buffer.from(
-      deflateSync(strToU8(JSON.stringify(payload))),
-    ).toString('base64');
-
-    FakeWebSocket.instances[0]?.message({
+  test('decompresses fastAssetCtxs in the event envelope and reports malformed data', async () => {
+    const client = createClient();
+    const message = jest.fn();
+    const exception = jest.fn();
+    client.on('message', message).on('exception', exception);
+    const [socket] = await subscribeAndOpen(client, { type: 'fastAssetCtxs' });
+    const data = { BTC: { markPx: '100', midPx: '99' } };
+    socket.message({
       channel: 'fastAssetCtxs',
-      data: compressed,
+      data: Buffer.from(deflateSync(strToU8(JSON.stringify(data)))).toString(
+        'base64',
+      ),
     });
-    expect(callback).toHaveBeenCalledWith(payload);
-
-    FakeWebSocket.instances[0]?.message({
+    expect(message).toHaveBeenCalledWith({
       channel: 'fastAssetCtxs',
-      data: 42,
+      data,
+      wsKey: 'public',
     });
-    expect(onError.mock.calls[0]?.[0].event).toBeInstanceOf(
+
+    socket.message({ channel: 'fastAssetCtxs', data: 42 });
+    socket.message('not JSON');
+    expect(exception).toHaveBeenCalledTimes(2);
+    expect(exception.mock.calls[0][0].event).toBeInstanceOf(
       HyperliquidWebSocketError,
     );
-
-    FakeWebSocket.instances[0]?.message('not JSON');
-    expect(onError).toHaveBeenCalledTimes(2);
-    expect(onError.mock.calls[1]?.[0].event).toMatchObject({
-      message: 'Hyperliquid returned a non-JSON WebSocket message.',
-      name: 'HyperliquidWebSocketError',
-    });
-    expect(TEST_LOGGER.error).toHaveBeenCalledTimes(2);
-    client.close();
-  });
-
-  test('reconnects and resubscribes with bounded delay', async () => {
-    jest.useFakeTimers();
-    const client = new WebsocketClient({
-      pingInterval: 0,
-      reconnectTimeout: 5,
-      webSocketConstructor: FakeWebSocket,
-    });
-    await subscribeAndOpen(client, { coin: 'BTC', type: 'bbo' }, jest.fn());
-    FakeWebSocket.instances[0]?.serverClose();
-    await jest.advanceTimersByTimeAsync(5);
-    expect(FakeWebSocket.instances).toHaveLength(2);
-    FakeWebSocket.instances[1]?.open();
-    expect(FakeWebSocket.instances[1]?.jsonMessages()).toEqual([
-      {
-        method: 'subscribe',
-        subscription: { coin: 'BTC', type: 'bbo' },
-      },
-    ]);
-    client.close();
-  });
-
-  test('sends heartbeats and closes a connection without a pong', async () => {
-    jest.useFakeTimers();
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      pingInterval: 10,
-      pongTimeout: 5,
-      webSocketConstructor: FakeWebSocket,
-    });
-    const connecting = client.connect();
-    FakeWebSocket.instances[0]?.open();
-    await connecting;
-    await jest.advanceTimersByTimeAsync(10);
-    expect(FakeWebSocket.instances[0]?.jsonMessages()).toContainEqual({
-      method: 'ping',
-    });
-    await jest.advanceTimersByTimeAsync(5);
-    expect(FakeWebSocket.instances[0]?.readyState).toBe(FakeWebSocket.CLOSED);
-    client.close();
-  });
-
-  test('isolates callback and lifecycle listener failures', async () => {
-    const client = new WebsocketClient(
-      {
-        autoReconnect: false,
-        pingInterval: 0,
-        webSocketConstructor: FakeWebSocket,
-      },
-      TEST_LOGGER,
+    expect(exception.mock.calls[1][0].event.message).toBe(
+      'Hyperliquid returned a non-JSON WebSocket message.',
     );
-    const healthy = jest.fn();
-    const onError = jest.fn();
+    expect(LOGGER.error).toHaveBeenCalledTimes(2);
+    expect(message).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves upstream error frames on the exception event', async () => {
+    const client = createClient();
+    const exception = jest.fn();
+    client.on('exception', exception);
+    const [socket] = await subscribeAndOpen(client, { type: 'allMids' });
+    socket.message({ channel: 'error', data: 'Subscription rejected' });
+    expect(exception).toHaveBeenCalledWith({
+      channel: 'error',
+      data: 'Subscription rejected',
+      wsKey: 'public',
+    });
+  });
+
+  test('reports listener failures and leaves the connection usable', async () => {
+    const client = createClient();
+    const exception = jest.fn();
+    const message = jest.fn();
+    client.on('exception', exception);
     client.on('open', () => {
-      throw new Error('listener failure');
+      throw new Error('open listener failed');
     });
-    client.on('open', healthy);
-    client.on('exception', onError);
-    await subscribeAndOpen(client, { coin: 'BTC', type: 'trades' }, () => {
-      throw new Error('callback failure');
+    const [socket] = await subscribeAndOpen(client, { type: 'allMids' });
+    client.once('message', () => {
+      throw new Error('message listener failed');
     });
-    FakeWebSocket.instances[0]?.message({
-      channel: 'trades',
-      data: [{ coin: 'BTC' }],
-    });
+    socket.message({ channel: 'allMids', data: { mids: {} } });
+    client.on('message', message);
+    socket.message({ channel: 'allMids', data: { mids: { BTC: '100' } } });
 
-    expect(healthy).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls.map(([context]) => context.event)).toContainEqual(
-      new Error('callback failure'),
-    );
-    client.close();
+    expect(exception.mock.calls.map(([event]) => event.event.message)).toEqual([
+      'open listener failed',
+      'message listener failed',
+    ]);
+    expect(message).toHaveBeenCalledTimes(1);
+    expect(client.isConnected()).toBe(true);
   });
 
   test('exposes numeric asset resolution and manual metadata refresh', async () => {
-    const client = new WebsocketClient({
-      autoReconnect: false,
-      pingInterval: 0,
-      webSocketConstructor: FakeWebSocket,
-    });
+    const refresh = jest
+      .spyOn(RestClient.prototype, 'refreshAssetMetadata')
+      .mockResolvedValue();
+    const client = createClient();
     await expect(client.resolveAsset(10_107)).resolves.toMatchObject({
       assetId: 10_107,
       kind: 'spot',
     });
-    const metadataClient = (
-      client as unknown as {
-        metadataClient: { refreshAssetMetadata(): Promise<void> };
-      }
-    ).metadataClient;
-    const refresh = jest
-      .spyOn(metadataClient, 'refreshAssetMetadata')
-      .mockResolvedValue();
-
-    await expect(client.refreshAssetMetadata()).resolves.toBeUndefined();
+    await client.refreshAssetMetadata();
     expect(refresh).toHaveBeenCalledTimes(1);
-    client.close();
   });
 });

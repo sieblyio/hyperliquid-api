@@ -9,6 +9,7 @@ const outputRoots = [
   { path: join(repositoryRoot, 'dist/mjs'), type: 'module' },
 ];
 const browser = {
+  './lib/event-emitter.js': './lib/event-emitter.browser.js',
   './lib/https-agent.js': './lib/https-agent.browser.js',
 };
 

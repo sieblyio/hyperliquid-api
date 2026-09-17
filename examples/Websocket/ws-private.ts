@@ -8,9 +8,8 @@ import { DefaultLogger, WebsocketClient } from '../../src/index.js';
  * isolates user streams whose server events omit the user onto per-user
  * connections.
  *
- * Unlike Bybit/OKX/Binance, there is no wsClient.on('update'). Market and
- * account payloads are delivered only to the subscribe() callback below.
- * on() is lifecycle only: open, reconnecting, reconnected, exception, close.
+ * Data emits through on('message'), with the original channel and wsKey.
+ * Subscription acknowledgements emit through on('response').
  *
  * Unix:
  * HYPERLIQUID_ADDRESS='0xabc' npx tsx examples/Websocket/ws-private.ts
@@ -48,51 +47,49 @@ wsClient.on('reconnected', (data) => {
   console.log('ws has reconnected ', data?.wsKey);
 });
 
-wsClient.on('exception', ({ event, wsKey }) => {
-  console.error('ws exception:', wsKey, event);
+wsClient.on('exception', ({ event, data, wsKey }) => {
+  console.error('ws exception:', wsKey, event ?? data);
+});
+
+wsClient.on('response', (event) => {
+  console.log('ws response:', event.wsKey, event.channel, event.data);
+});
+
+wsClient.on('message', (event) => {
+  switch (event.channel) {
+    case 'orderUpdates':
+      console.log('Orders:', event.wsKey, event.data);
+      break;
+    case 'userFills':
+      console.log(
+        'Fills:',
+        event.data.user,
+        event.data.isSnapshot,
+        event.data.fills,
+      );
+      break;
+    default:
+      console.log('Account update:', event.wsKey, event.channel, event.data);
+  }
 });
 
 async function main() {
+  if (!user) return;
   try {
-    const handles = [
-      await wsClient.subscribe({ type: 'userEvents', user }, (event) => {
-        console.log('userEvents', event);
-      }),
-      await wsClient.subscribe({ type: 'userFills', user }, (fills) => {
-        console.log('userFills', fills);
-      }),
-      await wsClient.subscribe({ type: 'orderUpdates', user }, (orders) => {
-        console.log('orderUpdates', orders);
-      }),
-      await wsClient.subscribe({ type: 'openOrders', user }, (orders) => {
-        console.log('openOrders', orders);
-      }),
-      await wsClient.subscribe(
-        { type: 'activeAssetData', user, coin: 'BTC' },
-        (data) => {
-          console.log('activeAssetData', data);
-        },
-      ),
-      await wsClient.subscribe(
-        { type: 'clearinghouseState', user },
-        (state) => {
-          console.log('clearinghouseState', state);
-        },
-      ),
-      await wsClient.subscribe({ type: 'notification', user }, (note) => {
-        console.log('notification', note);
-      }),
-    ];
-
-    process.once('SIGINT', () => {
-      void Promise.all(handles.map((handle) => handle.unsubscribe())).finally(
-        () => wsClient.close(),
-      );
-    });
-  } catch (e) {
-    console.error('subscribe failed: ', e);
-    wsClient.close();
+    await wsClient.subscribe([
+      { type: 'userEvents', user },
+      { type: 'userFills', user },
+      { type: 'orderUpdates', user },
+      { type: 'openOrders', user },
+      { type: 'activeAssetData', user, coin: 'BTC' },
+      { type: 'clearinghouseState', user },
+      { type: 'notification', user },
+    ]);
+  } catch (error) {
+    console.error('subscribe failed:', error);
+    wsClient.closeAll();
   }
 }
 
-main();
+process.once('SIGINT', () => wsClient.closeAll());
+void main();

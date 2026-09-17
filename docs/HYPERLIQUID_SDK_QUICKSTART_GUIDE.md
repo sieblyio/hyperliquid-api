@@ -300,7 +300,7 @@ Never put a private key in browser code, logs, or committed configuration.
 | `clientOrderId` | `0x` plus 32 hex characters | Your [custom order ID](https://siebly.io/reference/glossary#custom-order-id), called `cloid` by Hyperliquid |
 | `accountAddress` | `HYPERLIQUID_ACCOUNT_ADDRESS` | The master account, subaccount, or vault whose state is queried |
 | `vaultAddress` | `HYPERLIQUID_VAULT_ADDRESS` | Optional routing for actions signed on behalf of a vault or subaccount |
-| `wsKey` | `public`, `api`, or a user-scoped key | The [WebSocket key](https://siebly.io/reference/glossary#ws-key) included with lifecycle events |
+| `wsKey` | `public`, `api`, or `user:<address>` | The [WebSocket key](https://siebly.io/reference/glossary#ws-key) included with every emitted event |
 
 Perpetual sizes are quantities of the underlying asset. Spot sizes are quantities of the base asset. Prices, sizes, transfer amounts, and trigger prices are exact decimal strings in SDK requests.
 
@@ -501,7 +501,7 @@ main();
 
 Asset IDs differ across Mainnet and Testnet. Resolve them against the same network that will receive the request. Do not add `-PERP` or `-SPOT` suffixes.
 
-For Info methods and stream subscriptions, the SDK applies Hyperliquid's native name mapping where required. For example, `HYPE/USDC` currently maps to an `@` name, while `PURR/USDC` is already a native universe name. `getOrderBook()`, `getCandles()`, `getFundingHistory()`, and coin-based market subscriptions perform this mapping. `getRecentTrades()` and `getActiveAssetData()` expect an official coin name, so call `nameToCoin()` first when starting with a readable Spot alias.
+`getOrderBook()`, `getCandles()`, and `getFundingHistory()` apply Hyperliquid's native name mapping where required. For example, a readable Spot alias such as `HYPE/USDC` resolves to its current `@` name, while `PURR/USDC` is already a native universe name. Streaming subscriptions, `getRecentTrades()`, and `getActiveAssetData()` expect an official coin name. Call `nameToCoin()` explicitly when starting with a readable Spot alias, then pass the result as `coin`. Subscribing with a native coin name does not make a REST metadata request.
 
 <!-- siebly:section id="websocket-streams" -->
 
@@ -532,57 +532,54 @@ async function main() {
     .on('close', ({ wsKey }) => {
       console.log('WebSocket closed:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await client.subscribe({ type: 'allMids' }, (update) => {
-      console.log('BTC midpoint:', update.mids.BTC);
-    });
-  } catch (error) {
-    console.error('Midpoint subscription failed:', error);
-  }
+  client.on('message', ({ channel, data, wsKey }) => {
+    switch (channel) {
+      case 'allMids':
+        console.log('BTC midpoint:', wsKey, data.mids.BTC);
+        break;
+      case 'l2Book':
+        console.log('Best bid:', data.levels[0][0]);
+        console.log('Best ask:', data.levels[1][0]);
+        break;
+      case 'trades':
+        console.log('Trades:', data);
+        break;
+      case 'candle':
+        console.log('One-minute candle:', data);
+        break;
+    }
+  });
+
+  client.on('response', (response) => {
+    console.log('WebSocket response:', response);
+  });
 
   try {
-    await client.subscribe({ type: 'l2Book', coin: 'BTC' }, (book) => {
-      console.log('Best bid:', book.levels[0][0]);
-      console.log('Best ask:', book.levels[1][0]);
-    });
-  } catch (error) {
-    console.error('Order-book subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe({ type: 'trades', coin: 'BTC' }, (trades) => {
-      console.log('Trades:', trades);
-    });
-  } catch (error) {
-    console.error('Trade subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe(
+    await client.subscribe([
+      { type: 'allMids' },
+      { type: 'l2Book', coin: 'BTC' },
+      { type: 'trades', coin: 'BTC' },
       { type: 'candle', coin: 'BTC', interval: '1m' },
-      (candle) => {
-        console.log('One-minute candle:', candle);
-      },
-    );
+    ]);
   } catch (error) {
-    console.error('Candle subscription failed:', error);
+    console.error('Market subscription failed:', error);
   }
 }
 
 main();
 ```
 
-Hyperliquid sends a [subscription acknowledgement](https://siebly.io/reference/glossary#subscription-acknowledgement) when the subscription is registered. The SDK handles that protocol message internally. Your callback receives channel data.
+Hyperliquid sends a [subscription acknowledgement](https://siebly.io/reference/glossary#subscription-acknowledgement) when the subscription is registered. The SDK emits that protocol message through `response`. Market and account updates arrive through `message`, preserving the full `{ channel, data, wsKey }` envelope.
 
 The promise returned by `subscribe()` resolves after the socket opens and the request is sent. It does not wait for the server acknowledgement, so do not use that promise alone as a stream-readiness signal.
 
 Some channels send an initial snapshot before later updates. `l2Book` sends a current book, while `allMids`, trades, and candles continue with new values. The SDK sends heartbeat pings on quiet connections.
 
-Call `client.closeAll()` when the application explicitly needs to close its WebSocket connections.
+`subscribe()` and `unsubscribe()` accept one topic or an array of topics. Equivalent topics are deduplicated by value. Listeners are independent of subscriptions: use `off('message', listener)` to remove a listener and `unsubscribe(topic)` to stop a stream. Call `client.closeAll()` when the application needs to close its WebSocket connections. `connectionTimeout` bounds connection setup and defaults to 10 seconds.
 
 ### 5. Subscribe to account updates
 
@@ -609,47 +606,37 @@ async function main() {
     .on('reconnected', ({ wsKey }) => {
       console.log('WebSocket reconnected:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await client.subscribe({ type: 'orderUpdates', user }, (orders) => {
-      console.log('Order updates:', orders);
-    });
-  } catch (error) {
-    console.error('Order subscription failed:', error);
-  }
+  client.on('message', ({ channel, data, wsKey }) => {
+    switch (channel) {
+      case 'orderUpdates':
+        console.log('Order updates:', wsKey, data);
+        break;
+      case 'userFills':
+        console.log('Fill snapshot:', data.isSnapshot === true);
+        console.log('Fills:', data.fills);
+        break;
+      case 'clearinghouseState':
+        console.log('Perpetual state:', data.clearinghouseState);
+        break;
+      case 'spotState':
+        console.log('Spot state:', data.spotState);
+        break;
+    }
+  });
 
   try {
-    await client.subscribe(
+    await client.subscribe([
+      { type: 'orderUpdates', user },
       { type: 'userFills', user, aggregateByTime: true },
-      (update) => {
-        console.log('Fill snapshot:', update.isSnapshot === true);
-        console.log('Fills:', update.fills);
-      },
-    );
-  } catch (error) {
-    console.error('Fill subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe(
       { type: 'clearinghouseState', user },
-      (update) => {
-        console.log('Perpetual state:', update.clearinghouseState);
-      },
-    );
+      { type: 'spotState', user },
+    ]);
   } catch (error) {
-    console.error('Perpetual-state subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe({ type: 'spotState', user }, (update) => {
-      console.log('Spot state:', update.spotState);
-    });
-  } catch (error) {
-    console.error('Spot-state subscription failed:', error);
+    console.error('Account subscription failed:', error);
   }
 }
 
@@ -660,7 +647,7 @@ main();
 
 The `orderUpdates` stream reports order transitions. Use it with a REST API query when reconciling [pending confirmation](https://siebly.io/reference/glossary#pending-confirmation) after an uncertain order or cancellation response.
 
-Every lifecycle event includes `wsKey`. Most subscriptions share `public`. User-scoped channels whose server messages omit the address are isolated on a key derived from that address, which prevents updates for different users from being mixed.
+Every lifecycle, message, response, and exception event includes `wsKey`. Most subscriptions share `public`. `orderUpdates`, `notification`, and `userEvents` use `user:<lowercase-address>` connections because their server messages omit the address. Use that key to identify the account. The `userEvents` subscription emits messages on Hyperliquid's `user` channel.
 
 <!-- siebly:section id="order-management" -->
 
@@ -1324,30 +1311,25 @@ async function main() {
       console.log('WebSocket reconnected:', wsKey);
       await reloadAccountState();
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await websocketClient.subscribe(
-      { type: 'orderUpdates', user: accountAddress },
-      (orders) => {
-        console.log('Order updates:', orders);
-      },
-    );
-  } catch (error) {
-    console.error('Order subscription failed:', error);
-  }
+  websocketClient.on('message', ({ channel, data, wsKey }) => {
+    if (channel === 'orderUpdates') {
+      console.log('Order updates:', wsKey, data);
+    } else if (channel === 'userFills') {
+      console.log('Fill update:', data);
+    }
+  });
 
   try {
-    await websocketClient.subscribe(
+    await websocketClient.subscribe([
+      { type: 'orderUpdates', user: accountAddress },
       { type: 'userFills', user: accountAddress, aggregateByTime: true },
-      (update) => {
-        console.log('Fill update:', update);
-      },
-    );
+    ]);
   } catch (error) {
-    console.error('Fill subscription failed:', error);
+    console.error('Account subscription failed:', error);
   }
 
   await reloadAccountState();
@@ -1418,7 +1400,7 @@ console.log({
 });
 ```
 
-`baseUrl` changes REST API routing. `wsUrl` changes WebSocket routing. `WebsocketClient` may use REST API metadata while normalizing readable asset aliases, so set both values when routing it through custom infrastructure.
+`baseUrl` changes REST API routing. `wsUrl` changes WebSocket routing. The explicit `WebsocketClient.nameToCoin()` and `resolveAsset()` helpers use REST API metadata, so set both values if those helpers also need custom routing. Native streaming subscriptions use only `wsUrl`.
 
 Keep Mainnet and Testnet private keys, account addresses, client order IDs, and persistent state in separate configuration. Asset IDs and available markets can differ between the two networks.
 
@@ -1528,10 +1510,14 @@ async function main() {
     console.error('Proxied REST API request failed:', error);
   }
 
+  websocketClient.on('message', ({ channel, data }) => {
+    if (channel === 'allMids') {
+      console.log('Stream through proxy:', data.mids.BTC);
+    }
+  });
+
   try {
-    await websocketClient.subscribe({ type: 'allMids' }, (update) => {
-      console.log('Stream through proxy:', update.mids.BTC);
-    });
+    await websocketClient.subscribe({ type: 'allMids' });
   } catch (error) {
     console.error('Proxied stream subscription failed:', error);
   }
@@ -1549,7 +1535,7 @@ main();
 
 Set `keepAlive: false` so the SDK preserves the custom agent, and set `proxy: false` so Axios does not apply separate environment-proxy handling on top of it.
 
-`webSocketConstructor` routes the socket itself. `requestOptions.proxy` routes the REST API metadata requests used by asset-specific subscriptions. The `allMids` example does not need metadata resolution, but both routes are configured so the same client can later subscribe to books, trades, or candles.
+`webSocketConstructor` routes the socket itself. All streaming subscriptions use native coin names and avoid REST metadata requests. `requestOptions.proxy` routes REST API metadata requests if you explicitly call `nameToCoin()` or `resolveAsset()` on the streaming client.
 
 ### SOCKS5 proxy
 
@@ -1624,10 +1610,14 @@ async function main() {
     console.error('SOCKS5 REST API request failed:', error);
   }
 
+  websocketClient.on('message', ({ channel, data }) => {
+    if (channel === 'allMids') {
+      console.log('WebSocket through SOCKS5:', data.mids.BTC);
+    }
+  });
+
   try {
-    await websocketClient.subscribe({ type: 'allMids' }, (update) => {
-      console.log('WebSocket through SOCKS5:', update.mids.BTC);
-    });
+    await websocketClient.subscribe({ type: 'allMids' });
   } catch (error) {
     console.error('SOCKS5 stream subscription failed:', error);
   }
@@ -1643,7 +1633,7 @@ async function main() {
 main();
 ```
 
-Set `keepAlive: false` so the REST API client preserves the SOCKS agent. The WebSocket example uses `allMids` because it does not trigger a separate REST API metadata lookup. The current WebSocket client does not expose a keepalive override for its internal metadata client, so do not assume an asset-alias lookup follows the SOCKS route.
+Set `keepAlive: false` so the REST API client preserves the SOCKS agent. Streaming subscriptions use native coin names and do not trigger REST metadata lookups. Resolve readable aliases with the configured `restClient.nameToCoin()` first, then pass the result to `websocketClient.subscribe()`, so alias resolution also follows the SOCKS route.
 
 A proxy changes the network route, not the account, network, or available products. Monitor latency, disconnects, and the proxy's egress IP.
 
@@ -1710,7 +1700,7 @@ It sends an immediate-or-cancel limit order with a protection price. The SDK der
 
 ### How do I tell perpetual and Spot assets apart?
 
-Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. The SDK also accepts readable metadata-derived aliases such as `HYPE/USDC`.
+Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. REST helpers can resolve readable metadata-derived aliases such as `HYPE/USDC`. For streaming subscriptions, call `nameToCoin()` explicitly to resolve an alias, then subscribe with the returned native coin name.
 
 ### Do account WebSocket streams require authentication?
 
@@ -1718,7 +1708,7 @@ They use the public account address. The SDK isolates user-scoped channels when 
 
 ### How do subscription acknowledgements appear?
 
-The SDK handles acknowledgement protocol messages internally. Subscription callbacks receive the channel's snapshot or update data.
+Listen for `response` events with `channel === 'subscriptionResponse'`. Snapshot and update envelopes arrive through `message`. Both events include `wsKey`, and the promise returned by `subscribe()` only confirms that the subscription request was sent.
 
 ### What is the difference between `WebsocketClient` and `WebsocketAPIClient`?
 

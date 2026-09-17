@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 import { build } from 'esbuild';
 
@@ -33,7 +34,8 @@ async function bundleFixture({ absWorkingDir, entryPoint, label, nodePaths }) {
     bundle: true,
     conditions: ['browser', 'import', 'default'],
     entryPoints: [entryPoint],
-    format: 'esm',
+    format: 'iife',
+    globalName: 'HyperliquidSmoke',
     logLevel: 'silent',
     mainFields: ['browser', 'module', 'main'],
     metafile: true,
@@ -84,6 +86,8 @@ export async function validateBrowserBundles({
     '/node_modules/ws/',
     '/WebsocketClient.',
     '/WebsocketAPIClient.',
+    '/lib/event-emitter',
+    '/node_modules/events/',
   ]) {
     assert.equal(
       includesPath(rest.inputs, forbidden),
@@ -118,6 +122,38 @@ export async function validateBrowserBundles({
     false,
     'WebSocket browser bundle included the Node.js ws implementation',
   );
+
+  for (const required of [
+    '/lib/event-emitter.browser.js',
+    '/node_modules/events/events.js',
+  ]) {
+    assert.equal(
+      includesPath(websocket.inputs, required),
+      true,
+      `WebSocket browser bundle did not select ${required}`,
+    );
+  }
+  assert.equal(
+    includesPath(websocket.inputs, '/lib/event-emitter.js'),
+    false,
+    'Browser bundle selected the Node.js event emitter adapter',
+  );
+
+  const runtime = runInNewContext(
+    `globalThis.self = globalThis;\n${websocket.result.outputFiles[0].text}\nHyperliquidSmoke;`,
+    {
+      Blob,
+      TextDecoder,
+      TextEncoder,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      console,
+    },
+    { timeout: 10_000 },
+  );
+  await runtime.exerciseWebsocket();
 
   return {
     restBytes: rest.result.outputFiles.reduce(

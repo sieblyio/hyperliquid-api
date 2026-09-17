@@ -27,7 +27,9 @@
   },
   "browser": {
     "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
-    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js"
+    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/event-emitter.js": "./dist/cjs/lib/event-emitter.browser.js",
+    "./dist/mjs/lib/event-emitter.js": "./dist/mjs/lib/event-emitter.browser.js"
   },
   "type": "module",
   "sideEffects": false,
@@ -43,6 +45,7 @@
     "@msgpack/msgpack": "^3.1.2",
     "axios": "1.18.1",
     "ethers": "^6.16.0",
+    "events": "3.3.0",
     "fflate": "^0.8.2",
     "isomorphic-ws": "^5.0.0",
     "ws": "8.21.0"
