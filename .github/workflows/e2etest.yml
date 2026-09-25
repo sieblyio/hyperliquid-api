@@ -44,6 +44,9 @@ jobs:
       - name: Test Public REST API Calls
         run: npm run test -- public.test.ts
 
+      - name: Test Public WebSocket Connections (Mainnet and Testnet)
+        run: npm run test -- public.ws.test.ts
+
       # Private live tests. HYPERLIQUID_E2E_PRIVATE_KEY is required or those
       # suites skip. The other two secrets are optional:
       # - HYPERLIQUID_E2E_ACCOUNT_ADDRESS: master/sub address when the key is an

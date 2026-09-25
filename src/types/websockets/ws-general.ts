@@ -15,13 +15,13 @@ export interface WebsocketClientOptions {
   /** Reconnect automatically after an unexpected disconnect. Default: true. */
   autoReconnect?: boolean;
   baseUrl?: string;
-  /** Maximum time to open a connection, in milliseconds. Default: 10,000. */
+  /** Maximum time to open a connection, in milliseconds. Default: 1,000. */
   connectionTimeout?: number;
-  /** Maximum reconnect delay in milliseconds. Default: 30,000. Zero means no delay. */
+  /** Maximum reconnect delay in milliseconds. Default: 10,000. Zero means no delay. */
   maxReconnectTimeout?: number;
-  /** Ping interval in milliseconds. Default: 30,000. Zero disables pings. */
+  /** Ping interval in milliseconds. Default: 10,000. Zero disables pings. */
   pingInterval?: number;
-  /** Pong deadline in milliseconds. Default: 10,000. Zero disables the deadline. */
+  /** Pong deadline in milliseconds. Default: 1,000. Zero disables the deadline. */
   pongTimeout?: number;
   /** Initial reconnect delay in milliseconds. Default: 500. Zero means no delay. */
   reconnectTimeout?: number;
@@ -54,7 +54,7 @@ export interface WebsocketConnectionContext<
 export interface WebsocketExceptionEvent<
   TWsKey extends string = WsKey,
 > extends WebsocketLifecycleContext<TWsKey> {
-  channel?: 'error';
+  channel?: 'error' | 'post';
   data?: unknown;
 }
 

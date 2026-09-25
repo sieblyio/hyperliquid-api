@@ -256,6 +256,9 @@ describe('WebsocketAPIClient', () => {
 
   test('rejects action errors, malformed replies, and unknown response types', async () => {
     const instance = client();
+    const exception = jest.fn();
+    const response = jest.fn();
+    instance.on('exception', exception).on('response', response);
 
     const rejected = instance.getAllMids();
     const socket = await openLatest();
@@ -290,11 +293,20 @@ describe('WebsocketAPIClient', () => {
       },
     });
     await expect(unknown).rejects.toThrow('unknown WebSocket POST response');
+    expect(exception).toHaveBeenCalledTimes(3);
+    expect(exception.mock.calls.map(([event]) => event.data.id)).toEqual([
+      firstId,
+      secondId,
+      thirdId,
+    ]);
+    expect(response).not.toHaveBeenCalled();
     instance.close();
   });
 
   test('correlates server errors that echo a WebSocket POST request', async () => {
     const instance = client();
+    const exception = jest.fn();
+    instance.on('exception', exception);
     const pending = instance.getAllMids();
     const socket = await openLatest();
     await Promise.resolve();
@@ -310,11 +322,20 @@ describe('WebsocketAPIClient', () => {
     });
 
     await expect(pending).rejects.toThrow('Invalid request');
+    expect(exception).toHaveBeenCalledTimes(1);
+    expect(exception).toHaveBeenCalledWith({
+      channel: 'error',
+      data: `Invalid request ${JSON.stringify(request)}`,
+      wsKey: 'api',
+    });
     instance.close();
   });
 
   test('parses Exchange status err replies consistently with REST', async () => {
     const instance = client();
+    const exception = jest.fn();
+    const response = jest.fn();
+    instance.on('exception', exception).on('response', response);
     const pending = instance.invalidateNonce();
     const socket = await openLatest();
     await Promise.resolve();
@@ -337,6 +358,11 @@ describe('WebsocketAPIClient', () => {
 
     await expect(pending).rejects.toBeInstanceOf(HyperliquidApiError);
     await expect(pending).rejects.toMatchObject({ message: 'bad action' });
+    expect(exception).toHaveBeenCalledTimes(1);
+    expect(exception).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'post', wsKey: 'api' }),
+    );
+    expect(response).not.toHaveBeenCalled();
     instance.close();
   });
 

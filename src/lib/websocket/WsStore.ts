@@ -1,4 +1,5 @@
 import type { WebSocketLike } from '../../types/websockets/ws-portable.js';
+import { DefaultLogger, type DefaultLogger as Logger } from './logger.js';
 import {
   type DeferredPromise,
   WsConnectionStateEnum,
@@ -33,6 +34,11 @@ export function createDeferredPromise<T>(): DeferredPromise<T> {
 export class WsStore<TWsKey extends string, TTopic extends object> {
   private readonly wsState = new Map<TWsKey, WsStoredState<TTopic>>();
 
+  constructor(
+    private readonly logger: Logger = DefaultLogger,
+    private readonly loggerCategory = { category: 'WsClient' },
+  ) {}
+
   get(key: TWsKey, createIfMissing: true): WsStoredState<TTopic>;
 
   get(key: TWsKey, createIfMissing?: false): WsStoredState<TTopic> | undefined;
@@ -65,7 +71,11 @@ export class WsStore<TWsKey extends string, TTopic extends object> {
   }
 
   isWsOpen(key: TWsKey): boolean {
-    return this.getWs(key)?.readyState === 1;
+    const state = this.get(key);
+    return (
+      state?.connectionState === WsConnectionStateEnum.CONNECTED &&
+      state.ws?.readyState === 1
+    );
   }
 
   addTopic(key: TWsKey, topic: TTopic): boolean {
@@ -116,6 +126,12 @@ export class WsStore<TWsKey extends string, TTopic extends object> {
   rejectDeferredPromise(key: TWsKey, id: string, error: unknown): void {
     const pending = this.getDeferredPromise(key, id);
     if (pending) {
+      this.logger.trace(`rejectDeferredPromise(): rejecting ${key}/${id}`, {
+        ...this.loggerCategory,
+        wsKey: key,
+        promiseRef: id,
+        error,
+      });
       this.get(key)?.deferredPromiseStore.delete(id);
       pending.cleanup();
       pending.reject(error);

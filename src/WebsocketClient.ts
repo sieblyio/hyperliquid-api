@@ -20,6 +20,7 @@ import type { ExchangeResponse } from './types/response/exchange.types.js';
 import type { RequestOptions } from './types/shared.types.js';
 import type {
   WebsocketMessageEvent,
+  WebsocketPostResponseEvent,
   WebsocketResponseEvent,
 } from './types/websockets/ws-events.js';
 import type {
@@ -114,7 +115,7 @@ export class WebsocketClient extends BaseWebsocketClient<
     options: WebsocketClientOptions = {},
     logger: Logger = DefaultLogger,
   ) {
-    super(options, logger);
+    super({ ...options, wsLoggerCategory: 'hyperliquid-ws' }, logger);
     this.wsUrl =
       options.wsUrl ??
       (options.testnet === true ? TESTNET_WS_URL : MAINNET_WS_URL);
@@ -148,6 +149,7 @@ export class WebsocketClient extends BaseWebsocketClient<
     return this.isWsConnected(wsKey);
   }
 
+  /** Reject pending work immediately; emit 'close' when the socket confirms closure. */
   close(wsKey?: WsKey): void {
     if (wsKey === undefined) {
       this.closeAll();
@@ -275,6 +277,10 @@ export class WebsocketClient extends BaseWebsocketClient<
     }
     const record = recordValue(parsed);
     if (!record || typeof record.channel !== 'string') {
+      this.logger.error(
+        'Unhandled/unrecognised ws event message - unexpected message format',
+        { ...this.WS_LOGGER_CATEGORY, wsKey, message, parsed },
+      );
       return [];
     }
     if (record.channel === 'pong') {
@@ -285,12 +291,23 @@ export class WebsocketClient extends BaseWebsocketClient<
         wsKey === 'api' && typeof record.data === 'string'
           ? postErrorRequestId(record.data)
           : undefined;
-      if (requestId !== undefined) {
+      if (
+        requestId !== undefined &&
+        this.getWsStore().getDeferredPromise(wsKey, String(requestId))
+      ) {
         this.rejectRequest(
           requestId,
           new HyperliquidWebSocketError(String(record.data)),
         );
-        return [];
+      } else if (wsKey === 'api') {
+        this.logUnmatchedResponse(requestId, record);
+      } else {
+        this.logger.error('WebSocket exception', {
+          ...this.WS_LOGGER_CATEGORY,
+          wsKey,
+          parsed,
+          error: record.data,
+        });
       }
       return [
         {
@@ -309,40 +326,66 @@ export class WebsocketClient extends BaseWebsocketClient<
     }
     if (wsKey === 'api') {
       if (record.channel === 'post') {
-        this.handlePostMessage(record);
         return [
           {
-            eventType: 'response',
-            event: { ...record, wsKey } as WebsocketResponseEvent,
+            eventType: this.handlePostMessage(record),
+            event: { ...record, wsKey } as WebsocketPostResponseEvent,
           },
         ];
       }
+      this.logger.error(
+        'Unhandled/unrecognised ws event message - returned no emittable data',
+        { ...this.WS_LOGGER_CATEGORY, wsKey, parsed },
+      );
       return [];
     }
 
     // Emit each wire message once. Subscription ownership never controls listeners.
     // Keep upstream channel names (including user and activeSpotAssetCtx) unchanged.
+    let data = record.data;
+    if (record.channel === 'fastAssetCtxs') {
+      try {
+        data = decompressFastAssetCtxs(data);
+      } catch (error) {
+        this.emitException(
+          wsKey,
+          error,
+          'Failed to decompress ws message event',
+        );
+        return [];
+      }
+    }
     return [
       {
         eventType: 'message',
         event: {
           ...record,
-          data:
-            record.channel === 'fastAssetCtxs'
-              ? decompressFastAssetCtxs(record.data)
-              : record.data,
+          data,
           wsKey,
         } as WebsocketMessageEvent,
       },
     ];
   }
 
-  private handlePostMessage(record: Record<string, unknown>): void {
+  private handlePostMessage(
+    record: Record<string, unknown>,
+  ): 'exception' | 'response' {
     const data = recordValue(record.data);
-    if (!data || typeof data.id !== 'number') {
-      return;
+    const response = recordValue(data?.response);
+    const actionResponse =
+      response?.type === 'action'
+        ? (recordValue(response.payload) as ExchangeResponse | undefined)
+        : undefined;
+    if (
+      !data ||
+      typeof data.id !== 'number' ||
+      !this.getWsStore().getDeferredPromise('api', String(data.id))
+    ) {
+      this.logUnmatchedResponse(data?.id, record);
+      return response?.type === 'error' || actionResponse?.status === 'err'
+        ? 'exception'
+        : 'response';
     }
-    const response = recordValue(data.response);
     if (!response || typeof response.type !== 'string') {
       this.rejectRequest(
         data.id,
@@ -350,7 +393,7 @@ export class WebsocketClient extends BaseWebsocketClient<
           'Hyperliquid returned a malformed WebSocket POST response.',
         ),
       );
-      return;
+      return 'exception';
     }
     if (response.type === 'error') {
       this.rejectRequest(
@@ -361,7 +404,7 @@ export class WebsocketClient extends BaseWebsocketClient<
             : 'Hyperliquid rejected the WebSocket request.',
         ),
       );
-      return;
+      return 'exception';
     }
     if (response.type === 'info') {
       this.getWsStore().resolveDeferredPromise(
@@ -369,29 +412,29 @@ export class WebsocketClient extends BaseWebsocketClient<
         String(data.id),
         recordValue(response.payload)?.data,
       );
-      return;
+      return 'response';
     }
     if (response.type === 'action') {
-      const actionResponse = recordValue(response.payload) as
-        ExchangeResponse | undefined;
-      if (
-        actionResponse?.status === 'err' &&
-        typeof actionResponse.response === 'string'
-      ) {
+      if (actionResponse?.status === 'err') {
         this.rejectRequest(
           data.id,
-          new HyperliquidApiError(actionResponse.response, {
-            response: response.payload,
-          }),
+          new HyperliquidApiError(
+            typeof actionResponse.response === 'string'
+              ? actionResponse.response
+              : 'Hyperliquid rejected the WebSocket action.',
+            {
+              response: response.payload,
+            },
+          ),
         );
-      } else {
-        this.getWsStore().resolveDeferredPromise(
-          'api',
-          String(data.id),
-          response.payload,
-        );
+        return 'exception';
       }
-      return;
+      this.getWsStore().resolveDeferredPromise(
+        'api',
+        String(data.id),
+        response.payload,
+      );
+      return 'response';
     }
     this.rejectRequest(
       data.id,
@@ -399,6 +442,37 @@ export class WebsocketClient extends BaseWebsocketClient<
         `Hyperliquid returned an unknown WebSocket POST response type "${response.type}".`,
       ),
     );
+    return 'exception';
+  }
+
+  private logUnmatchedResponse(
+    requestId: unknown,
+    parsed: Record<string, unknown>,
+  ): void {
+    const context = {
+      ...this.WS_LOGGER_CATEGORY,
+      wsKey: 'api',
+      requestId,
+      parsed,
+    };
+    // IDs are monotonic for this client. A known ID without a pending promise has
+    // already settled (for example by timeout or abort); its late reply is expected.
+    if (
+      typeof requestId === 'number' &&
+      Number.isSafeInteger(requestId) &&
+      requestId > 0 &&
+      requestId <= this.nextRequestId
+    ) {
+      this.logger.trace(
+        'WS API response received for a settled request',
+        context,
+      );
+    } else {
+      this.logger.error(
+        'WS API response could not be correlated to request',
+        context,
+      );
+    }
   }
 
   private rejectRequest(id: number, error: unknown): void {

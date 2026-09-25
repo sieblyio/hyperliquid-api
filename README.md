@@ -400,7 +400,9 @@ const coin = await ws.nameToCoin('HYPE/USDC');
 await ws.subscribe({ type: 'trades', coin });
 ```
 
-`connectionTimeout` bounds connection attempts and defaults to 10,000 ms. Pings run every 30,000 ms with a 10,000 ms pong deadline. Set `pingInterval: 0` to disable pings or `pongTimeout: 0` to disable that deadline. Reconnect delays start at 500 ms and double up to 30,000 ms; configure `reconnectTimeout` and `maxReconnectTimeout` to change them, or set `autoReconnect: false` to disable recovery. Timeouts must be finite and positive; ping and reconnect controls also accept zero. Use `off()` or `removeAllListeners()` to remove listeners, and `close()` or `closeAll()` to close connections and clear their cached topics.
+`connectionTimeout` bounds connection attempts and defaults to 1,000 ms. Pings run every 10,000 ms with a 1,000 ms pong deadline. Set `pingInterval: 0` to disable pings or `pongTimeout: 0` to disable that deadline. Reconnect delays start at 500 ms and double up to 10,000 ms; configure `reconnectTimeout` and `maxReconnectTimeout` to change them, or set `autoReconnect: false` to disable recovery. Timeouts must be finite and positive; ping and reconnect controls also accept zero. Use `off()` or `removeAllListeners()` to remove listeners, and `close()` or `closeAll()` to close connections and clear their cached topics.
+
+Closing immediately rejects pending requests and clears timers. For an active socket, the `close` event confirms that the connection has actually closed. After an unexpected disconnect, reconnection restores subscriptions, but interrupted WS API requests are rejected rather than replayed.
 
 The previous callback form of `subscribe(topic, callback)` and its returned subscription handles have been removed. Register a `message` listener and pass the original topic to `unsubscribe()` when migrating existing consumers.
 
@@ -418,11 +420,17 @@ client.close();
 
 Use `client.getWSClient()` to access the underlying `WebsocketClient`, including lifecycle events and raw `sendWSAPIRequest()` calls. Use `WebsocketClient` directly for subscribe and consume workflows.
 
+WS API replies also emit events: successful replies use `response`, and exchange rejections use `exception` while rejecting the corresponding promise. Both preserve the exchange's reply and include `wsKey`.
+
 ## Logging
 
 ### Customise Logging
 
 Pass a custom logger as the second `WebsocketClient` or `WebsocketAPIClient` constructor argument. The logger must provide `trace`, `info`, and `error` methods. `DefaultLogger` keeps trace output disabled unless you override it.
+
+Connection, reconnection, closure, and heartbeat timeouts log at `info` level. Enable `trace` to see pings, pongs, subscriptions, messages, and WS API requests and responses. Logs include the `hyperliquid-ws` category and the connection's `wsKey` where applicable.
+
+Parsing, decompression, transport, and listener failures log at `error` level. Rejected WS API requests include their request ID and reason in `trace` output, including those interrupted by a disconnect or intentional close. Late replies to already-settled requests also log at `trace`, not `error`.
 
 ```ts
 import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';

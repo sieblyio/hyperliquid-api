@@ -45,8 +45,8 @@ wsClient.on('reconnected', (data) => {
   console.log('ws has reconnected ', data?.wsKey);
 });
 
-wsClient.on('exception', ({ event, wsKey }) => {
-  console.error('ws exception:', wsKey, event);
+wsClient.on('exception', ({ event, data, wsKey }) => {
+  console.error('ws exception:', wsKey, event ?? data);
 });
 
 function firstRestingOid(

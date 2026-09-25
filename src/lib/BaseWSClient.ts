@@ -4,9 +4,9 @@ import type { RequestOptions } from '../types/shared.types.js';
 import type {
   WebsocketClientEventMap,
   WebsocketClientOptions,
-  WebsocketExceptionEvent,
 } from '../types/websockets/ws-general.js';
 import type {
+  WebSocketCloseEvent,
   WebSocketConstructor,
   WebSocketLike,
   WebSocketMessageEvent,
@@ -71,16 +71,22 @@ export abstract class BaseWebsocketClient<
 > extends EventEmitter<WebsocketClientEventMap<TWsKey>> {
   protected readonly logger: Logger;
 
-  private readonly wsStore = new WsStore<TWsKey, TTopic>();
+  protected readonly WS_LOGGER_CATEGORY: { category: string };
+
+  private readonly wsStore: WsStore<TWsKey, TTopic>;
 
   private readonly options: Required<LifecycleOptions>;
 
   protected constructor(
-    options: LifecycleOptions = {},
+    options: LifecycleOptions & { wsLoggerCategory?: string } = {},
     logger: Logger = DefaultLogger,
   ) {
     super();
     this.logger = logger;
+    this.WS_LOGGER_CATEGORY = {
+      category: options.wsLoggerCategory ?? 'WsClient',
+    };
+    this.wsStore = new WsStore(logger, this.WS_LOGGER_CATEGORY);
     this.options = {
       autoReconnect: options.autoReconnect !== false,
       connectionTimeout: finiteTimeout(
@@ -147,9 +153,12 @@ export abstract class BaseWebsocketClient<
     state.connectionState = WsConnectionStateEnum.CONNECTING;
 
     try {
-      const socket = new this.options.webSocketConstructor(
-        this.getWsUrl(wsKey),
-      );
+      const url = this.getWsUrl(wsKey);
+      this.logger.trace(`Opening WS connection to URL: ${url}`, {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+      });
+      const socket = new this.options.webSocketConstructor(url);
       state.ws = socket;
       socket.binaryType = 'arraybuffer';
       socket.onopen = () => this.onWsOpen(wsKey, socket);
@@ -190,7 +199,7 @@ export abstract class BaseWebsocketClient<
       state.ws = undefined;
       this.clearTimers(state);
       if (socket) {
-        this.releaseSocket(socket, true, true);
+        this.releaseSocket(wsKey, socket, { close: true, force: true });
       }
       state.connectionState = WsConnectionStateEnum.ERROR;
       this.rejectConnection(state, error);
@@ -212,6 +221,10 @@ export abstract class BaseWebsocketClient<
     const added = topics.filter((topic) => this.wsStore.addTopic(wsKey, topic));
     if (!this.wsStore.isWsOpen(wsKey)) {
       // Cache first: the open/reconnect handler sends the latest set of topics.
+      this.logger.trace(
+        'WS not connected - requests queued for retry once connected.',
+        { ...this.WS_LOGGER_CATEGORY, wsKey, wsTopicRequests: added },
+      );
       await this.connectWebsocket(wsKey);
       return;
     }
@@ -232,12 +245,37 @@ export abstract class BaseWebsocketClient<
 
   protected tryWsSend(wsKey: TWsKey, message: string): void {
     const socket = this.wsStore.getWs(wsKey);
-    if (!socket || socket.readyState !== 1) {
-      throw new HyperliquidWebSocketError(
-        'The Hyperliquid WebSocket connection is not open.',
-      );
+    try {
+      this.logger.trace('Sending upstream ws message: ', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+        wsMessage: message,
+      });
+      if (!socket || !this.wsStore.isWsOpen(wsKey)) {
+        throw new HyperliquidWebSocketError(
+          'The Hyperliquid WebSocket connection is not open.',
+        );
+      }
+      socket.send(message);
+    } catch (error) {
+      this.logger.error('Failed to send WS message', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+        wsMessage: message,
+        exception: error,
+      });
+      this.emitEvent('exception', { wsKey, event: error });
+      if (socket) {
+        this.onWsDisconnect(
+          wsKey,
+          socket,
+          error,
+          this.requestSendError(error),
+          true,
+        );
+      }
+      throw error;
     }
-    socket.send(message);
   }
 
   protected sendRequest<T>(
@@ -267,23 +305,37 @@ export abstract class BaseWebsocketClient<
         ),
       );
     }, timeoutMs);
-    const abort = () =>
+    const abort = () => {
       this.wsStore.rejectDeferredPromise(
         wsKey,
         id,
         new HyperliquidWebSocketError('WebSocket request was aborted.'),
       );
+    };
     pending.cleanup = () => {
       clearTimeout(timer);
       options.signal?.removeEventListener?.('abort', abort);
     };
     options.signal?.addEventListener?.('abort', abort, { once: true });
 
+    this.logger.trace(`sendWSAPIRequest(): assert "${wsKey}" is connected`, {
+      ...this.WS_LOGGER_CATEGORY,
+      wsKey,
+      promiseRef: id,
+    });
     void this.connectWebsocket(wsKey)
       .then(() => {
         // A timed-out, cancelled or closed request must never be sent after opening.
         if (this.wsStore.getDeferredPromise(wsKey, id) === pending) {
           this.tryWsSend(wsKey, JSON.stringify(payload));
+          this.logger.trace(
+            `sendWSAPIRequest(): sent event with promiseRef(${id})`,
+            {
+              ...this.WS_LOGGER_CATEGORY,
+              wsKey,
+              promiseRef: id,
+            },
+          );
         }
       })
       .catch((error) => {
@@ -303,6 +355,20 @@ export abstract class BaseWebsocketClient<
     if (!state) {
       return;
     }
+    if (
+      state.connectionState === WsConnectionStateEnum.CLOSING &&
+      state.ws?.readyState === 2
+    ) {
+      return;
+    }
+    const alreadyClosed =
+      !state.ws && state.connectionState === WsConnectionStateEnum.INITIAL;
+    if (!alreadyClosed) {
+      this.logger.info('Closing connection', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+      });
+    }
     state.connectionState = WsConnectionStateEnum.CLOSING;
     this.clearTimers(state);
     const error = new HyperliquidWebSocketError(
@@ -310,11 +376,24 @@ export abstract class BaseWebsocketClient<
     );
     this.rejectConnection(state, error);
     this.wsStore.rejectAllDeferredPromises(wsKey, error);
+    state.subscribedTopics.clear();
+    state.messageQueue = undefined;
     const socket = state.ws;
-    this.wsStore.delete(wsKey);
     if (socket) {
-      this.releaseSocket(socket, true);
+      this.releaseSocket(wsKey, socket, {
+        close: true,
+        onClose: (event) => {
+          // A late close from a replaced socket must not close the new connection.
+          if (this.wsStore.get(wsKey) !== state) return;
+          this.wsStore.delete(wsKey);
+          this.emitEvent('close', { wsKey, event });
+        },
+      });
+      return;
     }
+    // Cancel a queued reconnect even when there is no socket left to close.
+    this.wsStore.delete(wsKey);
+    if (alreadyClosed) return;
     this.emitEvent('close', {
       wsKey,
       event: { code: 1000, reason: 'Client closed' },
@@ -322,12 +401,27 @@ export abstract class BaseWebsocketClient<
   }
 
   closeAll(): void {
-    for (const wsKey of this.wsStore.getKeys()) {
+    const keys = this.wsStore.getKeys();
+    if (keys.length) {
+      this.logger.info(`Closing all ws connections: ${keys}`, {
+        ...this.WS_LOGGER_CATEGORY,
+      });
+    }
+    for (const wsKey of keys) {
       this.closeWebsocket(wsKey);
     }
   }
 
-  protected emitException(wsKey: TWsKey, event: unknown): void {
+  protected emitException(
+    wsKey: TWsKey,
+    event: unknown,
+    message = 'WebSocket exception',
+  ): void {
+    this.logger.error(message, {
+      ...this.WS_LOGGER_CATEGORY,
+      wsKey,
+      error: event,
+    });
     this.emitEvent('exception', { event, wsKey });
   }
 
@@ -335,29 +429,41 @@ export abstract class BaseWebsocketClient<
     eventType: K,
     event: WebsocketClientEventMap<TWsKey>[K][0],
   ): void {
-    if (eventType === 'exception') {
-      const exception = event as WebsocketExceptionEvent<TWsKey>;
-      this.logger.error(
-        'WebSocket exception',
-        exception.wsKey,
-        exception.event ?? exception.data,
-      );
-    } else if (eventType !== 'message' && eventType !== 'response') {
-      this.logger.trace('WebSocket lifecycle', eventType, event.wsKey);
+    if (
+      eventType === 'message' ||
+      eventType === 'response' ||
+      eventType === 'exception'
+    ) {
+      this.logger.trace(`onWsMessage().emit(${eventType})`, {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey: event.wsKey,
+        event,
+      });
     }
     try {
       this.emit(eventType, ...([event] as WebsocketClientEventMap<TWsKey>[K]));
     } catch (error) {
-      if (eventType === 'exception') {
-        this.logger.error('WebSocket exception listener failed', error);
-      } else {
-        this.emitException(event.wsKey, error);
+      this.logger.error(
+        `Exception in onWsMessage().emit(${eventType}) handler:`,
+        { ...this.WS_LOGGER_CATEGORY, wsKey: event.wsKey, error },
+      );
+      if (eventType !== 'exception') {
+        this.emitEvent('exception', { wsKey: event.wsKey, event: error });
       }
     }
   }
 
   private getOrCreateState(wsKey: TWsKey): WsStoredState<TTopic> {
-    const existing = this.wsStore.get(wsKey);
+    let existing = this.wsStore.get(wsKey);
+    if (existing?.connectionState === WsConnectionStateEnum.CLOSING) {
+      if (existing.ws && existing.ws.readyState < 2) {
+        throw new HyperliquidWebSocketError(
+          'The previous WebSocket connection could not close. Retry close() before reconnecting.',
+        );
+      }
+      this.wsStore.delete(wsKey);
+      existing = undefined;
+    }
     if (existing) {
       return existing;
     }
@@ -380,13 +486,25 @@ export abstract class BaseWebsocketClient<
     }
     const socket = this.wsStore.getWs(wsKey);
     try {
-      for (const request of this.getWsRequestEvents(wsKey, operation, topics)) {
+      const requests = this.getWsRequestEvents(wsKey, operation, topics);
+      const action =
+        operation === 'subscribe' ? 'Subscribing' : 'Unsubscribing';
+      this.logger.trace(
+        `${action} to ${topics.length} "${wsKey}" topics in ${requests.length} batches.`,
+        { ...this.WS_LOGGER_CATEGORY, wsKey, wsTopicRequests: topics },
+      );
+      for (const request of requests) {
         this.tryWsSend(wsKey, JSON.stringify(request));
       }
+      this.logger.trace(
+        `Finished ${action.toLowerCase()} to ${topics.length} "${wsKey}" topics in ${requests.length} batches.`,
+        { ...this.WS_LOGGER_CATEGORY, wsKey },
+      );
     } catch (error) {
       // Recover from a failed send using the desired topic cache. Otherwise a
       // deduplicated retry could incorrectly assume this topic was already sent.
-      if (socket) {
+      if (socket && this.isCurrentConnection(wsKey, socket)) {
+        this.emitException(wsKey, error, 'Failed to send WS message');
         this.onWsDisconnect(wsKey, socket, error, error, true);
       }
       throw error;
@@ -401,16 +519,19 @@ export abstract class BaseWebsocketClient<
     clearTimeout(state.activeConnectionTimer);
     state.activeConnectionTimer = undefined;
     state.connectionState = WsConnectionStateEnum.CONNECTED;
+    const eventType = state.hasOpened ? 'reconnected' : 'open';
+    this.logger.info(
+      eventType === 'open' ? 'Websocket connected' : 'Websocket reconnected',
+      { ...this.WS_LOGGER_CATEGORY, wsKey, wsUrl: this.getWsUrl(wsKey) },
+    );
 
     try {
       this.requestTopics(wsKey, 'subscribe', this.wsStore.getTopics(wsKey));
     } catch (error) {
-      this.emitException(wsKey, error);
       this.onWsDisconnect(wsKey, socket, error, error, true);
       return;
     }
 
-    const eventType = state.hasOpened ? 'reconnected' : 'open';
     state.hasOpened = true;
     state.reconnectAttempts = 0;
 
@@ -441,6 +562,12 @@ export abstract class BaseWebsocketClient<
       try {
         for (const event of this.resolveEmittableEvents(wsKey, message)) {
           if (event.eventType === 'pong') {
+            this.logger.trace('Received PONG event', {
+              ...this.WS_LOGGER_CATEGORY,
+              wsKey,
+              eventData: message,
+              source: 'event',
+            });
             clearTimeout(state.activePongTimer);
             state.activePongTimer = undefined;
           } else {
@@ -448,7 +575,7 @@ export abstract class BaseWebsocketClient<
           }
         }
       } catch (error) {
-        this.emitException(wsKey, error);
+        this.emitException(wsKey, error, 'Failed to parse ws event message');
       }
     };
     const decode = (): void | Promise<void> => {
@@ -473,7 +600,11 @@ export abstract class BaseWebsocketClient<
         const queued = work
           .catch((error) => {
             if (this.isCurrentConnection(wsKey, socket)) {
-              this.emitException(wsKey, error);
+              this.emitException(
+                wsKey,
+                error,
+                'Failed to parse ws event message',
+              );
             }
           })
           .finally(() => {
@@ -484,7 +615,7 @@ export abstract class BaseWebsocketClient<
         state.messageQueue = queued;
       }
     } catch (error) {
-      this.emitException(wsKey, error);
+      this.emitException(wsKey, error, 'Failed to parse ws event message');
     }
   }
 
@@ -498,9 +629,18 @@ export abstract class BaseWebsocketClient<
     if (!this.isCurrentConnection(wsKey, socket)) {
       return;
     }
+    if (!closeSocket) {
+      this.logger.info('Websocket connection closed', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+        event,
+      });
+    }
     const state = this.wsStore.get(wsKey, true);
     const wasConnecting = Boolean(state.connectionInProgress);
-    state.ws = undefined;
+    // Without recovery, keep the closing socket reachable until close is confirmed.
+    const waitingForClose = closeSocket && !this.options.autoReconnect;
+    state.ws = waitingForClose ? socket : undefined;
     state.messageQueue = undefined;
     this.clearTimers(state);
     this.rejectConnection(state, error);
@@ -508,11 +648,27 @@ export abstract class BaseWebsocketClient<
       wsKey,
       wasConnecting ? this.requestSendError(error) : error,
     );
-    state.connectionState = WsConnectionStateEnum.INITIAL;
-    this.releaseSocket(socket, closeSocket, true);
+    state.connectionState = waitingForClose
+      ? WsConnectionStateEnum.ERROR
+      : WsConnectionStateEnum.INITIAL;
+    this.releaseSocket(wsKey, socket, {
+      close: closeSocket,
+      force: true,
+      onClose: (closeEvent) => {
+        if (
+          !this.options.autoReconnect &&
+          this.wsStore.get(wsKey) === state &&
+          state.ws === socket
+        ) {
+          state.ws = undefined;
+          state.connectionState = WsConnectionStateEnum.INITIAL;
+          this.emitEvent('close', { event: closeEvent, wsKey });
+        }
+      },
+    });
     if (this.options.autoReconnect) {
       this.scheduleReconnect(wsKey, state, event);
-    } else {
+    } else if (!closeSocket) {
       this.emitEvent('close', { event, wsKey });
     }
   }
@@ -536,13 +692,29 @@ export abstract class BaseWebsocketClient<
     );
     state.reconnectAttempts += 1;
     state.connectionState = WsConnectionStateEnum.RECONNECTING;
+    this.logger.info('Reconnecting to websocket with delay...', {
+      ...this.WS_LOGGER_CATEGORY,
+      wsKey,
+      connectionDelayMs: delay,
+      attempt: state.reconnectAttempts,
+      cause: event,
+    });
     state.activeReconnectTimer = setTimeout(() => {
       state.activeReconnectTimer = undefined;
       if (this.wsStore.get(wsKey) !== state) {
         return;
       }
+      this.logger.info('Reconnecting to websocket', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+        attempt: state.reconnectAttempts,
+      });
       void this.connectWebsocket(wsKey).catch((error) => {
-        this.logger.trace('WebSocket reconnect attempt failed', wsKey, error);
+        this.logger.trace('WebSocket reconnect attempt failed', {
+          ...this.WS_LOGGER_CATEGORY,
+          wsKey,
+          error,
+        });
       });
     }, delay);
     this.emitEvent('reconnecting', {
@@ -557,36 +729,75 @@ export abstract class BaseWebsocketClient<
     state: WsStoredState<TTopic>,
   ): void {
     if (this.options.pingInterval === 0) {
+      this.logger.trace('Disabled client-to-server ping timer', {
+        ...this.WS_LOGGER_CATEGORY,
+        wsKey,
+      });
       return;
     }
 
+    this.logger.trace('Enabled ping timer', {
+      ...this.WS_LOGGER_CATEGORY,
+      wsKey,
+      pingInterval: this.options.pingInterval,
+      pongTimeout: this.options.pongTimeout,
+    });
     state.activePingTimer = setInterval(() => {
-      if (!this.isCurrentConnection(wsKey, socket) || socket.readyState !== 1) {
+      if (
+        !this.isCurrentConnection(wsKey, socket) ||
+        socket.readyState !== 1 ||
+        state.activePongTimer !== undefined
+      ) {
         return;
       }
       try {
-        if (
-          !this.sendPingEvent(wsKey) ||
-          this.options.pongTimeout === 0 ||
-          state.activePongTimer !== undefined
-        ) {
+        this.logger.trace('Sending ping', {
+          ...this.WS_LOGGER_CATEGORY,
+          wsKey,
+        });
+        if (!this.sendPingEvent(wsKey)) {
+          this.logger.trace('Ping was not sent; pong timeout not started', {
+            ...this.WS_LOGGER_CATEGORY,
+            wsKey,
+          });
+          return;
+        }
+        if (this.options.pongTimeout === 0) {
           return;
         }
         state.activePongTimer = setTimeout(() => {
           const error = new HyperliquidWebSocketError(
             'WebSocket heartbeat timed out.',
           );
+          this.logger.info(
+            this.options.autoReconnect
+              ? 'Pong timeout - closing socket to reconnect'
+              : 'Pong timeout - closing socket',
+            {
+              ...this.WS_LOGGER_CATEGORY,
+              wsKey,
+              reason: 'Pong timeout',
+              pongTimeout: this.options.pongTimeout,
+            },
+          );
           this.onWsDisconnect(wsKey, socket, error, error, true);
         }, this.options.pongTimeout);
       } catch (error) {
-        this.emitException(wsKey, error);
-        this.onWsDisconnect(wsKey, socket, error, error, true);
+        if (this.isCurrentConnection(wsKey, socket)) {
+          this.emitException(wsKey, error, 'Failed to send ping');
+          this.onWsDisconnect(wsKey, socket, error, error, true);
+        }
       }
     }, this.options.pingInterval);
   }
 
   private isCurrentConnection(wsKey: TWsKey, socket: WebSocketLike): boolean {
-    return this.wsStore.getWs(wsKey) === socket;
+    const state = this.wsStore.get(wsKey);
+    return (
+      state?.ws === socket &&
+      (state.connectionState === WsConnectionStateEnum.CONNECTING ||
+        state.connectionState === WsConnectionStateEnum.CONNECTED)
+    );
   }
 
   private rejectConnection(state: WsStoredState<TTopic>, error: unknown): void {
@@ -606,9 +817,13 @@ export abstract class BaseWebsocketClient<
   }
 
   private releaseSocket(
+    wsKey: TWsKey,
     socket: WebSocketLike,
-    closeSocket: boolean,
-    force = false,
+    options: {
+      close?: boolean;
+      force?: boolean;
+      onClose?: (event: WebSocketCloseEvent) => void;
+    } = {},
   ): void {
     socket.onopen = null;
     socket.onmessage = null;
@@ -616,15 +831,46 @@ export abstract class BaseWebsocketClient<
     // Node's ws may report an expected abort error while closing a connecting socket.
     // Keep a handler on this retired socket so that its error cannot become unhandled.
     socket.onerror = () => undefined;
-    if (closeSocket) {
+    if (options.close) {
+      const onClose = (event: WebSocketCloseEvent) => {
+        if (socket.onclose !== onClose) return;
+        socket.onclose = null;
+        this.logger.info('Websocket connection closed', {
+          ...this.WS_LOGGER_CATEGORY,
+          wsKey,
+          event,
+        });
+        options.onClose?.(event);
+      };
+      socket.onclose = onClose;
+      if (socket.readyState === 3) {
+        onClose({});
+        return;
+      }
       try {
-        if (force && socket.terminate) {
+        if (options.force && socket.terminate) {
           socket.terminate();
         } else {
           socket.close(1000, 'Client closed');
         }
       } catch (error) {
-        this.logger.error('Failed to close a WebSocket connection', error);
+        this.emitException(
+          wsKey,
+          error,
+          'Failed to close a WebSocket connection',
+        );
+        // Node can still release a socket if graceful close failed.
+        if (!options.force && socket.terminate) {
+          try {
+            socket.terminate();
+          } catch (terminateError) {
+            this.emitException(
+              wsKey,
+              terminateError,
+              'Failed to terminate a WebSocket connection',
+            );
+          }
+        }
       }
     }
   }

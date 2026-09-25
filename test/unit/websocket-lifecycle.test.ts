@@ -195,8 +195,173 @@ describe('WebsocketClient lifecycle', () => {
       wsKey: 'public',
       event: new Error('ping failed'),
     });
+    expect(exception).toHaveBeenCalledTimes(1);
+    expect(LOGGER.error).toHaveBeenCalledTimes(1);
+    expect(LOGGER.error).toHaveBeenCalledWith(
+      'Failed to send WS message',
+      expect.objectContaining({
+        category: 'hyperliquid-ws',
+        wsKey: 'public',
+        exception: new Error('ping failed'),
+      }),
+    );
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('waits for socket close confirmation while rejecting pending requests immediately', async () => {
+    const client = createClient();
+    const close = jest.fn();
+    client.on('close', close);
+    const request = client.sendWSAPIRequest('info', { type: 'allMids' });
+    const rejected = expect(request).rejects.toThrow('client was closed');
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+    await jest.advanceTimersByTimeAsync(0);
+    jest.spyOn(socket, 'close').mockImplementationOnce(() => {
+      socket.readyState = FakeWebSocket.CLOSING;
+    });
+    client.close('api');
+    await rejected;
+    expect(jest.getTimerCount()).toBe(0);
+    expect(close).not.toHaveBeenCalled();
+    expect(LOGGER.info).not.toHaveBeenCalledWith(
+      'Websocket connection closed',
+      expect.anything(),
+    );
+    const onClose = socket.onclose;
+    socket.serverClose(1000, 'Confirmed');
+    onClose?.({ code: 1000, reason: 'Duplicate notification' });
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith({
+      wsKey: 'api',
+      event: { code: 1000, reason: 'Confirmed' },
+    });
+    expect(
+      LOGGER.info.mock.calls.filter(
+        ([message]) => message === 'Websocket connection closed',
+      ),
+    ).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(100);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  test('a late intentional close cannot emit close for or clear a replacement connection', async () => {
+    const client = createClient();
+    const old = await connect(client);
+    const close = jest.fn();
+    const message = jest.fn();
+    client.on('close', close).on('message', message);
+    jest.spyOn(old, 'close').mockImplementationOnce(() => {
+      old.readyState = FakeWebSocket.CLOSING;
+    });
+    client.close();
+    const next = await connect(client);
+    old.serverClose();
+    expect(client.isConnected()).toBe(true);
+    expect(close).not.toHaveBeenCalled();
+    next.message({ channel: 'allMids', data: { mids: {} } });
+    expect(message).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps a failed socket reachable until closure is confirmed when recovery is disabled', async () => {
+    const client = createClient({ autoReconnect: false });
+    const socket = await connect(client);
+    const close = jest.fn();
+    client.on('close', close);
+    jest.spyOn(socket, 'close').mockImplementation(() => {
+      socket.readyState = FakeWebSocket.CLOSING;
+    });
+    socket.error(new Error('Transport failed'));
+    client.close();
+    expect(close).not.toHaveBeenCalled();
+    socket.serverClose(1000, 'Confirmed');
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith({
+      wsKey: 'public',
+      event: { code: 1000, reason: 'Confirmed' },
+    });
+    client.close();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  test('retains a socket after close throws so closure can be retried', async () => {
+    const client = createClient();
+    const socket = await connect(client);
+    const close = jest.fn();
+    client.on('close', close);
+    jest.spyOn(socket, 'close').mockImplementationOnce(() => {
+      throw new Error('close failed');
+    });
+    client.close();
+    expect(client.isConnected()).toBe(false);
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+    expect(close).not.toHaveBeenCalled();
+    expect(LOGGER.info).not.toHaveBeenCalledWith(
+      'Websocket connection closed',
+      expect.anything(),
+    );
+    expect(() => client.connect()).toThrow('Retry close()');
+    client.close();
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('terminates a Node socket when graceful close throws', async () => {
+    const client = createClient();
+    const socket = await connect(client);
+    const terminate = jest.fn(() => socket.serverClose(1006, 'Terminated'));
+    Object.assign(socket, { terminate });
+    jest.spyOn(socket, 'close').mockImplementationOnce(() => {
+      throw new Error('close failed');
+    });
+    const close = jest.fn();
+    client.on('close', close);
+    client.close();
+    expect(terminate).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledWith({
+      wsKey: 'public',
+      event: { code: 1006, reason: 'Terminated' },
+    });
+    expect(client.isConnected()).toBe(false);
+  });
+
+  test('does not send another ping or extend the deadline while awaiting a pong', async () => {
+    const client = createClient({
+      autoReconnect: false,
+      pingInterval: 5,
+      pongTimeout: 20,
+    });
+    const socket = await connect(client);
+    await jest.advanceTimersByTimeAsync(24);
+    expect(socket.jsonMessages()).toEqual([{ method: 'ping' }]);
+    expect(client.isConnected()).toBe(true);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(client.isConnected()).toBe(false);
+  });
+
+  test('an API send failure rejects concurrent requests and recovers without replaying them', async () => {
+    const client = createClient();
+    const connection = client.connect('api');
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+    await connection;
+    jest.spyOn(socket, 'send').mockImplementationOnce(() => {
+      throw new Error('send failed');
+    });
+    const requests = [
+      client.sendWSAPIRequest('info', { type: 'allMids' }),
+      client.sendWSAPIRequest('info', { type: 'meta' }),
+    ];
+    const results = await Promise.allSettled(requests);
+    expect(results.every((result) => result.status === 'rejected')).toBe(true);
+    expect(LOGGER.error).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(5);
+    const replacement = FakeWebSocket.instances[1];
+    replacement.open();
+    expect(replacement.jsonMessages()).toEqual([]);
+    expect(client.isConnected('api')).toBe(true);
   });
 
   test('empty topic arrays and unknown unsubscriptions never open a connection', async () => {
