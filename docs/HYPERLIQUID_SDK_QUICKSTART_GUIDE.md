@@ -140,15 +140,17 @@ siebly:
           - label: Read endpoint fields
             owner: app
       - heading: WebSocket subscription flow
-        summary: Subscribe with an object, receive the initial snapshot where provided, then process updates.
+        summary: Register event listeners, subscribe to topics, then handle acknowledgements and data separately.
         steps:
-          - label: Choose subscription
+          - label: Register message and response listeners
             owner: app
-          - label: Call subscribe
+          - label: Call subscribe with native topics
             owner: app
-          - label: Connect and register
+          - label: Connect and send subscriptions
             owner: sdk
-          - label: Receive snapshot or update
+          - label: Receive acknowledgement through response
+            owner: event
+          - label: Receive data through message
             owner: event
           - label: Update local state
             owner: app
@@ -501,7 +503,7 @@ main();
 
 Asset IDs differ across Mainnet and Testnet. Resolve them against the same network that will receive the request. Do not add `-PERP` or `-SPOT` suffixes.
 
-`getOrderBook()`, `getCandles()`, and `getFundingHistory()` apply Hyperliquid's native name mapping where required. For example, a readable Spot alias such as `HYPE/USDC` resolves to its current `@` name, while `PURR/USDC` is already a native universe name. Streaming subscriptions, `getRecentTrades()`, and `getActiveAssetData()` expect an official coin name. Call `nameToCoin()` explicitly when starting with a readable Spot alias, then pass the result as `coin`. Subscribing with a native coin name does not make a REST metadata request.
+`getOrderBook()`, `getCandles()`, and `getFundingHistory()` apply Hyperliquid's native name mapping where required. For example, a readable Spot alias such as `HYPE/USDC` resolves to its current `@` name, while `PURR/USDC` is already a native universe name. Streaming subscriptions, `getRecentTrades()`, and `getActiveAssetData()` expect an official coin name. Call `nameToCoin()` explicitly when starting with a readable Spot alias, then pass the result as `coin`. Subscribing with a native coin name does not make a REST API metadata request.
 
 <!-- siebly:section id="websocket-streams" -->
 
@@ -554,8 +556,10 @@ async function main() {
     }
   });
 
-  client.on('response', (response) => {
-    console.log('WebSocket response:', response);
+  client.on('response', ({ channel, data, wsKey }) => {
+    if (channel === 'subscriptionResponse') {
+      console.log('Subscription acknowledgement:', wsKey, data);
+    }
   });
 
   try {
@@ -575,11 +579,54 @@ main();
 
 Hyperliquid sends a [subscription acknowledgement](https://siebly.io/reference/glossary#subscription-acknowledgement) when the subscription is registered. The SDK emits that protocol message through `response`. Market and account updates arrive through `message`, preserving the full `{ channel, data, wsKey }` envelope.
 
+Register listeners before subscribing. Each incoming data message is emitted once, and every registered `message` listener receives it. Filter by `channel` and the payload's coin or user when consuming several feeds.
+
 The promise returned by `subscribe()` resolves after the socket opens and the request is sent. It does not wait for the server acknowledgement, so do not use that promise alone as a stream-readiness signal.
 
-Some channels send an initial snapshot before later updates. `l2Book` sends a current book, while `allMids`, trades, and candles continue with new values. The SDK sends heartbeat pings on quiet connections.
+Some channels send an initial snapshot before later updates. `l2Book` sends a current book, while `allMids`, trades, and candles continue with new values. The SDK sends regular heartbeat pings to check connection health.
 
-`subscribe()` and `unsubscribe()` accept one topic or an array of topics. Equivalent topics are deduplicated by value. Listeners are independent of subscriptions: use `off('message', listener)` to remove a listener and `unsubscribe(topic)` to stop a stream. Call `client.closeAll()` when the application needs to close its WebSocket connections. `connectionTimeout` bounds connection setup and defaults to 10 seconds.
+`subscribe()` and `unsubscribe()` accept one topic or an array of topics. Equivalent topics are deduplicated by value. Listeners are independent of subscriptions: use `off('message', listener)` to remove a listener and `unsubscribe(topic)` to stop a stream. Call `client.closeAll()` when the application needs to close its WebSocket connections.
+
+`connectionTimeout` defaults to 1,000 ms. Heartbeats use a 10,000 ms ping interval and a 1,000 ms pong deadline. Increase `connectionTimeout` or `pongTimeout` for a higher-latency connection. Reconnect delays start at 500 ms and double up to 10,000 ms.
+
+#### Subscribe to a Spot market
+
+Resolve a readable Spot pair once, then subscribe with its native coin name. The lookup uses the REST API; `subscribe()` itself only sends WebSocket messages.
+
+```javascript
+import { WebsocketClient } from '@siebly/hyperliquid-api';
+
+const client = new WebsocketClient();
+
+client.on('message', ({ channel, data }) => {
+  if (channel === 'l2Book') {
+    console.log('Spot book:', data.coin, data.levels);
+  }
+});
+
+client.on('exception', ({ wsKey, event, data }) => {
+  console.error('WebSocket exception:', wsKey, event ?? data);
+});
+
+async function main() {
+  let coin;
+
+  try {
+    coin = await client.nameToCoin('HYPE/USDC');
+  } catch (error) {
+    console.error('Spot-name lookup failed:', error);
+    return;
+  }
+
+  try {
+    await client.subscribe({ type: 'l2Book', coin });
+  } catch (error) {
+    console.error('Spot subscription failed:', error);
+  }
+}
+
+main();
+```
 
 ### 5. Subscribe to account updates
 
@@ -1025,8 +1072,8 @@ async function main() {
     .on('reconnected', ({ wsKey }) => {
       console.log('WebSocket API reconnected:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket API exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket API exception:', wsKey, event ?? data);
     });
 
   let btc;
@@ -1144,6 +1191,10 @@ main();
 ```
 
 WebSocket POST supports Info requests and signed Exchange actions. Explorer requests are not supported. Use `WebsocketClient` for subscriptions and `WebsocketAPIClient` for awaitable request-response calls.
+
+Successful POST replies also emit `response` events with `channel: 'post'` and `wsKey: 'api'`. Protocol errors and top-level Exchange rejections emit `exception` and reject the matching promise. An accepted action can still contain individual order errors, so inspect its status entries. Use `try`/`catch` for each command; event listeners provide additional connection and protocol diagnostics.
+
+`requestTimeoutMs` defaults to 10,000 ms and includes connection setup. Requests interrupted by a disconnect are rejected, not replayed after reconnection. Query the order's status before retrying a command whose outcome is uncertain.
 
 An order-command response acknowledges the action and reports its immediate status. Confirm later changes through `orderUpdates` or `getOrderStatus()`. That distinction is important when an order fills or is cancelled immediately after its first response.
 
@@ -1267,8 +1318,10 @@ let accountState = {
   openOrders: [],
   recentFills: [],
 };
+let recoveryVersion = 0;
 
 async function reloadAccountState() {
+  const version = ++recoveryVersion;
   let balances;
   let openOrders;
   let recentFills;
@@ -1293,6 +1346,11 @@ async function reloadAccountState() {
     });
   } catch (error) {
     console.error('Fill recovery failed:', error);
+    return;
+  }
+
+  // A newer recovery must not be overwritten by an older request sequence.
+  if (version !== recoveryVersion) {
     return;
   }
 
@@ -1341,6 +1399,8 @@ main();
 This is [REST API hydration](https://siebly.io/reference/glossary#rest-hydration): rebuilding trusted [account state](https://siebly.io/reference/glossary#accountstate) from current REST API reads after a stream gap. Use [Scoped Recovery](https://siebly.io/reference/glossary#scoped-recovery) to reload only the state owned by the affected connection, and see [Exchange State](https://siebly.io/reference/exchange-state) and [Runtime Workflows](https://siebly.io/reference/runtime-workflows) for wider state-management patterns.
 
 If the process stores a durable fill cursor, reload by time and deduplicate by trade ID before replacing state. The initial `userFills` snapshot after resubscription may overlap with the REST API result.
+
+Here, `orderUpdates` uses `user:<address>` while `userFills` uses `public`, so either connection can trigger recovery. The version counter prevents overlapping recoveries from publishing out of order. This example logs stream events separately; a live state cache also needs to reconcile events received while its REST API reads are in flight.
 
 <!-- siebly:section id="api-hosts" -->
 
@@ -1535,7 +1595,7 @@ main();
 
 Set `keepAlive: false` so the SDK preserves the custom agent, and set `proxy: false` so Axios does not apply separate environment-proxy handling on top of it.
 
-`webSocketConstructor` routes the socket itself. All streaming subscriptions use native coin names and avoid REST metadata requests. `requestOptions.proxy` routes REST API metadata requests if you explicitly call `nameToCoin()` or `resolveAsset()` on the streaming client.
+`webSocketConstructor` routes the socket itself. Streaming subscriptions send native topics without REST API metadata requests. `requestOptions.proxy` routes REST API metadata requests if you explicitly call `nameToCoin()` or `resolveAsset()` on the streaming client.
 
 ### SOCKS5 proxy
 
@@ -1633,7 +1693,7 @@ async function main() {
 main();
 ```
 
-Set `keepAlive: false` so the REST API client preserves the SOCKS agent. Streaming subscriptions use native coin names and do not trigger REST metadata lookups. Resolve readable aliases with the configured `restClient.nameToCoin()` first, then pass the result to `websocketClient.subscribe()`, so alias resolution also follows the SOCKS route.
+Set `keepAlive: false` so the REST API client preserves the SOCKS agent. Streaming subscriptions do not trigger REST API metadata lookups. Resolve readable aliases with the configured `restClient.nameToCoin()` first, then pass the result to `websocketClient.subscribe()`, so alias resolution also follows the SOCKS route.
 
 A proxy changes the network route, not the account, network, or available products. Monitor latency, disconnects, and the proxy's egress IP.
 
@@ -1700,7 +1760,7 @@ It sends an immediate-or-cancel limit order with a protection price. The SDK der
 
 ### How do I tell perpetual and Spot assets apart?
 
-Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. REST helpers can resolve readable metadata-derived aliases such as `HYPE/USDC`. For streaming subscriptions, call `nameToCoin()` explicitly to resolve an alias, then subscribe with the returned native coin name.
+Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. REST API helpers can resolve readable metadata-derived aliases such as `HYPE/USDC`. For streaming subscriptions, call `nameToCoin()` explicitly to resolve an alias, then subscribe with the returned native coin name.
 
 ### Do account WebSocket streams require authentication?
 

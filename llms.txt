@@ -38,7 +38,7 @@ Notes:
 ------
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: .github/, examples/apidoc/, docs/images/, docs/endpointFunctionList.md, test/, src/lib/, dist/
+- Files matching these patterns are excluded: .github/, examples/apidoc/, docs/images/, docs/endpointFunctionList.md, test/, src/lib/, dist/, tmp/, llms.txt
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Content has been compressed - code blocks are separated by ⋮---- delimiter
@@ -80,6 +80,7 @@ src/
       exchange.types.ts
       info.types.ts
     websockets/
+      ws-events.ts
       ws-general.ts
       ws-portable.ts
       ws-subscriptions.ts
@@ -94,6 +95,7 @@ src/
 .nvmrc
 .prettierrc
 eslint.config.cjs
+hyperliquid-api.code-workspace
 jest.config.cjs
 LICENSE.md
 package.json
@@ -107,6 +109,501 @@ tsconfig.linting.json
 ================================================================
 Files
 ================================================================
+
+================
+File: hyperliquid-api.code-workspace
+================
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "git.ignoreLimitWarning": true,
+  },
+}
+
+================
+File: scripts/clean.mjs
+================
+
+
+================
+File: src/types/request/info.types.ts
+================
+export interface AccountRequest {
+  user?: string;
+}
+⋮----
+export interface AccountDexRequest extends AccountRequest {
+  dex?: string;
+}
+⋮----
+export interface UserRequest {
+  user: string;
+}
+⋮----
+export interface TimeRangeRequest extends AccountRequest {
+  endTime?: number;
+  startTime?: number;
+}
+⋮----
+export interface GetCandlesRequest {
+  coin: string;
+  endTime?: number;
+  interval:
+    | '1d'
+    | '12h'
+    | '15m'
+    | '1h'
+    | '1m'
+    | '2h'
+    | '30m'
+    | '3d'
+    | '3m'
+    | '4h'
+    | '5m'
+    | '8h'
+    | '1w'
+    | '1M';
+  startTime: number;
+}
+⋮----
+export interface GetOrderBookRequest {
+  coin: string;
+  mantissa?: 1 | 2 | 5 | null;
+  nSigFigs?: 2 | 3 | 4 | 5 | null;
+}
+⋮----
+export interface GetUserFillsRequest extends AccountRequest {
+  aggregateByTime?: boolean;
+}
+⋮----
+export interface GetUserFillsByTimeRequest extends TimeRangeRequest {
+  aggregateByTime?: boolean;
+  reversed?: boolean;
+  startTime: number;
+}
+⋮----
+export interface GetUserFundingHistoryRequest extends AccountRequest {
+  endTime?: number;
+  startTime?: number;
+}
+⋮----
+export interface GetFundingHistoryRequest {
+  coin: string;
+  endTime?: number;
+  startTime: number;
+}
+⋮----
+export interface GetUserNonFundingLedgerUpdatesRequest extends AccountRequest {
+  endTime?: number;
+  startTime?: number;
+}
+⋮----
+export interface GetOrderStatusRequest extends AccountRequest {
+  oid: number | string;
+}
+⋮----
+export interface GetUserTwapSliceFillsByTimeRequest extends AccountRequest {
+  endTime?: number;
+  startTime: number;
+}
+⋮----
+export interface GetUserBorrowLendInterestRequest extends AccountRequest {
+  endTime?: number;
+  startTime: number;
+}
+⋮----
+export interface GetMaxBuilderFeeRequest extends AccountRequest {
+  builder: string;
+}
+⋮----
+export interface GetPreTransferCheckRequest extends UserRequest {
+  source: string;
+}
+⋮----
+export interface GetVaultDetailsRequest {
+  user?: string;
+  vaultAddress: string;
+}
+
+================
+File: src/types/response/exchange.types.ts
+================
+export interface ExchangeErrorResponse {
+  response: string;
+  status: 'err';
+}
+⋮----
+export interface ExchangeSuccessResponse<Data = unknown> {
+  response: {
+    data?: Data;
+    type: string;
+    [key: string]: unknown;
+  };
+  status: 'ok';
+}
+⋮----
+export type ExchangeResponse<Data = unknown> =
+  ExchangeErrorResponse | ExchangeSuccessResponse<Data>;
+⋮----
+export interface OrderRestingStatus {
+  resting: {
+    oid: number;
+  };
+}
+⋮----
+export interface OrderFilledStatus {
+  filled: {
+    avgPx: string;
+    oid: number;
+    totalSz: string;
+  };
+}
+⋮----
+export interface OrderErrorStatus {
+  error: string;
+}
+⋮----
+export type OrderStatus =
+  OrderErrorStatus | OrderFilledStatus | OrderRestingStatus;
+⋮----
+export interface OrderResponseData {
+  statuses: OrderStatus[];
+}
+
+================
+File: src/types/response/info.types.ts
+================
+export type InfoResponse =
+  Record<string, unknown> | unknown[] | boolean | number | string | null;
+⋮----
+export type AllMidsResponse = Record<string, string>;
+⋮----
+export type UserRoleResponse =
+  | { role: 'agent'; data: { user: string } }
+  | { role: 'missing' | 'user' | 'vault' }
+  | { role: 'subAccount'; data: { master: string } };
+⋮----
+export interface OrderBookLevel {
+  n: number;
+  px: string;
+  sz: string;
+}
+⋮----
+export interface OrderBookResponse {
+  coin: string;
+  fast?: true;
+  levels: [OrderBookLevel[], OrderBookLevel[]];
+  spread?: string;
+  time: number;
+}
+⋮----
+export interface Candle {
+  T: number;
+  c: string;
+  h: string;
+  i:
+    | '1d'
+    | '12h'
+    | '15m'
+    | '1h'
+    | '1m'
+    | '1M'
+    | '2h'
+    | '30m'
+    | '3d'
+    | '3m'
+    | '4h'
+    | '5m'
+    | '8h'
+    | '1w';
+  l: string;
+  n: number;
+  o: string;
+  s: string;
+  t: number;
+  v: string;
+}
+⋮----
+export interface OpenOrder {
+  coin: string;
+  limitPx: string;
+  oid: number;
+  origSz: string;
+  side: 'A' | 'B';
+  sz: string;
+  timestamp: number;
+  [key: string]: unknown;
+}
+⋮----
+export interface SpotBalance {
+  coin: string;
+  entryNtl: string;
+  hold: string;
+  token: number;
+  total: string;
+}
+⋮----
+export interface SpotBalancesResponse {
+  balances: SpotBalance[];
+  tokenToAvailableAfterMaintenance?: Array<[token: number, available: string]>;
+}
+⋮----
+export interface PerpMarginSummary {
+  accountValue: string;
+  totalMarginUsed: string;
+  totalNtlPos: string;
+  totalRawUsd: string;
+}
+⋮----
+export interface PerpAccountSummaryResponse {
+  assetPositions: unknown[];
+  crossMaintenanceMarginUsed: string;
+  crossMarginSummary: PerpMarginSummary;
+  marginSummary: PerpMarginSummary;
+  time?: number;
+  withdrawable: string;
+  [key: string]: unknown;
+}
+⋮----
+export interface AccountBalancesResponse {
+  perp: PerpAccountSummaryResponse;
+  spot: SpotBalancesResponse;
+  user: string;
+}
+⋮----
+export interface UserFill {
+  closedPnl: string;
+  coin: string;
+  crossed: boolean;
+  dir: string;
+  fee: string;
+  hash: string;
+  oid: number;
+  px: string;
+  side: 'A' | 'B';
+  sz: string;
+  time: number;
+  tid: number;
+  [key: string]: unknown;
+}
+⋮----
+export interface PerpMeta {
+  universe: Array<{
+    isDelisted?: boolean;
+    maxLeverage: number;
+    name: string;
+    onlyIsolated?: boolean;
+    szDecimals: number;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+⋮----
+export interface SpotMeta {
+  tokens: Array<{
+    index: number;
+    name: string;
+    tokenId: string;
+    weiDecimals: number;
+    szDecimals: number;
+    [key: string]: unknown;
+  }>;
+  universe: Array<{
+    index: number;
+    name: string;
+    tokens: number[];
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+================
+File: src/types/websockets/ws-events.ts
+================
+import type { WsKey } from './ws-general.js';
+import type {
+  AssetContextEvent,
+  UserEvent,
+  WebsocketSubscription,
+  WebsocketSubscriptionData,
+} from './ws-subscriptions.js';
+⋮----
+export type WebsocketChannel =
+  | Exclude<keyof WebsocketSubscriptionData, 'userEvents'>
+  | 'activeSpotAssetCtx'
+  | 'user';
+⋮----
+/** The original wire envelope, with its physical connection identified by wsKey. */
+export type WebsocketMessageEvent<TWsKey extends string = WsKey> = {
+  [K in WebsocketChannel]: {
+    channel: K;
+    data: K extends 'user'
+      ? UserEvent
+      : K extends 'activeSpotAssetCtx'
+        ? AssetContextEvent
+        : WebsocketSubscriptionData[K & keyof WebsocketSubscriptionData];
+    wsKey: TWsKey;
+  };
+}[WebsocketChannel];
+⋮----
+export interface WebsocketSubscriptionResponseEvent<
+  TWsKey extends string = WsKey,
+> {
+  channel: 'subscriptionResponse';
+  data: {
+    method: 'subscribe' | 'unsubscribe';
+    subscription: WebsocketSubscription;
+  };
+  wsKey: TWsKey;
+}
+⋮----
+export interface WebsocketPostResponseEvent<TWsKey extends string = WsKey> {
+  channel: 'post';
+  data: {
+    id: number;
+    response: {
+      type: 'action' | 'error' | 'info';
+      payload: unknown;
+    };
+  };
+  wsKey: TWsKey;
+}
+⋮----
+export type WebsocketResponseEvent<TWsKey extends string = WsKey> =
+  | WebsocketSubscriptionResponseEvent<TWsKey>
+  | WebsocketPostResponseEvent<TWsKey>;
+
+================
+File: src/constants.ts
+================
+
+
+================
+File: .npmrc
+================
+min-release-age=30
+
+================
+File: .nvmrc
+================
+v24.18.0
+
+================
+File: .prettierrc
+================
+{
+  "tabWidth": 2,
+  "singleQuote": true,
+  "trailingComma": "all"
+}
+
+================
+File: eslint.config.cjs
+================
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+================
+File: jest.config.cjs
+================
+/** @type {import('jest').Config} */
+
+================
+File: LICENSE.md
+================
+Copyright 2026 Tiago Siebler
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+================
+File: tsconfig.cjs.json
+================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "outDir": "dist/cjs",
+    "rootDir": "src",
+    "target": "esnext"
+  },
+  "include": ["src/**/*.*"]
+}
+
+================
+File: tsconfig.esm.json
+================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/mjs",
+    "rootDir": "src",
+    "target": "esnext"
+  },
+  "include": ["src/**/*.*"]
+}
+
+================
+File: tsconfig.json
+================
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": false,
+    "inlineSourceMap": false,
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "pretty": true,
+    "removeComments": false,
+    "resolveJsonModule": true,
+    "skipLibCheck": false,
+    "sourceMap": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "types": ["node"],
+    "target": "esnext"
+  },
+  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*.*"]
+}
+
+================
+File: tsconfig.linting.json
+================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "rootDir": ".",
+    "target": "esnext",
+    "types": ["node", "jest"]
+  },
+  "include": [
+    "src/**/*.*",
+    "test/**/*.*",
+    "examples/**/*.*",
+    "eslint.config.cjs",
+    "jest.config.cjs"
+  ]
+}
 
 ================
 File: docs/HYPERLIQUID_SDK_QUICKSTART_GUIDE.md
@@ -253,15 +750,17 @@ siebly:
           - label: Read endpoint fields
             owner: app
       - heading: WebSocket subscription flow
-        summary: Subscribe with an object, receive the initial snapshot where provided, then process updates.
+        summary: Register event listeners, subscribe to topics, then handle acknowledgements and data separately.
         steps:
-          - label: Choose subscription
+          - label: Register message and response listeners
             owner: app
-          - label: Call subscribe
+          - label: Call subscribe with native topics
             owner: app
-          - label: Connect and register
+          - label: Connect and send subscriptions
             owner: sdk
-          - label: Receive snapshot or update
+          - label: Receive acknowledgement through response
+            owner: event
+          - label: Receive data through message
             owner: event
           - label: Update local state
             owner: app
@@ -413,7 +912,7 @@ Never put a private key in browser code, logs, or committed configuration.
 | `clientOrderId` | `0x` plus 32 hex characters | Your [custom order ID](https://siebly.io/reference/glossary#custom-order-id), called `cloid` by Hyperliquid |
 | `accountAddress` | `HYPERLIQUID_ACCOUNT_ADDRESS` | The master account, subaccount, or vault whose state is queried |
 | `vaultAddress` | `HYPERLIQUID_VAULT_ADDRESS` | Optional routing for actions signed on behalf of a vault or subaccount |
-| `wsKey` | `public`, `api`, or a user-scoped key | The [WebSocket key](https://siebly.io/reference/glossary#ws-key) included with lifecycle events |
+| `wsKey` | `public`, `api`, or `user:<address>` | The [WebSocket key](https://siebly.io/reference/glossary#ws-key) included with every emitted event |
 
 Perpetual sizes are quantities of the underlying asset. Spot sizes are quantities of the base asset. Prices, sizes, transfer amounts, and trigger prices are exact decimal strings in SDK requests.
 
@@ -614,7 +1113,7 @@ main();
 
 Asset IDs differ across Mainnet and Testnet. Resolve them against the same network that will receive the request. Do not add `-PERP` or `-SPOT` suffixes.
 
-For Info methods and stream subscriptions, the SDK applies Hyperliquid's native name mapping where required. For example, `HYPE/USDC` currently maps to an `@` name, while `PURR/USDC` is already a native universe name. `getOrderBook()`, `getCandles()`, `getFundingHistory()`, and coin-based market subscriptions perform this mapping. `getRecentTrades()` and `getActiveAssetData()` expect an official coin name, so call `nameToCoin()` first when starting with a readable Spot alias.
+`getOrderBook()`, `getCandles()`, and `getFundingHistory()` apply Hyperliquid's native name mapping where required. For example, a readable Spot alias such as `HYPE/USDC` resolves to its current `@` name, while `PURR/USDC` is already a native universe name. Streaming subscriptions, `getRecentTrades()`, and `getActiveAssetData()` expect an official coin name. Call `nameToCoin()` explicitly when starting with a readable Spot alias, then pass the result as `coin`. Subscribing with a native coin name does not make a REST API metadata request.
 
 <!-- siebly:section id="websocket-streams" -->
 
@@ -645,57 +1144,99 @@ async function main() {
     .on('close', ({ wsKey }) => {
       console.log('WebSocket closed:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await client.subscribe({ type: 'allMids' }, (update) => {
-      console.log('BTC midpoint:', update.mids.BTC);
-    });
-  } catch (error) {
-    console.error('Midpoint subscription failed:', error);
-  }
+  client.on('message', ({ channel, data, wsKey }) => {
+    switch (channel) {
+      case 'allMids':
+        console.log('BTC midpoint:', wsKey, data.mids.BTC);
+        break;
+      case 'l2Book':
+        console.log('Best bid:', data.levels[0][0]);
+        console.log('Best ask:', data.levels[1][0]);
+        break;
+      case 'trades':
+        console.log('Trades:', data);
+        break;
+      case 'candle':
+        console.log('One-minute candle:', data);
+        break;
+    }
+  });
+
+  client.on('response', ({ channel, data, wsKey }) => {
+    if (channel === 'subscriptionResponse') {
+      console.log('Subscription acknowledgement:', wsKey, data);
+    }
+  });
 
   try {
-    await client.subscribe({ type: 'l2Book', coin: 'BTC' }, (book) => {
-      console.log('Best bid:', book.levels[0][0]);
-      console.log('Best ask:', book.levels[1][0]);
-    });
-  } catch (error) {
-    console.error('Order-book subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe({ type: 'trades', coin: 'BTC' }, (trades) => {
-      console.log('Trades:', trades);
-    });
-  } catch (error) {
-    console.error('Trade subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe(
+    await client.subscribe([
+      { type: 'allMids' },
+      { type: 'l2Book', coin: 'BTC' },
+      { type: 'trades', coin: 'BTC' },
       { type: 'candle', coin: 'BTC', interval: '1m' },
-      (candle) => {
-        console.log('One-minute candle:', candle);
-      },
-    );
+    ]);
   } catch (error) {
-    console.error('Candle subscription failed:', error);
+    console.error('Market subscription failed:', error);
   }
 }
 
 main();
 ```
 
-Hyperliquid sends a [subscription acknowledgement](https://siebly.io/reference/glossary#subscription-acknowledgement) when the subscription is registered. The SDK handles that protocol message internally. Your callback receives channel data.
+Hyperliquid sends a [subscription acknowledgement](https://siebly.io/reference/glossary#subscription-acknowledgement) when the subscription is registered. The SDK emits that protocol message through `response`. Market and account updates arrive through `message`, preserving the full `{ channel, data, wsKey }` envelope.
+
+Register listeners before subscribing. Each incoming data message is emitted once, and every registered `message` listener receives it. Filter by `channel` and the payload's coin or user when consuming several feeds.
 
 The promise returned by `subscribe()` resolves after the socket opens and the request is sent. It does not wait for the server acknowledgement, so do not use that promise alone as a stream-readiness signal.
 
-Some channels send an initial snapshot before later updates. `l2Book` sends a current book, while `allMids`, trades, and candles continue with new values. The SDK sends heartbeat pings on quiet connections.
+Some channels send an initial snapshot before later updates. `l2Book` sends a current book, while `allMids`, trades, and candles continue with new values. The SDK sends regular heartbeat pings to check connection health.
 
-Call `client.closeAll()` when the application explicitly needs to close its WebSocket connections.
+`subscribe()` and `unsubscribe()` accept one topic or an array of topics. Equivalent topics are deduplicated by value. Listeners are independent of subscriptions: use `off('message', listener)` to remove a listener and `unsubscribe(topic)` to stop a stream. Call `client.closeAll()` when the application needs to close its WebSocket connections.
+
+`connectionTimeout` defaults to 1,000 ms. Heartbeats use a 10,000 ms ping interval and a 1,000 ms pong deadline. Increase `connectionTimeout` or `pongTimeout` for a higher-latency connection. Reconnect delays start at 500 ms and double up to 10,000 ms.
+
+#### Subscribe to a Spot market
+
+Resolve a readable Spot pair once, then subscribe with its native coin name. The lookup uses the REST API; `subscribe()` itself only sends WebSocket messages.
+
+```javascript
+import { WebsocketClient } from '@siebly/hyperliquid-api';
+
+const client = new WebsocketClient();
+
+client.on('message', ({ channel, data }) => {
+  if (channel === 'l2Book') {
+    console.log('Spot book:', data.coin, data.levels);
+  }
+});
+
+client.on('exception', ({ wsKey, event, data }) => {
+  console.error('WebSocket exception:', wsKey, event ?? data);
+});
+
+async function main() {
+  let coin;
+
+  try {
+    coin = await client.nameToCoin('HYPE/USDC');
+  } catch (error) {
+    console.error('Spot-name lookup failed:', error);
+    return;
+  }
+
+  try {
+    await client.subscribe({ type: 'l2Book', coin });
+  } catch (error) {
+    console.error('Spot subscription failed:', error);
+  }
+}
+
+main();
+```
 
 ### 5. Subscribe to account updates
 
@@ -722,47 +1263,37 @@ async function main() {
     .on('reconnected', ({ wsKey }) => {
       console.log('WebSocket reconnected:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await client.subscribe({ type: 'orderUpdates', user }, (orders) => {
-      console.log('Order updates:', orders);
-    });
-  } catch (error) {
-    console.error('Order subscription failed:', error);
-  }
+  client.on('message', ({ channel, data, wsKey }) => {
+    switch (channel) {
+      case 'orderUpdates':
+        console.log('Order updates:', wsKey, data);
+        break;
+      case 'userFills':
+        console.log('Fill snapshot:', data.isSnapshot === true);
+        console.log('Fills:', data.fills);
+        break;
+      case 'clearinghouseState':
+        console.log('Perpetual state:', data.clearinghouseState);
+        break;
+      case 'spotState':
+        console.log('Spot state:', data.spotState);
+        break;
+    }
+  });
 
   try {
-    await client.subscribe(
+    await client.subscribe([
+      { type: 'orderUpdates', user },
       { type: 'userFills', user, aggregateByTime: true },
-      (update) => {
-        console.log('Fill snapshot:', update.isSnapshot === true);
-        console.log('Fills:', update.fills);
-      },
-    );
-  } catch (error) {
-    console.error('Fill subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe(
       { type: 'clearinghouseState', user },
-      (update) => {
-        console.log('Perpetual state:', update.clearinghouseState);
-      },
-    );
+      { type: 'spotState', user },
+    ]);
   } catch (error) {
-    console.error('Perpetual-state subscription failed:', error);
-  }
-
-  try {
-    await client.subscribe({ type: 'spotState', user }, (update) => {
-      console.log('Spot state:', update.spotState);
-    });
-  } catch (error) {
-    console.error('Spot-state subscription failed:', error);
+    console.error('Account subscription failed:', error);
   }
 }
 
@@ -773,7 +1304,7 @@ main();
 
 The `orderUpdates` stream reports order transitions. Use it with a REST API query when reconciling [pending confirmation](https://siebly.io/reference/glossary#pending-confirmation) after an uncertain order or cancellation response.
 
-Every lifecycle event includes `wsKey`. Most subscriptions share `public`. User-scoped channels whose server messages omit the address are isolated on a key derived from that address, which prevents updates for different users from being mixed.
+Every lifecycle, message, response, and exception event includes `wsKey`. Most subscriptions share `public`. `orderUpdates`, `notification`, and `userEvents` use `user:<lowercase-address>` connections because their server messages omit the address. Use that key to identify the account. The `userEvents` subscription emits messages on Hyperliquid's `user` channel.
 
 <!-- siebly:section id="order-management" -->
 
@@ -1151,8 +1682,8 @@ async function main() {
     .on('reconnected', ({ wsKey }) => {
       console.log('WebSocket API reconnected:', wsKey);
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket API exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket API exception:', wsKey, event ?? data);
     });
 
   let btc;
@@ -1270,6 +1801,10 @@ main();
 ```
 
 WebSocket POST supports Info requests and signed Exchange actions. Explorer requests are not supported. Use `WebsocketClient` for subscriptions and `WebsocketAPIClient` for awaitable request-response calls.
+
+Successful POST replies also emit `response` events with `channel: 'post'` and `wsKey: 'api'`. Protocol errors and top-level Exchange rejections emit `exception` and reject the matching promise. An accepted action can still contain individual order errors, so inspect its status entries. Use `try`/`catch` for each command; event listeners provide additional connection and protocol diagnostics.
+
+`requestTimeoutMs` defaults to 10,000 ms and includes connection setup. Requests interrupted by a disconnect are rejected, not replayed after reconnection. Query the order's status before retrying a command whose outcome is uncertain.
 
 An order-command response acknowledges the action and reports its immediate status. Confirm later changes through `orderUpdates` or `getOrderStatus()`. That distinction is important when an order fills or is cancelled immediately after its first response.
 
@@ -1393,8 +1928,10 @@ let accountState = {
   openOrders: [],
   recentFills: [],
 };
+let recoveryVersion = 0;
 
 async function reloadAccountState() {
+  const version = ++recoveryVersion;
   let balances;
   let openOrders;
   let recentFills;
@@ -1422,6 +1959,11 @@ async function reloadAccountState() {
     return;
   }
 
+  // A newer recovery must not be overwritten by an older request sequence.
+  if (version !== recoveryVersion) {
+    return;
+  }
+
   accountState = {
     balances,
     openOrders,
@@ -1437,30 +1979,25 @@ async function main() {
       console.log('WebSocket reconnected:', wsKey);
       await reloadAccountState();
     })
-    .on('exception', ({ wsKey, event }) => {
-      console.error('WebSocket exception:', wsKey, event);
+    .on('exception', ({ wsKey, event, data }) => {
+      console.error('WebSocket exception:', wsKey, event ?? data);
     });
 
-  try {
-    await websocketClient.subscribe(
-      { type: 'orderUpdates', user: accountAddress },
-      (orders) => {
-        console.log('Order updates:', orders);
-      },
-    );
-  } catch (error) {
-    console.error('Order subscription failed:', error);
-  }
+  websocketClient.on('message', ({ channel, data, wsKey }) => {
+    if (channel === 'orderUpdates') {
+      console.log('Order updates:', wsKey, data);
+    } else if (channel === 'userFills') {
+      console.log('Fill update:', data);
+    }
+  });
 
   try {
-    await websocketClient.subscribe(
+    await websocketClient.subscribe([
+      { type: 'orderUpdates', user: accountAddress },
       { type: 'userFills', user: accountAddress, aggregateByTime: true },
-      (update) => {
-        console.log('Fill update:', update);
-      },
-    );
+    ]);
   } catch (error) {
-    console.error('Fill subscription failed:', error);
+    console.error('Account subscription failed:', error);
   }
 
   await reloadAccountState();
@@ -1472,6 +2009,8 @@ main();
 This is [REST API hydration](https://siebly.io/reference/glossary#rest-hydration): rebuilding trusted [account state](https://siebly.io/reference/glossary#accountstate) from current REST API reads after a stream gap. Use [Scoped Recovery](https://siebly.io/reference/glossary#scoped-recovery) to reload only the state owned by the affected connection, and see [Exchange State](https://siebly.io/reference/exchange-state) and [Runtime Workflows](https://siebly.io/reference/runtime-workflows) for wider state-management patterns.
 
 If the process stores a durable fill cursor, reload by time and deduplicate by trade ID before replacing state. The initial `userFills` snapshot after resubscription may overlap with the REST API result.
+
+Here, `orderUpdates` uses `user:<address>` while `userFills` uses `public`, so either connection can trigger recovery. The version counter prevents overlapping recoveries from publishing out of order. This example logs stream events separately; a live state cache also needs to reconcile events received while its REST API reads are in flight.
 
 <!-- siebly:section id="api-hosts" -->
 
@@ -1531,7 +2070,7 @@ console.log({
 });
 ```
 
-`baseUrl` changes REST API routing. `wsUrl` changes WebSocket routing. `WebsocketClient` may use REST API metadata while normalizing readable asset aliases, so set both values when routing it through custom infrastructure.
+`baseUrl` changes REST API routing. `wsUrl` changes WebSocket routing. The explicit `WebsocketClient.nameToCoin()` and `resolveAsset()` helpers use REST API metadata, so set both values if those helpers also need custom routing. Native streaming subscriptions use only `wsUrl`.
 
 Keep Mainnet and Testnet private keys, account addresses, client order IDs, and persistent state in separate configuration. Asset IDs and available markets can differ between the two networks.
 
@@ -1641,10 +2180,14 @@ async function main() {
     console.error('Proxied REST API request failed:', error);
   }
 
+  websocketClient.on('message', ({ channel, data }) => {
+    if (channel === 'allMids') {
+      console.log('Stream through proxy:', data.mids.BTC);
+    }
+  });
+
   try {
-    await websocketClient.subscribe({ type: 'allMids' }, (update) => {
-      console.log('Stream through proxy:', update.mids.BTC);
-    });
+    await websocketClient.subscribe({ type: 'allMids' });
   } catch (error) {
     console.error('Proxied stream subscription failed:', error);
   }
@@ -1662,7 +2205,7 @@ main();
 
 Set `keepAlive: false` so the SDK preserves the custom agent, and set `proxy: false` so Axios does not apply separate environment-proxy handling on top of it.
 
-`webSocketConstructor` routes the socket itself. `requestOptions.proxy` routes the REST API metadata requests used by asset-specific subscriptions. The `allMids` example does not need metadata resolution, but both routes are configured so the same client can later subscribe to books, trades, or candles.
+`webSocketConstructor` routes the socket itself. Streaming subscriptions send native topics without REST API metadata requests. `requestOptions.proxy` routes REST API metadata requests if you explicitly call `nameToCoin()` or `resolveAsset()` on the streaming client.
 
 ### SOCKS5 proxy
 
@@ -1737,10 +2280,14 @@ async function main() {
     console.error('SOCKS5 REST API request failed:', error);
   }
 
+  websocketClient.on('message', ({ channel, data }) => {
+    if (channel === 'allMids') {
+      console.log('WebSocket through SOCKS5:', data.mids.BTC);
+    }
+  });
+
   try {
-    await websocketClient.subscribe({ type: 'allMids' }, (update) => {
-      console.log('WebSocket through SOCKS5:', update.mids.BTC);
-    });
+    await websocketClient.subscribe({ type: 'allMids' });
   } catch (error) {
     console.error('SOCKS5 stream subscription failed:', error);
   }
@@ -1756,7 +2303,7 @@ async function main() {
 main();
 ```
 
-Set `keepAlive: false` so the REST API client preserves the SOCKS agent. The WebSocket example uses `allMids` because it does not trigger a separate REST API metadata lookup. The current WebSocket client does not expose a keepalive override for its internal metadata client, so do not assume an asset-alias lookup follows the SOCKS route.
+Set `keepAlive: false` so the REST API client preserves the SOCKS agent. Streaming subscriptions do not trigger REST API metadata lookups. Resolve readable aliases with the configured `restClient.nameToCoin()` first, then pass the result to `websocketClient.subscribe()`, so alias resolution also follows the SOCKS route.
 
 A proxy changes the network route, not the account, network, or available products. Monitor latency, disconnects, and the proxy's egress IP.
 
@@ -1823,7 +2370,7 @@ It sends an immediate-or-cancel limit order with a protection price. The SDK der
 
 ### How do I tell perpetual and Spot assets apart?
 
-Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. The SDK also accepts readable metadata-derived aliases such as `HYPE/USDC`.
+Perpetuals commonly use names such as `BTC`. Spot markets use native universe names such as `PURR/USDC` or `@107`. REST API helpers can resolve readable metadata-derived aliases such as `HYPE/USDC`. For streaming subscriptions, call `nameToCoin()` explicitly to resolve an alias, then subscribe with the returned native coin name.
 
 ### Do account WebSocket streams require authentication?
 
@@ -1831,7 +2378,7 @@ They use the public account address. The SDK isolates user-scoped channels when 
 
 ### How do subscription acknowledgements appear?
 
-The SDK handles acknowledgement protocol messages internally. Subscription callbacks receive the channel's snapshot or update data.
+Listen for `response` events with `channel === 'subscriptionResponse'`. Snapshot and update envelopes arrive through `message`. Both events include `wsKey`, and the promise returned by `subscribe()` only confirms that the subscription request was sent.
 
 ### What is the difference between `WebsocketClient` and `WebsocketAPIClient`?
 
@@ -1862,1023 +2409,6 @@ No. `testnet`, `baseUrl`, and `wsUrl` select the destination. A proxy only chang
 5. Add client order IDs, action deadlines, dead-man-switch refresh, and scoped recovery before moving a strategy to Mainnet.
 
 Continue with the [Hyperliquid SDK examples](https://siebly.io/examples/Hyperliquid), browse the [source repository](https://github.com/sieblyio/hyperliquid-api), and check the [official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api) for current exchange behavior.
-
-================
-File: examples/README.md
-================
-# Hyperliquid API - Examples
-
-This folder contains ready to go examples demonstrating the SDK, written in TypeScript (they also work in JavaScript after dropping type annotations).
-
-## Getting started
-
-- Clone the project, or install the module: `npm install @siebly/hyperliquid-api`.
-- Edit the sample as needed (some samples require a private key, or a change from `../src/index.js` to `@siebly/hyperliquid-api`).
-- Execute with tsx: `npx tsx examples/Rest/rest-public.ts`.
-
-Samples that refer to credentials via `process.env.HYPERLIQUID_PRIVATE_KEY` can be spawned with environment variables. Unix/macOS example:
-
-```
-HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
-```
-
-If the key is an API/agent wallet, also pass the master account:
-
-```
-HYPERLIQUID_PRIVATE_KEY='0xabc' HYPERLIQUID_ACCOUNT_ADDRESS='0x...' npx tsx examples/Rest/rest-private.ts
-```
-
-Trading examples submit real orders on mainnet by default. Sizes are small and limit prices are far from market. Uncomment `testnet: true` in a sample to use testnet. Start with `rest-public.ts` and `rest-private.ts` before the order samples.
-
-### REST APIs
-
-All REST examples live in [examples/Rest](./Rest/).
-
-- `rest-public.ts` - Public Info: mids, books, candles, trades, metadata, asset aliases.
-- `rest-private.ts` - Authenticated Info reads: balances, positions, open orders, fills. No orders.
-- `rest-market-order.ts` - `submitMarketOrder()` then `submitMarketClose()`.
-- `rest-limit-order.ts` - GTC limit with client order id, status lookup, cancel by cloid.
-- `rest-spot-order.ts` - Spot limit on `PURR/USDC`, then cancel.
-- `rest-tpsl.ts` - Standalone stop plus grouped entry + TP/SL.
-- `rest-leverage.ts` - Cross/isolated leverage and isolated margin.
-- `rest-cancel-open-orders.ts` - Cancel every open order.
-- `rest-schedule-cancel.ts` - Dead-man's switch via `setCancelAllAfter()`.
-- `rest-rounding.ts` - Tick/lot rules for raw `submitOrder()` wires.
-
-### WebSockets
-
-All WebSocket examples live in [examples/Websocket](./Websocket/).
-
-#### Consumers
-
-These receive data from Hyperliquid WebSockets (market data, account updates). Data is delivered to the `subscribe()` callback. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the client.
-
-- `ws-public.ts` - Public mids, book, trades, candles, bbo, asset context.
-- `ws-private.ts` - Account streams: fills, order updates, open orders, notifications. Needs `HYPERLIQUID_ADDRESS`.
-
-#### WebSocket API
-
-These send commands over Hyperliquid's WebSocket POST protocol. `WebsocketAPIClient` has the same methods as `RestClient`.
-
-- `WS-API/ws-api-client.ts` - Public Info over WS, plus an optional limit + cancel when `HYPERLIQUID_PRIVATE_KEY` is set.
-
-================
-File: scripts/clean.mjs
-================
-
-
-================
-File: scripts/postbuild.mjs
-================
-async function copySourceDeclarations(directory)
-
-================
-File: src/types/request/info.types.ts
-================
-export interface AccountRequest {
-  user?: string;
-}
-⋮----
-export interface AccountDexRequest extends AccountRequest {
-  dex?: string;
-}
-⋮----
-export interface UserRequest {
-  user: string;
-}
-⋮----
-export interface TimeRangeRequest extends AccountRequest {
-  endTime?: number;
-  startTime?: number;
-}
-⋮----
-export interface GetCandlesRequest {
-  coin: string;
-  endTime?: number;
-  interval:
-    | '1d'
-    | '12h'
-    | '15m'
-    | '1h'
-    | '1m'
-    | '2h'
-    | '30m'
-    | '3d'
-    | '3m'
-    | '4h'
-    | '5m'
-    | '8h'
-    | '1w'
-    | '1M';
-  startTime: number;
-}
-⋮----
-export interface GetOrderBookRequest {
-  coin: string;
-  mantissa?: 1 | 2 | 5 | null;
-  nSigFigs?: 2 | 3 | 4 | 5 | null;
-}
-⋮----
-export interface GetUserFillsRequest extends AccountRequest {
-  aggregateByTime?: boolean;
-}
-⋮----
-export interface GetUserFillsByTimeRequest extends TimeRangeRequest {
-  aggregateByTime?: boolean;
-  reversed?: boolean;
-  startTime: number;
-}
-⋮----
-export interface GetUserFundingHistoryRequest extends AccountRequest {
-  endTime?: number;
-  startTime?: number;
-}
-⋮----
-export interface GetFundingHistoryRequest {
-  coin: string;
-  endTime?: number;
-  startTime: number;
-}
-⋮----
-export interface GetUserNonFundingLedgerUpdatesRequest extends AccountRequest {
-  endTime?: number;
-  startTime?: number;
-}
-⋮----
-export interface GetOrderStatusRequest extends AccountRequest {
-  oid: number | string;
-}
-⋮----
-export interface GetUserTwapSliceFillsByTimeRequest extends AccountRequest {
-  endTime?: number;
-  startTime: number;
-}
-⋮----
-export interface GetUserBorrowLendInterestRequest extends AccountRequest {
-  endTime?: number;
-  startTime: number;
-}
-⋮----
-export interface GetMaxBuilderFeeRequest extends AccountRequest {
-  builder: string;
-}
-⋮----
-export interface GetPreTransferCheckRequest extends UserRequest {
-  source: string;
-}
-⋮----
-export interface GetVaultDetailsRequest {
-  user?: string;
-  vaultAddress: string;
-}
-
-================
-File: src/types/response/exchange.types.ts
-================
-export interface ExchangeErrorResponse {
-  response: string;
-  status: 'err';
-}
-⋮----
-export interface ExchangeSuccessResponse<Data = unknown> {
-  response: {
-    data?: Data;
-    type: string;
-    [key: string]: unknown;
-  };
-  status: 'ok';
-}
-⋮----
-export type ExchangeResponse<Data = unknown> =
-  ExchangeErrorResponse | ExchangeSuccessResponse<Data>;
-⋮----
-export interface OrderRestingStatus {
-  resting: {
-    oid: number;
-  };
-}
-⋮----
-export interface OrderFilledStatus {
-  filled: {
-    avgPx: string;
-    oid: number;
-    totalSz: string;
-  };
-}
-⋮----
-export interface OrderErrorStatus {
-  error: string;
-}
-⋮----
-export type OrderStatus =
-  OrderErrorStatus | OrderFilledStatus | OrderRestingStatus;
-⋮----
-export interface OrderResponseData {
-  statuses: OrderStatus[];
-}
-
-================
-File: src/types/response/info.types.ts
-================
-export type InfoResponse =
-  Record<string, unknown> | unknown[] | boolean | number | string | null;
-⋮----
-export type AllMidsResponse = Record<string, string>;
-⋮----
-export type UserRoleResponse =
-  | { role: 'agent'; data: { user: string } }
-  | { role: 'missing' | 'user' | 'vault' }
-  | { role: 'subAccount'; data: { master: string } };
-⋮----
-export interface OrderBookLevel {
-  n: number;
-  px: string;
-  sz: string;
-}
-⋮----
-export interface OrderBookResponse {
-  coin: string;
-  fast?: true;
-  levels: [OrderBookLevel[], OrderBookLevel[]];
-  spread?: string;
-  time: number;
-}
-⋮----
-export interface Candle {
-  T: number;
-  c: string;
-  h: string;
-  i:
-    | '1d'
-    | '12h'
-    | '15m'
-    | '1h'
-    | '1m'
-    | '1M'
-    | '2h'
-    | '30m'
-    | '3d'
-    | '3m'
-    | '4h'
-    | '5m'
-    | '8h'
-    | '1w';
-  l: string;
-  n: number;
-  o: string;
-  s: string;
-  t: number;
-  v: string;
-}
-⋮----
-export interface OpenOrder {
-  coin: string;
-  limitPx: string;
-  oid: number;
-  origSz: string;
-  side: 'A' | 'B';
-  sz: string;
-  timestamp: number;
-  [key: string]: unknown;
-}
-⋮----
-export interface SpotBalance {
-  coin: string;
-  entryNtl: string;
-  hold: string;
-  token: number;
-  total: string;
-}
-⋮----
-export interface SpotBalancesResponse {
-  balances: SpotBalance[];
-  tokenToAvailableAfterMaintenance?: Array<[token: number, available: string]>;
-}
-⋮----
-export interface PerpMarginSummary {
-  accountValue: string;
-  totalMarginUsed: string;
-  totalNtlPos: string;
-  totalRawUsd: string;
-}
-⋮----
-export interface PerpAccountSummaryResponse {
-  assetPositions: unknown[];
-  crossMaintenanceMarginUsed: string;
-  crossMarginSummary: PerpMarginSummary;
-  marginSummary: PerpMarginSummary;
-  time?: number;
-  withdrawable: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface AccountBalancesResponse {
-  perp: PerpAccountSummaryResponse;
-  spot: SpotBalancesResponse;
-  user: string;
-}
-⋮----
-export interface UserFill {
-  closedPnl: string;
-  coin: string;
-  crossed: boolean;
-  dir: string;
-  fee: string;
-  hash: string;
-  oid: number;
-  px: string;
-  side: 'A' | 'B';
-  sz: string;
-  time: number;
-  tid: number;
-  [key: string]: unknown;
-}
-⋮----
-export interface PerpMeta {
-  universe: Array<{
-    isDelisted?: boolean;
-    maxLeverage: number;
-    name: string;
-    onlyIsolated?: boolean;
-    szDecimals: number;
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
-}
-⋮----
-export interface SpotMeta {
-  tokens: Array<{
-    index: number;
-    name: string;
-    tokenId: string;
-    weiDecimals: number;
-    szDecimals: number;
-    [key: string]: unknown;
-  }>;
-  universe: Array<{
-    index: number;
-    name: string;
-    tokens: number[];
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
-}
-
-================
-File: src/types/websockets/ws-portable.ts
-================
-export interface WebSocketMessageEvent {
-  data: ArrayBuffer | ArrayBufferView | Blob | string;
-}
-⋮----
-export interface WebSocketCloseEvent {
-  code?: number;
-  reason?: string;
-}
-⋮----
-export interface WebSocketLike {
-  close(code?: number, reason?: string): void;
-  onclose: ((event: WebSocketCloseEvent) => void) | null;
-  onerror: ((event: unknown) => void) | null;
-  onmessage: ((event: WebSocketMessageEvent) => void) | null;
-  onopen: (() => void) | null;
-  readonly readyState: number;
-  send(data: string): void;
-}
-⋮----
-close(code?: number, reason?: string): void;
-⋮----
-send(data: string): void;
-⋮----
-export interface WebSocketConstructor {
-  new (url: string): WebSocketLike;
-  readonly CLOSED?: number;
-  readonly CLOSING?: number;
-  readonly CONNECTING?: number;
-  readonly OPEN?: number;
-}
-
-================
-File: src/types/websockets/ws-subscriptions.ts
-================
-import type {
-  Candle,
-  OpenOrder,
-  OrderBookResponse,
-  UserFill,
-} from '../response/info.types.js';
-⋮----
-export type CandleInterval =
-  | '1d'
-  | '12h'
-  | '15m'
-  | '1h'
-  | '1m'
-  | '1M'
-  | '2h'
-  | '30m'
-  | '3d'
-  | '3m'
-  | '4h'
-  | '5m'
-  | '6h'
-  | '8h'
-  | '1w';
-⋮----
-export type UserSubscriptionType =
-  | 'activeAssetData'
-  | 'allDexsClearinghouseState'
-  | 'clearinghouseState'
-  | 'notification'
-  | 'openOrders'
-  | 'orderUpdates'
-  | 'spotState'
-  | 'twapStates'
-  | 'userEvents'
-  | 'userFills'
-  | 'userFundings'
-  | 'userHistoricalOrders'
-  | 'userNonFundingLedgerUpdates'
-  | 'userTwapHistory'
-  | 'userTwapSliceFills'
-  | 'webData3';
-⋮----
-export type WebsocketSubscription =
-  | { dex?: string; type: 'allMids' }
-  | { dex?: string; type: 'assetCtxs' }
-  | { coin: string; type: 'activeAssetCtx' }
-  | { coin: string; user: string; type: 'activeAssetData' }
-  | { type: 'allDexsAssetCtxs' }
-  | { user: string; type: 'allDexsClearinghouseState' }
-  | { coin: string; type: 'bbo' }
-  | { coin: string; interval: CandleInterval; type: 'candle' }
-  | { dex?: string; user: string; type: 'clearinghouseState' }
-  | { type: 'fastAssetCtxs' }
-  | {
-      coin: string;
-      fast?: boolean;
-      mantissa?: 1 | 2 | 5 | null;
-      nSigFigs?: 2 | 3 | 4 | 5 | null;
-      type: 'l2Book';
-    }
-  | { user: string; type: 'notification' }
-  | { dex?: string; user: string; type: 'openOrders' }
-  | { user: string; type: 'orderUpdates' }
-  | { type: 'outcomeMetaUpdates' }
-  | { type: 'spotAssetCtxs' }
-  | {
-      ignorePortfolioMargin?: boolean;
-      isPortfolioMargin?: never;
-      user: string;
-      type: 'spotState';
-    }
-  | {
-      ignorePortfolioMargin?: never;
-      isPortfolioMargin?: boolean;
-      user: string;
-      type: 'spotState';
-    }
-  | { coin: string; type: 'trades' }
-  | { dex?: string; user: string; type: 'twapStates' }
-  | { user: string; type: 'userEvents' }
-  | { aggregateByTime?: boolean; user: string; type: 'userFills' }
-  | { user: string; type: 'userFundings' }
-  | { user: string; type: 'userHistoricalOrders' }
-  | { user: string; type: 'userNonFundingLedgerUpdates' }
-  | { user: string; type: 'userTwapHistory' }
-  | { user: string; type: 'userTwapSliceFills' }
-  | { user: string; type: 'webData3' };
-⋮----
-export interface AllMidsEvent {
-  dex?: string;
-  mids: Record<string, string>;
-}
-⋮----
-export interface AssetContextEvent {
-  coin?: string;
-  ctx?: Record<string, unknown>;
-  dex?: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface AssetCtxsEvent {
-  ctxs: Record<string, unknown>[];
-  dex: string;
-}
-⋮----
-export interface AllDexsAssetCtxsEvent {
-  ctxs: Array<[dex: string, contexts: Record<string, unknown>[]]>;
-}
-⋮----
-export interface ClearinghouseStateEvent {
-  clearinghouseState: Record<string, unknown>;
-  dex: string;
-  user: string;
-}
-⋮----
-export interface AllDexsClearinghouseStateEvent {
-  clearinghouseStates: Array<[dex: string, state: Record<string, unknown>]>;
-  user: string;
-}
-⋮----
-export interface ActiveAssetDataEvent {
-  availableToTrade: [string, string];
-  coin: string;
-  leverage: Record<string, unknown>;
-  maxTradeSzs: [string, string];
-  user: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface BboEvent {
-  bbo: [
-    bid: { n: number; px: string; sz: string } | null,
-    offer: { n: number; px: string; sz: string } | null,
-  ];
-  coin: string;
-  time: number;
-}
-⋮----
-export interface TradeEvent {
-  coin: string;
-  hash: string;
-  px: string;
-  side: 'A' | 'B';
-  sz: string;
-  tid: number;
-  time: number;
-  users: [string, string];
-}
-⋮----
-export interface NotificationEvent {
-  notification: string;
-}
-⋮----
-export interface OrderUpdateEvent {
-  order: OpenOrder;
-  status: string;
-  statusTimestamp: number;
-}
-⋮----
-export interface FastAssetCtxsEvent {
-  [coin: string]: {
-    markPx?: string;
-    midPx?: string | null;
-  };
-}
-⋮----
-export type SpotAssetCtxsEvent = Array<Record<string, unknown>>;
-⋮----
-export interface OutcomeMetaUpdatesEvent {
-  updates: Array<
-    | {
-        outcomeCreated: {
-          description: string;
-          name: string;
-          outcome: number;
-          quoteToken: string;
-          sideSpecs: Array<{ name: string; token?: number }>;
-        };
-      }
-    | { outcomeSettled: { outcome: number } }
-    | {
-        questionUpdated: {
-          description: string;
-          fallbackOutcome: number;
-          name: string;
-          namedOutcomes: number[];
-          question: number;
-          settledNamedOutcomes: number[];
-        };
-      }
-    | { questionSettled: { question: number } }
-  >;
-}
-⋮----
-export interface UserFillsEvent {
-  fills: UserFill[];
-  isSnapshot?: true;
-  user: string;
-}
-⋮----
-export interface OpenOrdersEvent {
-  dex: string;
-  orders: OpenOrder[];
-  user: string;
-}
-⋮----
-export interface UserFundingsEvent {
-  fundings: Array<{
-    coin: string;
-    fundingRate: string;
-    nSamples: number | null;
-    szi: string;
-    time: number;
-    usdc: string;
-  }>;
-  isSnapshot?: true;
-  user: string;
-}
-⋮----
-export interface UserHistoricalOrdersEvent {
-  isSnapshot?: true;
-  orderHistory: unknown[];
-  user: string;
-}
-⋮----
-export interface UserNonFundingLedgerUpdatesEvent {
-  isSnapshot?: true;
-  nonFundingLedgerUpdates: unknown[];
-  user: string;
-}
-⋮----
-export interface UserTwapHistoryEvent {
-  history: unknown[];
-  isSnapshot?: true;
-  user: string;
-}
-⋮----
-export interface UserTwapSliceFillsEvent {
-  isSnapshot?: true;
-  twapSliceFills: unknown[];
-  user: string;
-}
-⋮----
-export interface SpotStateEvent {
-  spotState: Record<string, unknown>;
-  user: string;
-}
-⋮----
-export interface TwapStatesEvent {
-  dex: string;
-  states: Array<[twapId: number, state: Record<string, unknown>]>;
-  user: string;
-}
-⋮----
-export type UserEvent =
-  | { fills: UserFill[] }
-  | {
-      funding: {
-        coin: string;
-        fundingRate: string;
-        nSamples: number | null;
-        szi: string;
-        time: number;
-        usdc: string;
-      };
-    }
-  | {
-      liquidation: {
-        lid: number;
-        liquidated_account_value: string;
-        liquidated_ntl_pos: string;
-        liquidated_user: string;
-        liquidator: string;
-      };
-    }
-  | { nonUserCancel: Array<{ coin: string; oid: number }> }
-  | { twapHistory: unknown[] }
-  | { twapSliceFills: unknown[] };
-⋮----
-export interface WebData3Event {
-  perpDexStates: Record<string, unknown>[];
-  userState: {
-    abstraction?: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
-    agentAddress: string | null;
-    agentValidUntil: number | null;
-    cumLedger: string;
-    dexAbstractionEnabled?: boolean;
-    isVault: boolean;
-    optOutOfSpotDusting?: true;
-    serverTime: number;
-    user: string;
-  };
-  [key: string]: unknown;
-}
-⋮----
-export type GenericWebsocketEvent =
-  Record<string, unknown> | unknown[] | string | number | boolean | null;
-⋮----
-export type WebsocketEventFor<S extends WebsocketSubscription> =
-  S['type'] extends 'allMids'
-    ? AllMidsEvent
-    : S['type'] extends 'activeAssetData'
-      ? ActiveAssetDataEvent
-      : S['type'] extends 'allDexsAssetCtxs'
-        ? AllDexsAssetCtxsEvent
-        : S['type'] extends 'allDexsClearinghouseState'
-          ? AllDexsClearinghouseStateEvent
-          : S['type'] extends 'assetCtxs'
-            ? AssetCtxsEvent
-            : S['type'] extends 'clearinghouseState'
-              ? ClearinghouseStateEvent
-              : S['type'] extends 'notification'
-                ? NotificationEvent
-                : S['type'] extends 'orderUpdates'
-                  ? OrderUpdateEvent[]
-                  : S['type'] extends 'spotState'
-                    ? SpotStateEvent
-                    : S['type'] extends 'trades'
-                      ? TradeEvent[]
-                      : S['type'] extends 'twapStates'
-                        ? TwapStatesEvent
-                        : S['type'] extends 'userEvents'
-                          ? UserEvent
-                          : S['type'] extends 'userFundings'
-                            ? UserFundingsEvent
-                            : S['type'] extends 'userHistoricalOrders'
-                              ? UserHistoricalOrdersEvent
-                              : S['type'] extends 'userNonFundingLedgerUpdates'
-                                ? UserNonFundingLedgerUpdatesEvent
-                                : S['type'] extends 'userTwapHistory'
-                                  ? UserTwapHistoryEvent
-                                  : S['type'] extends 'userTwapSliceFills'
-                                    ? UserTwapSliceFillsEvent
-                                    : S['type'] extends 'webData3'
-                                      ? WebData3Event
-                                      : S['type'] extends 'bbo'
-                                        ? BboEvent
-                                        : S['type'] extends 'candle'
-                                          ? Candle
-                                          : S['type'] extends 'fastAssetCtxs'
-                                            ? FastAssetCtxsEvent
-                                            : S['type'] extends 'outcomeMetaUpdates'
-                                              ? OutcomeMetaUpdatesEvent
-                                              : S['type'] extends 'spotAssetCtxs'
-                                                ? SpotAssetCtxsEvent
-                                                : S['type'] extends 'l2Book'
-                                                  ? OrderBookResponse
-                                                  : S['type'] extends 'userFills'
-                                                    ? UserFillsEvent
-                                                    : S['type'] extends 'openOrders'
-                                                      ? OpenOrdersEvent
-                                                      : S['type'] extends 'activeAssetCtx'
-                                                        ? AssetContextEvent
-                                                        : GenericWebsocketEvent;
-⋮----
-export type WebsocketCallback<S extends WebsocketSubscription> = (
-  data: WebsocketEventFor<S>,
-) => void;
-⋮----
-export interface WebsocketSubscriptionHandle<S extends WebsocketSubscription> {
-  readonly subscription: S;
-  unsubscribe(): Promise<void>;
-}
-⋮----
-unsubscribe(): Promise<void>;
-
-================
-File: src/constants.ts
-================
-
-
-================
-File: .npmrc
-================
-min-release-age=30
-
-================
-File: .nvmrc
-================
-v24.18.0
-
-================
-File: .prettierrc
-================
-{
-  "tabWidth": 2,
-  "singleQuote": true,
-  "trailingComma": "all"
-}
-
-================
-File: eslint.config.cjs
-================
-/* eslint-disable @typescript-eslint/no-require-imports */
-
-================
-File: jest.config.cjs
-================
-/** @type {import('jest').Config} */
-
-================
-File: LICENSE.md
-================
-Copyright 2026 Tiago Siebler
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-================
-File: package.json
-================
-{
-  "name": "@siebly/hyperliquid-api",
-  "version": "0.0.1",
-  "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
-  "scripts": {
-    "clean": "node scripts/clean.mjs",
-    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
-    "lint": "eslint src",
-    "test": "jest --passWithNoTests",
-    "test:extensions": "tsc -p tsconfig.extensions.json",
-    "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
-    "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
-    "test:unit": "jest --passWithNoTests --runInBand test/unit",
-    "prepublishOnly": "npm run validate:release && npm run lint && npm run test:types && npm run test:unit && npm run test:packed"
-  },
-  "main": "dist/cjs/index.js",
-  "module": "dist/mjs/index.js",
-  "types": "dist/mjs/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/mjs/index.d.ts",
-      "browser": "./dist/mjs/index.js",
-      "import": "./dist/mjs/index.js",
-      "require": "./dist/cjs/index.js",
-      "default": "./dist/mjs/index.js"
-    }
-  },
-  "browser": {
-    "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
-    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js"
-  },
-  "type": "module",
-  "sideEffects": false,
-  "packageManager": "npm@11.12.0",
-  "files": [
-    "dist/*"
-  ],
-  "author": "Siebly.io (https://github.com/sieblyio)",
-  "contributors": [
-    "Tiago Siebler (https://github.com/tiagosiebler)"
-  ],
-  "dependencies": {
-    "@msgpack/msgpack": "^3.1.2",
-    "axios": "1.18.1",
-    "ethers": "^6.16.0",
-    "fflate": "^0.8.2",
-    "isomorphic-ws": "^5.0.0",
-    "ws": "8.21.0"
-  },
-  "devDependencies": {
-    "@eslint/compat": "2.1.0",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.14",
-    "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
-    "esbuild": "0.27.2",
-    "eslint": "^10.3.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "eslint-plugin-require-extensions": "0.1.3",
-    "eslint-plugin-simple-import-sort": "^13.0.0",
-    "jest": "^30.4.2",
-    "prettier": "^3.8.3",
-    "typescript": "^6.0.3"
-  },
-  "overrides": {
-    "@babel/core": "7.29.6",
-    "form-data": "4.0.6",
-    "js-yaml": "3.15.0"
-  },
-  "keywords": [
-    "hyperliquid",
-    "hyperliquid api",
-    "hyperliquid nodejs",
-    "hyperliquid javascript",
-    "hyperliquid typescript",
-    "hyperliquid websocket",
-    "hip-3",
-    "algo trading",
-    "api",
-    "sdk",
-    "websocket",
-    "rest",
-    "trading bots",
-    "cryptocurrency",
-    "siebly",
-    "siebly.io"
-  ],
-  "funding": {
-    "type": "individual",
-    "url": "https://github.com/sponsors/tiagosiebler"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sieblyio/hyperliquid-api.git"
-  },
-  "bugs": {
-    "url": "https://github.com/sieblyio/hyperliquid-api/issues"
-  },
-  "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
-  "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=11.0.0"
-  }
-}
-
-================
-File: tsconfig.cjs.json
-================
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "bundler",
-    "outDir": "dist/cjs",
-    "rootDir": "src",
-    "target": "esnext"
-  },
-  "include": ["src/**/*.*"]
-}
-
-================
-File: tsconfig.esm.json
-================
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "outDir": "dist/mjs",
-    "rootDir": "src",
-    "target": "esnext"
-  },
-  "include": ["src/**/*.*"]
-}
-
-================
-File: tsconfig.extensions.json
-================
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "declaration": false,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "noEmit": true
-  },
-  "include": ["src/**/*.*"]
-}
-
-================
-File: tsconfig.json
-================
-{
-  "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": false,
-    "inlineSourceMap": false,
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "noEmitOnError": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "pretty": true,
-    "removeComments": false,
-    "resolveJsonModule": true,
-    "skipLibCheck": false,
-    "sourceMap": true,
-    "strict": true,
-    "strictNullChecks": true,
-    "types": ["node"],
-    "target": "esnext"
-  },
-  "exclude": ["node_modules", "dist"],
-  "include": ["src/**/*.*"]
-}
-
-================
-File: tsconfig.linting.json
-================
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "allowJs": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "noEmit": true,
-    "rootDir": ".",
-    "target": "esnext",
-    "types": ["node", "jest"]
-  },
-  "include": [
-    "src/**/*.*",
-    "test/**/*.*",
-    "examples/**/*.*",
-    "eslint.config.cjs",
-    "jest.config.cjs"
-  ]
-}
 
 ================
 File: examples/Rest/rest-cancel-open-orders.ts
@@ -3155,135 +2685,541 @@ import { RestClient } from '../../src/index.js';
 async function main()
 
 ================
-File: examples/Websocket/WS-API/ws-api-client.ts
+File: examples/README.md
 ================
-import {
-  DefaultLogger,
-  type ExchangeResponse,
-  type OrderResponseData,
-  WebsocketAPIClient,
-} from '../../../src/index.js';
-⋮----
-// or
-// import { DefaultLogger, WebsocketAPIClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * WebsocketAPIClient has the same Info and Exchange methods as RestClient, but
- * sends them over Hyperliquid's correlated WebSocket POST protocol.
- *
- * Public example:
- * npx tsx examples/Websocket/WS-API/ws-api-client.ts
- *
- * Private example:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Websocket/WS-API/ws-api-client.ts
- */
-⋮----
-// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
-⋮----
-// testnet: true,
-⋮----
-function firstRestingOid(
-  result: ExchangeResponse<OrderResponseData>,
-): number | undefined
-⋮----
-async function main()
-⋮----
-// Optional: open the WS API connection early so the first call is not a
-// cold start. connect() happens automatically on the first request.
-// await wsClient.connect();
+# Hyperliquid API - Examples
+
+This folder contains ready to go examples demonstrating the SDK, written in TypeScript (they also work in JavaScript after dropping type annotations).
+
+## Getting started
+
+- Clone the project, or install the module: `npm install @siebly/hyperliquid-api`.
+- Edit the sample as needed (some samples require a private key, or a change from `../src/index.js` to `@siebly/hyperliquid-api`).
+- Execute with tsx: `npx tsx examples/Rest/rest-public.ts`.
+
+Samples that refer to credentials via `process.env.HYPERLIQUID_PRIVATE_KEY` can be spawned with environment variables. Unix/macOS example:
+
+```
+HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
+```
+
+If the key is an API/agent wallet, also pass the master account:
+
+```
+HYPERLIQUID_PRIVATE_KEY='0xabc' HYPERLIQUID_ACCOUNT_ADDRESS='0x...' npx tsx examples/Rest/rest-private.ts
+```
+
+Trading examples submit real orders on mainnet by default. Sizes are small and limit prices are far from market. Uncomment `testnet: true` in a sample to use testnet. Start with `rest-public.ts` and `rest-private.ts` before the order samples.
+
+### REST APIs
+
+All REST examples live in [examples/Rest](./Rest/).
+
+- `rest-public.ts` - Public Info: mids, books, candles, trades, metadata, asset aliases.
+- `rest-private.ts` - Authenticated Info reads: balances, positions, open orders, fills. No orders.
+- `rest-market-order.ts` - `submitMarketOrder()` then `submitMarketClose()`.
+- `rest-limit-order.ts` - GTC limit with client order id, status lookup, cancel by cloid.
+- `rest-spot-order.ts` - Spot limit on `PURR/USDC`, then cancel.
+- `rest-tpsl.ts` - Standalone stop plus grouped entry + TP/SL.
+- `rest-leverage.ts` - Cross/isolated leverage and isolated margin.
+- `rest-cancel-open-orders.ts` - Cancel every open order.
+- `rest-schedule-cancel.ts` - Dead-man's switch via `setCancelAllAfter()`.
+- `rest-rounding.ts` - Tick/lot rules for raw `submitOrder()` wires.
+
+### WebSockets
+
+All WebSocket examples live in [examples/Websocket](./Websocket/).
+
+#### Consumers
+
+These receive data from Hyperliquid WebSockets (market data, account updates). Data emits through `on('message')` with the original `channel`, `data`, and `wsKey`. Subscription acknowledgements emit through `on('response')`. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the same client. Use `subscribe()` and `unsubscribe()` to manage one topic or an array independently of listeners.
+
+- `ws-public.ts` - Public mids, book, trades, candles, bbo, asset context.
+- `ws-private.ts` - Account streams: fills, order updates, open orders, notifications. Needs `HYPERLIQUID_ADDRESS`.
+
+#### WebSocket API
+
+These send commands over Hyperliquid's WebSocket POST protocol. `WebsocketAPIClient` has the same methods as `RestClient`.
+
+- `WS-API/ws-api-client.ts` - Public Info over WS, plus an optional limit + cancel when `HYPERLIQUID_PRIVATE_KEY` is set.
 
 ================
-File: examples/Websocket/ws-private.ts
+File: scripts/postbuild.mjs
 ================
-import { DefaultLogger, WebsocketClient } from '../../src/index.js';
-⋮----
-// or
-// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Account streams. These need a wallet address, not a private key. The SDK
- * isolates user streams whose server events omit the user onto per-user
- * connections.
- *
- * Unlike Bybit/OKX/Binance, there is no wsClient.on('update'). Market and
- * account payloads are delivered only to the subscribe() callback below.
- * on() is lifecycle only: open, reconnecting, reconnected, exception, close.
- *
- * Unix:
- * HYPERLIQUID_ADDRESS='0xabc' npx tsx examples/Websocket/ws-private.ts
- */
-⋮----
-// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
-⋮----
-// testnet: true,
-⋮----
-async function main()
+async function copySourceDeclarations(directory)
 
 ================
-File: examples/Websocket/ws-public.ts
+File: src/types/websockets/ws-portable.ts
 ================
-import { DefaultLogger, WebsocketClient } from '../../src/index.js';
+export interface WebSocketMessageEvent {
+  data: ArrayBuffer | ArrayBufferView | Blob | string;
+}
 ⋮----
-// or
-// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
+export interface WebSocketCloseEvent {
+  code?: number;
+  reason?: string;
+}
 ⋮----
-/**
- * Public market-data subscriptions.
- *
- * Unlike Bybit/OKX/Binance, there is no wsClient.on('update'). Payloads are
- * delivered only to the subscribe() callback below. on() is lifecycle only:
- * open, reconnecting, reconnected, exception, close.
- *
- * npx tsx examples/Websocket/ws-public.ts
- */
+export interface WebSocketLike {
+  binaryType?: string;
+  close(code?: number, reason?: string): void;
+  onclose: ((event: WebSocketCloseEvent) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onmessage: ((event: WebSocketMessageEvent) => void) | null;
+  onopen: (() => void) | null;
+  readonly readyState: number;
+  send(data: string): void;
+  /** Node.js extension used when a failed connection cannot close gracefully. */
+  terminate?(): void;
+}
 ⋮----
-// Uncomment for a verbose view of heartbeats and reconnects:
-// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+close(code?: number, reason?: string): void;
 ⋮----
-// testnet: true,
+send(data: string): void;
+/** Node.js extension used when a failed connection cannot close gracefully. */
+terminate?(): void;
 ⋮----
-async function main()
+/** SDK-owned types keep Node's emitter declarations out of browser consumers. */
+export interface EventEmitterLike<
+  TEvents extends { [K in keyof TEvents]: unknown[] },
+> {
+  addListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  on<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  once<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  prependListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  prependOnceListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  off<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  removeListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  removeAllListeners(event?: keyof TEvents): this;
+  setMaxListeners(count: number): this;
+  getMaxListeners(): number;
+  listeners<K extends keyof TEvents>(
+    event: K,
+  ): Array<(...args: TEvents[K]) => void>;
+  rawListeners<K extends keyof TEvents>(
+    event: K,
+  ): Array<(...args: TEvents[K]) => void>;
+  emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
+  listenerCount<K extends keyof TEvents>(
+    event: K,
+    listener?: (...args: TEvents[K]) => void,
+  ): number;
+  eventNames(): Array<keyof TEvents>;
+}
 ⋮----
-// Spot pair aliases remap the same way as REST info: HYPE/USDC -> @107.
+addListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+on<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+once<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+prependListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+prependOnceListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+off<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+removeListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+removeAllListeners(event?: keyof TEvents): this;
+setMaxListeners(count: number): this;
+getMaxListeners(): number;
+listeners<K extends keyof TEvents>(
+    event: K,
+): Array<(...args: TEvents[K])
+rawListeners<K extends keyof TEvents>(
+    event: K,
+): Array<(...args: TEvents[K])
+emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
+listenerCount<K extends keyof TEvents>(
+    event: K,
+    listener?: (...args: TEvents[K]) => void,
+  ): number;
+eventNames(): Array<keyof TEvents>;
+⋮----
+export interface EventEmitterConstructor {
+  new <
+    TEvents extends { [K in keyof TEvents]: unknown[] },
+  >(): EventEmitterLike<TEvents>;
+}
+⋮----
+export interface WebSocketConstructor {
+  new (url: string): WebSocketLike;
+  readonly CLOSED?: number;
+  readonly CLOSING?: number;
+  readonly CONNECTING?: number;
+  readonly OPEN?: number;
+}
 
 ================
-File: src/types/websockets/ws-general.ts
+File: src/types/websockets/ws-subscriptions.ts
 ================
 import type {
-  RestClientNetworkOptions,
-  RestClientOptions,
-} from '../shared.types.js';
-import type { WebSocketConstructor } from './ws-portable.js';
+  Candle,
+  OpenOrder,
+  OrderBookResponse,
+  UserFill,
+} from '../response/info.types.js';
 ⋮----
-export interface WebsocketClientOptions {
-  assetCacheTtlMs?: number;
-  autoReconnect?: boolean;
-  baseUrl?: string;
-  maxReconnectTimeout?: number;
-  pingInterval?: number;
-  pongTimeout?: number;
-  reconnectTimeout?: number;
-  requestTimeoutMs?: number;
-  requestOptions?: RestClientNetworkOptions;
-  testnet?: boolean;
-  webSocketConstructor?: WebSocketConstructor;
-  wsUrl?: string;
+export type CandleInterval =
+  | '1d'
+  | '12h'
+  | '15m'
+  | '1h'
+  | '1m'
+  | '1M'
+  | '2h'
+  | '30m'
+  | '3d'
+  | '3m'
+  | '4h'
+  | '5m'
+  | '6h'
+  | '8h'
+  | '1w';
+⋮----
+export type UserSubscriptionType =
+  | 'activeAssetData'
+  | 'allDexsClearinghouseState'
+  | 'clearinghouseState'
+  | 'notification'
+  | 'openOrders'
+  | 'orderUpdates'
+  | 'spotState'
+  | 'twapStates'
+  | 'userEvents'
+  | 'userFills'
+  | 'userFundings'
+  | 'userHistoricalOrders'
+  | 'userNonFundingLedgerUpdates'
+  | 'userTwapHistory'
+  | 'userTwapSliceFills'
+  | 'webData3';
+⋮----
+export type WebsocketSubscription =
+  | { dex?: string; type: 'allMids' }
+  | { dex?: string; type: 'assetCtxs' }
+  | { coin: string; type: 'activeAssetCtx' }
+  | { coin: string; user: string; type: 'activeAssetData' }
+  | { type: 'allDexsAssetCtxs' }
+  | { user: string; type: 'allDexsClearinghouseState' }
+  | { coin: string; type: 'bbo' }
+  | { coin: string; interval: CandleInterval; type: 'candle' }
+  | { dex?: string; user: string; type: 'clearinghouseState' }
+  | { type: 'fastAssetCtxs' }
+  | {
+      coin: string;
+      fast?: boolean;
+      mantissa?: 1 | 2 | 5 | null;
+      nSigFigs?: 2 | 3 | 4 | 5 | null;
+      type: 'l2Book';
+    }
+  | { user: string; type: 'notification' }
+  | { dex?: string; user: string; type: 'openOrders' }
+  | { user: string; type: 'orderUpdates' }
+  | { type: 'outcomeMetaUpdates' }
+  | { type: 'spotAssetCtxs' }
+  | {
+      ignorePortfolioMargin?: boolean;
+      isPortfolioMargin?: never;
+      user: string;
+      type: 'spotState';
+    }
+  | {
+      ignorePortfolioMargin?: never;
+      isPortfolioMargin?: boolean;
+      user: string;
+      type: 'spotState';
+    }
+  | { coin: string; type: 'trades' }
+  | { dex?: string; user: string; type: 'twapStates' }
+  | { user: string; type: 'userEvents' }
+  | { aggregateByTime?: boolean; user: string; type: 'userFills' }
+  | { user: string; type: 'userFundings' }
+  | { user: string; type: 'userHistoricalOrders' }
+  | { user: string; type: 'userNonFundingLedgerUpdates' }
+  | { user: string; type: 'userTwapHistory' }
+  | { user: string; type: 'userTwapSliceFills' }
+  | { user: string; type: 'webData3' };
+⋮----
+export interface AllMidsEvent {
+  dex?: string;
+  mids: Record<string, string>;
 }
 ⋮----
-export type WebsocketAPIClientOptions = RestClientOptions &
-  Omit<WebsocketClientOptions, keyof RestClientOptions>;
-⋮----
-export type WebsocketLifecycleEvent =
-  'close' | 'exception' | 'open' | 'reconnected' | 'reconnecting';
-⋮----
-export interface WebsocketLifecycleContext {
-  wsKey: string;
-  event?: unknown;
+export interface AssetContextEvent {
+  coin?: string;
+  ctx?: Record<string, unknown>;
+  dex?: string;
+  [key: string]: unknown;
 }
 ⋮----
-export type WebsocketLifecycleCallback = (
-  context: WebsocketLifecycleContext,
-) => void;
+export interface AssetCtxsEvent {
+  ctxs: Record<string, unknown>[];
+  dex: string;
+}
+⋮----
+export interface AllDexsAssetCtxsEvent {
+  ctxs: Array<[dex: string, contexts: Record<string, unknown>[]]>;
+}
+⋮----
+export interface ClearinghouseStateEvent {
+  clearinghouseState: Record<string, unknown>;
+  dex: string;
+  user: string;
+}
+⋮----
+export interface AllDexsClearinghouseStateEvent {
+  clearinghouseStates: Array<[dex: string, state: Record<string, unknown>]>;
+  user: string;
+}
+⋮----
+export interface ActiveAssetDataEvent {
+  availableToTrade: [string, string];
+  coin: string;
+  leverage: Record<string, unknown>;
+  maxTradeSzs: [string, string];
+  user: string;
+  [key: string]: unknown;
+}
+⋮----
+export interface BboEvent {
+  bbo: [
+    bid: { n: number; px: string; sz: string } | null,
+    offer: { n: number; px: string; sz: string } | null,
+  ];
+  coin: string;
+  time: number;
+}
+⋮----
+export interface TradeEvent {
+  coin: string;
+  hash: string;
+  px: string;
+  side: 'A' | 'B';
+  sz: string;
+  tid: number;
+  time: number;
+  users: [string, string];
+}
+⋮----
+export interface NotificationEvent {
+  notification: string;
+}
+⋮----
+export interface OrderUpdateEvent {
+  order: OpenOrder;
+  status: string;
+  statusTimestamp: number;
+}
+⋮----
+export interface FastAssetCtxsEvent {
+  [coin: string]: {
+    markPx?: string;
+    midPx?: string | null;
+  };
+}
+⋮----
+export type SpotAssetCtxsEvent = Array<Record<string, unknown>>;
+⋮----
+export interface OutcomeMetaUpdatesEvent {
+  updates: Array<
+    | {
+        outcomeCreated: {
+          description: string;
+          name: string;
+          outcome: number;
+          quoteToken: string;
+          sideSpecs: Array<{ name: string; token?: number }>;
+        };
+      }
+    | { outcomeSettled: { outcome: number } }
+    | {
+        questionUpdated: {
+          description: string;
+          fallbackOutcome: number;
+          name: string;
+          namedOutcomes: number[];
+          question: number;
+          settledNamedOutcomes: number[];
+        };
+      }
+    | { questionSettled: { question: number } }
+  >;
+}
+⋮----
+export interface UserFillsEvent {
+  fills: UserFill[];
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface OpenOrdersEvent {
+  dex: string;
+  orders: OpenOrder[];
+  user: string;
+}
+⋮----
+export interface UserFundingsEvent {
+  fundings: Array<{
+    coin: string;
+    fundingRate: string;
+    nSamples: number | null;
+    szi: string;
+    time: number;
+    usdc: string;
+  }>;
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface UserHistoricalOrdersEvent {
+  isSnapshot?: boolean;
+  orderHistory: unknown[];
+  user: string;
+}
+⋮----
+export interface UserNonFundingLedgerUpdatesEvent {
+  isSnapshot?: boolean;
+  nonFundingLedgerUpdates: unknown[];
+  user: string;
+}
+⋮----
+export interface UserTwapHistoryEvent {
+  history: unknown[];
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface UserTwapSliceFillsEvent {
+  isSnapshot?: boolean;
+  twapSliceFills: unknown[];
+  user: string;
+}
+⋮----
+export interface SpotStateEvent {
+  spotState: Record<string, unknown>;
+  user: string;
+}
+⋮----
+export interface TwapStatesEvent {
+  dex: string;
+  states: Array<[twapId: number, state: Record<string, unknown>]>;
+  user: string;
+}
+⋮----
+export type UserEvent =
+  | { fills: UserFill[] }
+  | {
+      funding: {
+        coin: string;
+        fundingRate: string;
+        nSamples: number | null;
+        szi: string;
+        time: number;
+        usdc: string;
+      };
+    }
+  | {
+      liquidation: {
+        lid: number;
+        liquidated_account_value: string;
+        liquidated_ntl_pos: string;
+        liquidated_user: string;
+        liquidator: string;
+      };
+    }
+  | { nonUserCancel: Array<{ coin: string; oid: number }> }
+  | { twapHistory: unknown[] }
+  | { twapSliceFills: unknown[] };
+⋮----
+export interface WebData3Event {
+  perpDexStates: Record<string, unknown>[];
+  userState: {
+    abstraction?: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
+    agentAddress: string | null;
+    agentValidUntil: number | null;
+    cumLedger: string;
+    dexAbstractionEnabled?: boolean;
+    isVault: boolean;
+    optOutOfSpotDusting?: true;
+    serverTime: number;
+    user: string;
+  };
+  [key: string]: unknown;
+}
+⋮----
+export type GenericWebsocketEvent =
+  Record<string, unknown> | unknown[] | string | number | boolean | null;
+⋮----
+/** Payload types keyed by subscription type. Wire envelopes are defined in ws-events. */
+export interface WebsocketSubscriptionData {
+  activeAssetCtx: AssetContextEvent;
+  activeAssetData: ActiveAssetDataEvent;
+  allDexsAssetCtxs: AllDexsAssetCtxsEvent;
+  allDexsClearinghouseState: AllDexsClearinghouseStateEvent;
+  allMids: AllMidsEvent;
+  assetCtxs: AssetCtxsEvent;
+  bbo: BboEvent;
+  candle: Candle;
+  clearinghouseState: ClearinghouseStateEvent;
+  fastAssetCtxs: FastAssetCtxsEvent;
+  l2Book: OrderBookResponse;
+  notification: NotificationEvent;
+  openOrders: OpenOrdersEvent;
+  orderUpdates: OrderUpdateEvent[];
+  outcomeMetaUpdates: OutcomeMetaUpdatesEvent;
+  spotAssetCtxs: SpotAssetCtxsEvent;
+  spotState: SpotStateEvent;
+  trades: TradeEvent[];
+  twapStates: TwapStatesEvent;
+  userEvents: UserEvent;
+  userFills: UserFillsEvent;
+  userFundings: UserFundingsEvent;
+  userHistoricalOrders: UserHistoricalOrdersEvent;
+  userNonFundingLedgerUpdates: UserNonFundingLedgerUpdatesEvent;
+  userTwapHistory: UserTwapHistoryEvent;
+  userTwapSliceFills: UserTwapSliceFillsEvent;
+  webData3: WebData3Event;
+}
+⋮----
+export type WebsocketEventFor<S extends WebsocketSubscription> =
+  WebsocketSubscriptionData[S['type']];
 
 ================
 File: src/types/shared.types.ts
@@ -3396,6 +3332,85 @@ export interface L1ActionOptions {
   nonce?: number;
   vaultAddress?: string | null;
 }
+
+================
+File: tsconfig.extensions.json
+================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true
+  },
+  "include": ["src/**/*.*", "examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples/apidoc", "examples/tstests"]
+}
+
+================
+File: examples/Websocket/WS-API/ws-api-client.ts
+================
+import {
+  DefaultLogger,
+  type ExchangeResponse,
+  type OrderResponseData,
+  WebsocketAPIClient,
+} from '../../../src/index.js';
+⋮----
+// or
+// import { DefaultLogger, WebsocketAPIClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * WebsocketAPIClient has the same Info and Exchange methods as RestClient, but
+ * sends them over Hyperliquid's correlated WebSocket POST protocol.
+ *
+ * Public example:
+ * npx tsx examples/Websocket/WS-API/ws-api-client.ts
+ *
+ * Private example:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Websocket/WS-API/ws-api-client.ts
+ */
+⋮----
+// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+⋮----
+// testnet: true,
+⋮----
+function firstRestingOid(
+  result: ExchangeResponse<OrderResponseData>,
+): number | undefined
+⋮----
+async function main()
+⋮----
+// Optional: open the WS API connection early so the first call is not a
+// cold start. connect() happens automatically on the first request.
+// await wsClient.connect();
+
+================
+File: examples/Websocket/ws-private.ts
+================
+import { DefaultLogger, WebsocketClient } from '../../src/index.js';
+⋮----
+// or
+// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Account streams. These need a wallet address, not a private key. The SDK
+ * isolates user streams whose server events omit the user onto per-user
+ * connections.
+ *
+ * Data emits through on('message'), with the original channel and wsKey.
+ * Subscription acknowledgements emit through on('response').
+ *
+ * Unix:
+ * HYPERLIQUID_ADDRESS='0xabc' npx tsx examples/Websocket/ws-private.ts
+ */
+⋮----
+// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+⋮----
+// testnet: true,
+⋮----
+async function main()
 
 ================
 File: src/types/request/exchange.types.ts
@@ -3611,215 +3626,6 @@ export type DeploySpotRequest = Omit<JsonObject, 'type'>;
 export type SubmitUserOutcomeRequest = Omit<JsonObject, 'type'>;
 
 ================
-File: src/index.ts
-================
-
-
-================
-File: src/WebsocketAPIClient.ts
-================
-import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
-import {
-  DefaultLogger,
-  type DefaultLogger as Logger,
-} from './lib/websocket/logger.js';
-import { RestClient } from './RestClient.js';
-import type {
-  WebsocketAPIClientOptions,
-  WebsocketLifecycleCallback,
-  WebsocketLifecycleEvent,
-} from './types/websockets/ws-general.js';
-import { WebsocketClient } from './WebsocketClient.js';
-⋮----
-export class WebsocketAPIClient extends RestClient
-⋮----
-constructor(
-    options: WebsocketAPIClientOptions = {},
-    logger: Logger = DefaultLogger,
-)
-⋮----
-getWSClient(): WebsocketClient
-⋮----
-connect(): Promise<void>
-⋮----
-on(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
-): this
-⋮----
-once(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
-): this
-⋮----
-off(
-    event: WebsocketLifecycleEvent,
-    callback: WebsocketLifecycleCallback,
-): this
-⋮----
-isConnected(): boolean
-⋮----
-close(): void
-⋮----
-closeAll(): void
-⋮----
-protected override post<T>(path: string, body: unknown): Promise<T>
-
-================
-File: src/WebsocketClient.ts
-================
-import { inflateSync, strFromU8 } from 'fflate';
-⋮----
-import { MAINNET_WS_URL, TESTNET_WS_URL } from './constants.js';
-import type { ResolvedAsset } from './lib/asset-resolver.js';
-import { BaseWebsocketClient } from './lib/BaseWSClient.js';
-import { HyperliquidApiError } from './lib/errors.js';
-import { normalizeAddresses } from './lib/normalize-addresses.js';
-import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
-import {
-  DefaultLogger,
-  type DefaultLogger as Logger,
-} from './lib/websocket/logger.js';
-import type { WsConnection } from './lib/websocket/WsConnection.js';
-import { sanitizeObjectForWire } from './lib/wire.js';
-import { RestClient } from './RestClient.js';
-import type { ExchangeResponse } from './types/response/exchange.types.js';
-import type { RequestOptions } from './types/shared.types.js';
-import type { WebsocketClientOptions } from './types/websockets/ws-general.js';
-import type {
-  WebsocketCallback,
-  WebsocketEventFor,
-  WebsocketSubscription,
-  WebsocketSubscriptionHandle,
-} from './types/websockets/ws-subscriptions.js';
-⋮----
-type UntypedCallback = (data: unknown) => void;
-⋮----
-interface PendingRequest {
-  cleanup: () => void;
-  reject: (error: unknown) => void;
-  resolve: (value: unknown) => void;
-}
-⋮----
-interface SubscriptionEntry {
-  callbacks: Set<UntypedCallback>;
-  subscription: WebsocketSubscription;
-}
-⋮----
-interface ConnectionContext {
-  connection: WsConnection;
-  connectionKey: string;
-  subscriptions: Map<string, SubscriptionEntry>;
-}
-⋮----
-function stableValue(value: unknown): unknown
-⋮----
-function subscriptionId(subscription: WebsocketSubscription): string
-⋮----
-function normalizeSubscriptionFields<S extends WebsocketSubscription>(
-  subscription: S,
-): S
-⋮----
-function channelMatches(
-  subscription: WebsocketSubscription,
-  channel: string,
-): boolean
-⋮----
-function recordValue(value: unknown): Record<string, unknown> | undefined
-⋮----
-function postErrorRequestId(message: string): number | undefined
-⋮----
-function positiveFinite(
-  value: number | undefined,
-  fallback: number,
-  field: string,
-): number
-⋮----
-function eventMatches(
-  subscription: WebsocketSubscription,
-  data: unknown,
-): boolean
-⋮----
-function decompressFastAssetCtxs(data: unknown): unknown
-⋮----
-export class WebsocketClient extends BaseWebsocketClient
-⋮----
-constructor(
-    options: WebsocketClientOptions = {},
-    logger: Logger = DefaultLogger,
-)
-⋮----
-connect(wsKey: 'api' | 'public' = 'public'): Promise<void>
-⋮----
-sendWSAPIRequest<T>(
-    endpoint: 'action' | 'info',
-    body: unknown,
-    options: RequestOptions = {},
-): Promise<T>
-⋮----
-const abort = () =>
-⋮----
-const cleanup = () =>
-⋮----
-async subscribe<S extends WebsocketSubscription>(
-    subscription: S,
-    callback: WebsocketCallback<S>,
-): Promise<WebsocketSubscriptionHandle<S>>
-⋮----
-async unsubscribe<S extends WebsocketSubscription>(
-    subscription: S,
-    callback?: WebsocketCallback<S>,
-): Promise<void>
-⋮----
-resolveAsset(identifier: number | string): Promise<ResolvedAsset>
-⋮----
-nameToCoin(name: string): Promise<string>
-⋮----
-refreshAssetMetadata(): Promise<void>
-⋮----
-override closeAll(): void
-⋮----
-private getConnection(connectionKey: string): ConnectionContext
-⋮----
-private resubscribe(context: ConnectionContext): void
-⋮----
-private handleSubscriptionMessage(
-    context: ConnectionContext,
-    record: Record<string, unknown>,
-): void
-⋮----
-private handlePostMessage(
-    wsKey: string,
-    record: Record<string, unknown>,
-): void
-⋮----
-private resolveRequest(id: number, value: unknown): void
-⋮----
-private rejectRequest(id: number, error: unknown): void
-⋮----
-private rejectPendingRequests(error: unknown): void
-⋮----
-private connectionKey(subscription: WebsocketSubscription): string
-⋮----
-private async normalizeSubscription<S extends WebsocketSubscription>(
-    subscription: S,
-): Promise<S>
-⋮----
-protected override getWsUrl(): string
-⋮----
-protected override onConnectionOpen(wsKey: string): void
-⋮----
-protected override onConnectionReconnected(wsKey: string): void
-⋮----
-protected override onConnectionClose(wsKey: string, event: unknown): void
-⋮----
-protected override onConnectionMessage(wsKey: string, value: unknown): void
-⋮----
-protected override onConnectionRemoved(wsKey: string): void
-⋮----
-protected override onAllConnectionsRemoved(): void
-
-================
 File: .gitignore
 ================
 hyperliquidref
@@ -3838,7 +3644,247 @@ dist
 node_modules
 README_BEFORE_RELEASE.md
 examples/tstests
+/tmp/
 localtest.sh
+
+================
+File: package.json
+================
+{
+  "name": "@siebly/hyperliquid-api",
+  "version": "0.0.1",
+  "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
+    "lint": "eslint src",
+    "test": "jest --passWithNoTests",
+    "test:extensions": "tsc -p tsconfig.extensions.json",
+    "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
+    "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
+    "test:unit": "jest --passWithNoTests --runInBand test/unit"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "dist/mjs/index.js",
+  "types": "dist/mjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mjs/index.d.ts",
+      "browser": "./dist/mjs/index.js",
+      "import": "./dist/mjs/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/mjs/index.js"
+    }
+  },
+  "browser": {
+    "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/event-emitter.js": "./dist/cjs/lib/event-emitter.browser.js",
+    "./dist/mjs/lib/event-emitter.js": "./dist/mjs/lib/event-emitter.browser.js"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "npm@11.12.0",
+  "files": [
+    "dist/*"
+  ],
+  "author": "Siebly.io (https://github.com/sieblyio)",
+  "contributors": [
+    "Tiago Siebler (https://github.com/tiagosiebler)"
+  ],
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
+    "axios": "1.18.1",
+    "ethers": "^6.16.0",
+    "events": "3.3.0",
+    "fflate": "^0.8.2",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/compat": "2.1.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.14",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "esbuild": "0.27.2",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-require-extensions": "0.1.3",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "@babel/core": "7.29.6",
+    "form-data": "4.0.6",
+    "js-yaml": "3.15.2"
+  },
+  "keywords": [
+    "hyperliquid",
+    "hyperliquid api",
+    "hyperliquid nodejs",
+    "hyperliquid javascript",
+    "hyperliquid typescript",
+    "hyperliquid websocket",
+    "hip-3",
+    "algo trading",
+    "api",
+    "sdk",
+    "websocket",
+    "rest",
+    "trading bots",
+    "cryptocurrency",
+    "siebly",
+    "siebly.io"
+  ],
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/tiagosiebler"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sieblyio/hyperliquid-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sieblyio/hyperliquid-api/issues"
+  },
+  "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  }
+}
+
+================
+File: examples/Websocket/ws-public.ts
+================
+import { DefaultLogger, WebsocketClient } from '../../src/index.js';
+⋮----
+// or
+// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Public market-data subscriptions.
+ *
+ * Listen for data with on('message') and acknowledgements with on('response').
+ * Every event includes the connection's wsKey.
+ *
+ * npx tsx examples/Websocket/ws-public.ts
+ */
+⋮----
+// Uncomment to log connection lifecycle events:
+⋮----
+// testnet: true,
+⋮----
+async function main()
+⋮----
+// Native Spot universe names pass through without metadata requests.
+⋮----
+// For a readable alias, resolve it explicitly before subscribing:
+// const coin = await wsClient.nameToCoin('HYPE/USDC');
+// await wsClient.subscribe({ type: 'trades', coin });
+
+================
+File: src/types/websockets/ws-general.ts
+================
+import type {
+  RestClientNetworkOptions,
+  RestClientOptions,
+} from '../shared.types.js';
+import type {
+  WebsocketMessageEvent,
+  WebsocketResponseEvent,
+} from './ws-events.js';
+import type { WebSocketConstructor, WebSocketLike } from './ws-portable.js';
+⋮----
+export type WsKey = 'api' | 'public' | `user:${string}`;
+⋮----
+export interface WebsocketClientOptions {
+  assetCacheTtlMs?: number;
+  /** Reconnect automatically after an unexpected disconnect. Default: true. */
+  autoReconnect?: boolean;
+  baseUrl?: string;
+  /** Maximum time to open a connection, in milliseconds. Default: 1,000. */
+  connectionTimeout?: number;
+  /** Maximum reconnect delay in milliseconds. Default: 10,000. Zero means no delay. */
+  maxReconnectTimeout?: number;
+  /** Ping interval in milliseconds. Default: 10,000. Zero disables pings. */
+  pingInterval?: number;
+  /** Pong deadline in milliseconds. Default: 1,000. Zero disables the deadline. */
+  pongTimeout?: number;
+  /** Initial reconnect delay in milliseconds. Default: 500. Zero means no delay. */
+  reconnectTimeout?: number;
+  /** Maximum request duration in milliseconds, including connection setup. Default: 10,000. */
+  requestTimeoutMs?: number;
+  requestOptions?: RestClientNetworkOptions;
+  testnet?: boolean;
+  webSocketConstructor?: WebSocketConstructor;
+  wsUrl?: string;
+}
+⋮----
+/** Reconnect automatically after an unexpected disconnect. Default: true. */
+⋮----
+/** Maximum time to open a connection, in milliseconds. Default: 1,000. */
+⋮----
+/** Maximum reconnect delay in milliseconds. Default: 10,000. Zero means no delay. */
+⋮----
+/** Ping interval in milliseconds. Default: 10,000. Zero disables pings. */
+⋮----
+/** Pong deadline in milliseconds. Default: 1,000. Zero disables the deadline. */
+⋮----
+/** Initial reconnect delay in milliseconds. Default: 500. Zero means no delay. */
+⋮----
+/** Maximum request duration in milliseconds, including connection setup. Default: 10,000. */
+⋮----
+export type WebsocketAPIClientOptions = RestClientOptions &
+  Omit<WebsocketClientOptions, keyof RestClientOptions>;
+⋮----
+export type WebsocketLifecycleEvent =
+  'close' | 'exception' | 'open' | 'reconnected' | 'reconnecting';
+⋮----
+export interface WebsocketLifecycleContext<TWsKey extends string = WsKey> {
+  wsKey: TWsKey;
+  event?: unknown;
+}
+⋮----
+export interface WebsocketConnectionContext<
+  TWsKey extends string = WsKey,
+> extends WebsocketLifecycleContext<TWsKey> {
+  ws: WebSocketLike;
+  wsUrl: string;
+}
+⋮----
+export interface WebsocketExceptionEvent<
+  TWsKey extends string = WsKey,
+> extends WebsocketLifecycleContext<TWsKey> {
+  channel?: 'error' | 'post';
+  data?: unknown;
+}
+⋮----
+/** Argument tuples for the standard EventEmitter API. */
+export interface WebsocketClientEventMap<TWsKey extends string = WsKey> {
+  open: [event: WebsocketConnectionContext<TWsKey>];
+  reconnecting: [event: WebsocketLifecycleContext<TWsKey>];
+  reconnected: [event: WebsocketConnectionContext<TWsKey>];
+  close: [event: WebsocketLifecycleContext<TWsKey>];
+  message: [event: WebsocketMessageEvent<TWsKey>];
+  response: [event: WebsocketResponseEvent<TWsKey>];
+  exception: [event: WebsocketExceptionEvent<TWsKey>];
+}
+⋮----
+export type WebsocketLifecycleCallback = (
+  context: WebsocketLifecycleContext,
+) => void;
+
+================
+File: src/index.ts
+================
+
 
 ================
 File: src/RestClient.ts
@@ -4449,6 +4495,181 @@ private async accountInfo<T>(type: string, params: InfoParams): Promise<T>
 private async resolveAccountAddress(requestedUser?: string): Promise<string>
 
 ================
+File: src/WebsocketAPIClient.ts
+================
+import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
+import {
+  DefaultLogger,
+  type DefaultLogger as Logger,
+} from './lib/websocket/logger.js';
+import { RestClient } from './RestClient.js';
+import type {
+  WebsocketAPIClientOptions,
+  WebsocketClientEventMap,
+} from './types/websockets/ws-general.js';
+import { WebsocketClient } from './WebsocketClient.js';
+⋮----
+export class WebsocketAPIClient extends RestClient
+⋮----
+constructor(
+    options: WebsocketAPIClientOptions = {},
+    logger: Logger = DefaultLogger,
+)
+⋮----
+getWSClient(): WebsocketClient
+⋮----
+connect(): Promise<void>
+⋮----
+on<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
+): this
+⋮----
+once<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
+): this
+⋮----
+off<K extends keyof WebsocketClientEventMap>(
+    event: K,
+    listener: (...args: WebsocketClientEventMap[K]) => void,
+): this
+⋮----
+isConnected(): boolean
+⋮----
+close(): void
+⋮----
+closeAll(): void
+⋮----
+protected override post<T>(path: string, body: unknown): Promise<T>
+
+================
+File: src/WebsocketClient.ts
+================
+import { inflateSync, strFromU8 } from 'fflate';
+⋮----
+import { MAINNET_WS_URL, TESTNET_WS_URL } from './constants.js';
+import type { ResolvedAsset } from './lib/asset-resolver.js';
+import {
+  BaseWebsocketClient,
+  type EmittableEvent,
+  type WSOperation,
+} from './lib/BaseWSClient.js';
+import { HyperliquidApiError } from './lib/errors.js';
+import { normalizeAddresses } from './lib/normalize-addresses.js';
+import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
+import {
+  DefaultLogger,
+  type DefaultLogger as Logger,
+} from './lib/websocket/logger.js';
+import { sanitizeObjectForWire } from './lib/wire.js';
+import { RestClient } from './RestClient.js';
+import type { ExchangeResponse } from './types/response/exchange.types.js';
+import type { RequestOptions } from './types/shared.types.js';
+import type {
+  WebsocketMessageEvent,
+  WebsocketPostResponseEvent,
+  WebsocketResponseEvent,
+} from './types/websockets/ws-events.js';
+import type {
+  WebsocketClientOptions,
+  WsKey,
+} from './types/websockets/ws-general.js';
+import type { WebsocketSubscription } from './types/websockets/ws-subscriptions.js';
+⋮----
+function normalizeSubscriptionFields(
+  subscription: WebsocketSubscription,
+): WebsocketSubscription
+⋮----
+function recordValue(value: unknown): Record<string, unknown> | undefined
+⋮----
+function postErrorRequestId(message: string): number | undefined
+⋮----
+function decompressFastAssetCtxs(data: unknown): unknown
+⋮----
+export class WebsocketClient extends BaseWebsocketClient<
+⋮----
+constructor(
+    options: WebsocketClientOptions = {},
+    logger: Logger = DefaultLogger,
+)
+⋮----
+connect(wsKey: WsKey = 'public'): Promise<void>
+⋮----
+/** Connect all cached connection groups, or the public connection if none exist. */
+async connectAll(): Promise<void>
+⋮----
+isConnected(wsKey: WsKey = 'public'): boolean
+⋮----
+/** Reject pending work immediately; emit 'close' when the socket confirms closure. */
+close(wsKey?: WsKey): void
+⋮----
+/**
+   * Subscribe to one or more wire topics. Listen for data with on('message').
+   * Topics are cached before connecting and restored automatically after reconnect.
+   * The promise confirms local sending; server acknowledgements emit 'response'.
+   * Resolve display aliases explicitly with nameToCoin() when needed.
+   */
+async subscribe(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+): Promise<void>
+⋮----
+/** Remove cached topics independently of event listeners, including while disconnected. */
+async unsubscribe(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+): Promise<void>
+⋮----
+async sendWSAPIRequest<T>(
+    endpoint: 'action' | 'info',
+    body: unknown,
+    options: RequestOptions = {},
+): Promise<T>
+⋮----
+resolveAsset(identifier: number | string): Promise<ResolvedAsset>
+⋮----
+nameToCoin(name: string): Promise<string>
+⋮----
+refreshAssetMetadata(): Promise<void>
+⋮----
+private groupSubscriptions(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+): Map<WsKey, WebsocketSubscription[]>
+⋮----
+protected override getWsUrl(): string
+⋮----
+protected override getMaxConnections(): number
+⋮----
+protected override getWsRequestEvents(
+    _wsKey: WsKey,
+    operation: WSOperation,
+    topics: WebsocketSubscription[],
+): object[]
+⋮----
+protected override sendPingEvent(wsKey: WsKey): boolean
+⋮----
+protected override resolveEmittableEvents(
+    wsKey: WsKey,
+    message: string,
+): EmittableEvent<WsKey>[]
+⋮----
+// Emit each wire message once. Subscription ownership never controls listeners.
+// Keep upstream channel names (including user and activeSpotAssetCtx) unchanged.
+⋮----
+private handlePostMessage(
+    record: Record<string, unknown>,
+): 'exception' | 'response'
+⋮----
+private logUnmatchedResponse(
+    requestId: unknown,
+    parsed: Record<string, unknown>,
+): void
+⋮----
+// IDs are monotonic for this client. A known ID without a pending promise has
+// already settled (for example by timeout or abort); its late reply is expected.
+⋮----
+private rejectRequest(id: number, error: unknown): void
+
+================
 File: README.md
 ================
 # Node.js & JavaScript SDK for Hyperliquid REST APIs & WebSockets
@@ -4484,7 +4705,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
   - Event-driven messaging.
   - Smart WebSocket persistence.
     - Automatically detect silent WebSocket disconnections through timed heartbeats.
-    - Automatically handle authentication.
+    - Restore cached subscriptions after reconnecting.
     - Emit a `reconnected` event when a dropped connection is restored.
 - WebSocket API integration, with two promise-driven approaches:
   1. Import `WebsocketAPIClient` and use it like the REST API client. Call typed methods and await their responses.
@@ -4497,7 +4718,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 - CEX-style helpers for market orders, limit orders, market closes, balances, and account summaries.
 - Perpetual, spot, HIP-3, and outcome asset resolution using official identifiers and metadata-derived aliases.
 - Dual ESM and CommonJS output.
-- Browser-safe public REST calls and public WebSocket subscriptions.
+- Browser-safe public REST API calls and public WebSocket subscriptions.
 - Active community support & collaboration in telegram: [Node.js Algo Traders](https://t.me/nodetraders).
 
 # Table of Contents
@@ -4529,7 +4750,6 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 - [Raw Methods](#raw-methods)
 - [Browser Usage](#browser-usage)
 - [Use with LLMs & AI](#use-with-llms--ai)
-- [Used By](#used-by)
 
 ## Contributing
 
@@ -4555,7 +4775,7 @@ Node.js 24 or newer and npm 11 or newer are supported.
 - [WebSocket POST requests](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/post-requests)
 - [Builder codes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes)
 
-Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST, WebSocket, and WebSocket API samples.
+Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST API, WebSocket, and WebSocket API samples.
 
 ## Issues & Discussion
 
@@ -4738,7 +4958,7 @@ console.log(asset.assetId, asset.canonicalName);
 await client.refreshAssetMetadata();
 ```
 
-Info and WebSocket `coin` fields follow official Python `name_to_coin`: exact metadata lookup, including pair aliases. `getOrderBook`, `getCandles`, `getFundingHistory`, and the `l2Book` / `trades` / `candle` / `bbo` / `activeAssetCtx` subscriptions rewrite `HYPE/USDC` to `@107`. `PURR/USDC` stays `PURR/USDC` because that is the universe name. Other info methods leave `coin` as-is.
+The Info methods `getOrderBook`, `getCandles`, and `getFundingHistory` resolve readable pair aliases through metadata. Other Info methods and streaming subscriptions leave `coin` as-is. Use a native coin name such as `BTC`, `@107`, or `PURR/USDC` when subscribing, or call `nameToCoin('HYPE/USDC')` explicitly to resolve a readable alias first.
 
 ```ts
 const book = await client.getOrderBook({ coin: 'HYPE/USDC' });
@@ -4808,35 +5028,57 @@ ws.on('reconnected', ({ wsKey }) => {
   console.log('Reconnected:', wsKey);
 });
 
-const book = await ws.subscribe(
-  {
-    type: 'l2Book',
-    coin: 'BTC',
-    nSigFigs: 5,
-    mantissa: 1,
-    fast: true,
-  },
-  (update) => {
-    console.log(update.levels);
-  },
-);
+ws.on('message', (event) => {
+  if (event.channel === 'l2Book') {
+    console.log(event.wsKey, event.data.coin, event.data.levels);
+  } else if (event.channel === 'userFills') {
+    console.log(event.wsKey, event.data.user, event.data.fills);
+  }
+});
 
-const fills = await ws.subscribe(
-  {
-    type: 'userFills',
-    user: '0x1234567890123456789012345678901234567890',
-  },
-  (update) => {
-    console.log(update.fills);
-  },
-);
+ws.on('response', (event) => {
+  console.log('Acknowledgement:', event.wsKey, event.channel, event.data);
+});
 
-await book.unsubscribe();
-await fills.unsubscribe();
-ws.close();
+ws.on('exception', ({ wsKey, event, data }) => {
+  console.error('WebSocket exception:', wsKey, event ?? data);
+});
+
+const book = {
+  type: 'l2Book',
+  coin: 'BTC',
+  nSigFigs: 5,
+  mantissa: 1,
+  fast: true,
+} as const;
+const fills = {
+  type: 'userFills',
+  user: '0x1234567890123456789012345678901234567890',
+} as const;
+
+await ws.subscribe([book, fills]);
+
+// When these feeds are no longer needed:
+await ws.unsubscribe([book, fills]);
+ws.closeAll();
 ```
 
-`fastAssetCtxs` payloads are decompressed before the callback runs. User streams whose server events omit the user address are isolated on separate per-user connections.
+`subscribe()` and `unsubscribe()` manage topics independently of listeners and accept one topic or an array. The subscribe promise resolves after the socket opens and the request is sent; server acknowledgements emit through `response`. Incoming data emits once per wire message through `message`, preserving the upstream envelope and adding `wsKey`.
+
+`fastAssetCtxs` payloads are decompressed inside the event's `data` field. User streams whose server events omit the user address use separate connections with a `user:<address>` key. Other streams share `public`.
+
+Coin identifiers such as `BTC`, `@107`, `PURR/USDC`, and `xyz:NVDA` pass through without REST API metadata requests. Resolve a readable alias explicitly when needed:
+
+```ts
+const coin = await ws.nameToCoin('HYPE/USDC');
+await ws.subscribe({ type: 'trades', coin });
+```
+
+`connectionTimeout` bounds connection attempts and defaults to 1,000 ms. Pings run every 10,000 ms with a 1,000 ms pong deadline. Set `pingInterval: 0` to disable pings or `pongTimeout: 0` to disable that deadline. Reconnect delays start at 500 ms and double up to 10,000 ms; configure `reconnectTimeout` and `maxReconnectTimeout` to change them, or set `autoReconnect: false` to disable recovery. Timeouts must be finite and positive; ping and reconnect controls also accept zero. Use `off()` or `removeAllListeners()` to remove listeners, and `close()` or `closeAll()` to close connections and clear their cached topics.
+
+Closing immediately rejects pending requests and clears timers. For an active socket, the `close` event confirms that the connection has actually closed. After an unexpected disconnect, reconnection restores subscriptions, but interrupted WS API requests are rejected rather than replayed.
+
+The previous callback form of `subscribe(topic, callback)` and its returned subscription handles have been removed. Register a `message` listener and pass the original topic to `unsubscribe()` when migrating existing consumers.
 
 ### WebSocket API - Sending Commands via WebSockets
 
@@ -4852,11 +5094,17 @@ client.close();
 
 Use `client.getWSClient()` to access the underlying `WebsocketClient`, including lifecycle events and raw `sendWSAPIRequest()` calls. Use `WebsocketClient` directly for subscribe and consume workflows.
 
+WS API replies also emit events: successful replies use `response`, and exchange rejections use `exception` while rejecting the corresponding promise. Both preserve the exchange's reply and include `wsKey`.
+
 ## Logging
 
 ### Customise Logging
 
 Pass a custom logger as the second `WebsocketClient` or `WebsocketAPIClient` constructor argument. The logger must provide `trace`, `info`, and `error` methods. `DefaultLogger` keeps trace output disabled unless you override it.
+
+Connection, reconnection, closure, and heartbeat timeouts log at `info` level. Enable `trace` to see pings, pongs, subscriptions, messages, and WS API requests and responses. Logs include the `hyperliquid-ws` category and the connection's `wsKey` where applicable.
+
+Parsing, decompression, transport, and listener failures log at `error` level. Rejected WS API requests include their request ID and reason in `trace` output, including those interrupted by a disconnect or intentional close. Late replies to already-settled requests also log at `trace`, not `error`.
 
 ```ts
 import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
@@ -4873,7 +5121,7 @@ const ws = new WebsocketClient({}, customLogger);
 
 ### Debug HTTP Requests
 
-REST requests are quiet by default. Axios-compatible network options can be passed once as the second `RestClient` constructor argument. One option is to route requests through a local debugging proxy. Avoid logging signed `/exchange` request bodies or private keys.
+REST API requests are quiet by default. Axios-compatible network options can be passed once as the second `RestClient` constructor argument. One option is to route requests through a local debugging proxy. Avoid logging signed `/exchange` request bodies or private keys.
 
 ```ts
 import { RestClient } from '@siebly/hyperliquid-api';
@@ -4927,17 +5175,17 @@ Raw order actions follow the same approval check as typed orders. A caller-provi
 
 ## Browser Usage
 
-Modern bundlers can import the normal package entry. Public REST calls and public subscriptions are browser-safe.
+Modern bundlers can import the normal package entry. Public REST API calls and public subscriptions are browser-safe.
 
 ```ts
 import { RestClient, WebsocketClient } from '@siebly/hyperliquid-api';
 ```
 
-Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST access also depends on Hyperliquid's CORS policy.
+Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST API access also depends on Hyperliquid's CORS policy.
 
 ## Use with LLMs & AI
 
-The README, examples, and exported TypeScript types can be provided directly to coding assistants as package context. A package-specific `llms.txt` file and endpoint map will be added separately.
+Use [llms.txt](./llms.txt) for packaged SDK context, the [endpoint map](./docs/endpointFunctionList.md) to find methods, and the [JavaScript quickstart](./docs/HYPERLIQUID_SDK_QUICKSTART_GUIDE.md) for complete workflows. The README, examples, and exported TypeScript types are also available as package context.
 
 ---
 

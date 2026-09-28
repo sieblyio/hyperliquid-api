@@ -44,7 +44,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 - CEX-style helpers for market orders, limit orders, market closes, balances, and account summaries.
 - Perpetual, spot, HIP-3, and outcome asset resolution using official identifiers and metadata-derived aliases.
 - Dual ESM and CommonJS output.
-- Browser-safe public REST calls and public WebSocket subscriptions.
+- Browser-safe public REST API calls and public WebSocket subscriptions.
 - Active community support & collaboration in telegram: [Node.js Algo Traders](https://t.me/nodetraders).
 
 # Table of Contents
@@ -101,7 +101,7 @@ Node.js 24 or newer and npm 11 or newer are supported.
 - [WebSocket POST requests](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/post-requests)
 - [Builder codes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes)
 
-Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST, WebSocket, and WebSocket API samples.
+Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST API, WebSocket, and WebSocket API samples.
 
 ## Issues & Discussion
 
@@ -393,7 +393,7 @@ ws.closeAll();
 
 `fastAssetCtxs` payloads are decompressed inside the event's `data` field. User streams whose server events omit the user address use separate connections with a `user:<address>` key. Other streams share `public`.
 
-Coin identifiers such as `BTC`, `@107`, `PURR/USDC`, and `xyz:NVDA` pass through without REST metadata requests. Resolve a readable alias explicitly when needed:
+Coin identifiers such as `BTC`, `@107`, `PURR/USDC`, and `xyz:NVDA` pass through without REST API metadata requests. Resolve a readable alias explicitly when needed:
 
 ```ts
 const coin = await ws.nameToCoin('HYPE/USDC');
@@ -447,7 +447,7 @@ const ws = new WebsocketClient({}, customLogger);
 
 ### Debug HTTP Requests
 
-REST requests are quiet by default. Axios-compatible network options can be passed once as the second `RestClient` constructor argument. One option is to route requests through a local debugging proxy. Avoid logging signed `/exchange` request bodies or private keys.
+REST API requests are quiet by default. Axios-compatible network options can be passed once as the second `RestClient` constructor argument. One option is to route requests through a local debugging proxy. Avoid logging signed `/exchange` request bodies or private keys.
 
 ```ts
 import { RestClient } from '@siebly/hyperliquid-api';
@@ -501,17 +501,17 @@ Raw order actions follow the same approval check as typed orders. A caller-provi
 
 ## Browser Usage
 
-Modern bundlers can import the normal package entry. Public REST calls and public subscriptions are browser-safe.
+Modern bundlers can import the normal package entry. Public REST API calls and public subscriptions are browser-safe.
 
 ```ts
 import { RestClient, WebsocketClient } from '@siebly/hyperliquid-api';
 ```
 
-Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST access also depends on Hyperliquid's CORS policy.
+Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST API access also depends on Hyperliquid's CORS policy.
 
 ## Use with LLMs & AI
 
-The README, examples, and exported TypeScript types can be provided directly to coding assistants as package context. A package-specific `llms.txt` file and endpoint map will be added separately.
+Use [llms.txt](./llms.txt) for packaged SDK context, the [endpoint map](./docs/endpointFunctionList.md) to find methods, and the [JavaScript quickstart](./docs/HYPERLIQUID_SDK_QUICKSTART_GUIDE.md) for complete workflows. The README, examples, and exported TypeScript types are also available as package context.
 
 ---
 
