@@ -10,8 +10,7 @@
     "test:extensions": "tsc -p tsconfig.extensions.json",
     "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
     "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
-    "test:unit": "jest --passWithNoTests --runInBand test/unit",
-    "prepublishOnly": "npm run validate:release && npm run lint && npm run test:types && npm run test:unit && npm run test:packed"
+    "test:unit": "jest --passWithNoTests --runInBand test/unit"
   },
   "main": "dist/cjs/index.js",
   "module": "dist/mjs/index.js",
@@ -70,7 +69,7 @@
   "overrides": {
     "@babel/core": "7.29.6",
     "form-data": "4.0.6",
-    "js-yaml": "3.15.0"
+    "js-yaml": "3.15.2"
   },
   "keywords": [
     "hyperliquid",

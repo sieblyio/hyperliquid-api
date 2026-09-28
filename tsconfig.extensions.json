@@ -6,5 +6,6 @@
     "moduleResolution": "NodeNext",
     "noEmit": true
   },
-  "include": ["src/**/*.*"]
+  "include": ["src/**/*.*", "examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples/apidoc", "examples/tstests"]
 }
