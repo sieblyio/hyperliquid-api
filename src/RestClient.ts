@@ -67,22 +67,65 @@ import type {
   UserRequest,
 } from './types/request/info.types.js';
 import type {
+  CancelResponseData,
+  ExchangeDefaultResponse,
   ExchangeResponse,
   OrderResponseData,
+  TwapCancelResponseData,
+  TwapOrderResponseData,
 } from './types/response/exchange.types.js';
 import type {
   AccountBalancesResponse,
+  ActiveAssetData,
   AllMidsResponse,
+  BorrowLendReserveEntry,
+  BorrowLendReserveState,
+  BorrowLendUserState,
   Candle,
+  FrontendOpenOrder,
+  FundingHistory,
+  HistoricalOrder,
   InfoResponse,
   OpenOrder,
   OrderBookResponse,
+  OrderStatusResponse,
+  OutcomeDeployerLimits,
+  OutcomeMetadata,
   PerpAccountSummaryResponse,
+  PerpAnnotation,
+  PerpCategory,
+  PerpConciseAnnotation,
+  PerpDeployAuctionStatus,
+  PerpDex,
+  PerpDexLimits,
+  PerpDexStatus,
   PerpMeta,
+  PerpMetaAndAssetContexts,
+  PortfolioEntry,
+  PredictedFunding,
+  ReferralInfo,
+  SettledOutcome,
   SpotBalancesResponse,
+  SpotDeployStateResponse,
   SpotMeta,
+  SpotMetaAndAssetContexts,
+  SpotPairDeployAuctionStatus,
+  StakingDelegation,
+  StakingHistoryEntry,
+  StakingReward,
+  StakingSummary,
+  SubAccount,
+  TokenDetails,
+  TwapSliceFill,
+  UserAbstraction,
+  UserFees,
   UserFill,
+  UserFunding,
+  UserNonFundingLedgerUpdate,
+  UserRateLimit,
   UserRoleResponse,
+  UserVaultDeposit,
+  VaultDetails,
 } from './types/response/info.types.js';
 import type {
   JsonObject,
@@ -98,23 +141,6 @@ function hip3Dex(canonicalName: string): string | undefined {
   return canonicalName.includes(':')
     ? canonicalName.split(':', 1)[0]
     : undefined;
-}
-
-function perpPositionCoin(
-  entry: unknown,
-): { coin: string; szi: string } | undefined {
-  if (!entry || typeof entry !== 'object' || !('position' in entry)) {
-    return undefined;
-  }
-  const position = (entry as { position: unknown }).position;
-  if (!position || typeof position !== 'object') {
-    return undefined;
-  }
-  const { coin, szi } = position as { coin?: unknown; szi?: unknown };
-  if (typeof coin !== 'string' || typeof szi !== 'string') {
-    return undefined;
-  }
-  return { coin, szi };
 }
 
 export class RestClient extends BaseRestClient {
@@ -146,61 +172,130 @@ export class RestClient extends BaseRestClient {
     return this.resolveAccountAddress(undefined);
   }
 
+  /**
+   * Mid prices for all coins (`allMids`).
+   *
+   * An empty book falls back to the last trade price. Spot mids are included
+   * only when `dex` is omitted or empty.
+   */
   getAllMids(params: { dex?: string } = {}): Promise<AllMidsResponse> {
     return this.info('allMids', params);
   }
 
+  /**
+   * User's active asset data (`activeAssetData`): leverage, max trade size,
+   * available to trade, and mark price for one coin.
+   */
   getActiveAssetData(
     params: AccountRequest & { coin: string },
-  ): Promise<InfoResponse> {
+  ): Promise<ActiveAssetData> {
     return this.accountInfo('activeAssetData', params);
   }
 
-  getAllBorrowLendReserveStates(): Promise<InfoResponse> {
+  /**
+   * Borrow and lend reserve state for every token (`allBorrowLendReserveStates`).
+   *
+   * Each entry is `[token, reserve]`.
+   */
+  getAllBorrowLendReserveStates(): Promise<BorrowLendReserveEntry[]> {
     return this.info('allBorrowLendReserveStates', {});
   }
 
-  getAllPerpMetadata(): Promise<InfoResponse> {
+  /**
+   * Metadata for every perp DEX (`allPerpMetas`).
+   *
+   * Each entry is one DEX: universe, margin tables, and collateral token.
+   * Index 0 is the default perp DEX.
+   */
+  getAllPerpMetadata(): Promise<PerpMeta[]> {
     return this.info('allPerpMetas', {});
   }
 
-  getApprovedBuilders(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Builder addresses this user has approved (`approvedBuilders`).
+   */
+  getApprovedBuilders(params: AccountRequest = {}): Promise<string[]> {
     return this.accountInfo('approvedBuilders', params);
   }
 
-  getBorrowLendReserveState(params: { token: number }): Promise<InfoResponse> {
+  /**
+   * Borrow and lend reserve state for one token (`borrowLendReserveState`).
+   */
+  getBorrowLendReserveState(params: {
+    token: number;
+  }): Promise<BorrowLendReserveState> {
     return this.info('borrowLendReserveState', params);
   }
 
-  getUserBorrowLendState(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * User borrow and lend balances (`borrowLendUserState`).
+   *
+   * `tokenToState` entries are `[token, state]`.
+   */
+  getUserBorrowLendState(
+    params: AccountRequest = {},
+  ): Promise<BorrowLendUserState> {
     return this.accountInfo('borrowLendUserState', params);
   }
 
+  /**
+   * Candle snapshot (`candleSnapshot`).
+   *
+   * Only the most recent 5000 candles are available. HIP-3 coins use a
+   * `dex:COIN` name.
+   */
   async getCandles(params: GetCandlesRequest): Promise<Candle[]> {
     return this.info('candleSnapshot', {
       req: { ...params, coin: await this.nameToCoin(params.coin) },
     });
   }
 
+  /**
+   * Perp account summary (`clearinghouseState`): open positions and margin.
+   *
+   * `assetPositions[].position.szi` is signed: positive is long, negative is short.
+   * Under unified account or portfolio margin, use spot balances for the
+   * trading account balance across spot and perps.
+   */
   getPerpAccountSummary(
     params: AccountDexRequest = {},
   ): Promise<PerpAccountSummaryResponse> {
     return this.accountInfo('clearinghouseState', params);
   }
 
-  getStakingDelegations(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Stake delegated to validators (`delegations`).
+   */
+  getStakingDelegations(
+    params: AccountRequest = {},
+  ): Promise<StakingDelegation[]> {
     return this.accountInfo('delegations', params);
   }
 
-  getStakingHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Staking history (`delegatorHistory`).
+   *
+   * The documented delta is a delegation or undelegation.
+   */
+  getStakingHistory(
+    params: AccountRequest = {},
+  ): Promise<StakingHistoryEntry[]> {
     return this.accountInfo('delegatorHistory', params);
   }
 
-  getStakingRewards(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Staking rewards (`delegatorRewards`).
+   *
+   * `source` is `"delegation"` or `"commission"` in the documented samples.
+   */
+  getStakingRewards(params: AccountRequest = {}): Promise<StakingReward[]> {
     return this.accountInfo('delegatorRewards', params);
   }
 
-  getStakingSummary(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Staking summary (`delegatorSummary`): delegated, undelegated, and pending withdrawals.
+   */
+  getStakingSummary(params: AccountRequest = {}): Promise<StakingSummary> {
     return this.accountInfo('delegatorSummary', params);
   }
 
@@ -212,13 +307,23 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('extraAgents', params);
   }
 
-  getFrontendOpenOrders(params: AccountDexRequest = {}): Promise<OpenOrder[]> {
+  /**
+   * Open orders with trigger and reduce-only fields (`frontendOpenOrders`).
+   *
+   * Spot orders are included only for the first perp DEX.
+   */
+  getFrontendOpenOrders(
+    params: AccountDexRequest = {},
+  ): Promise<FrontendOpenOrder[]> {
     return this.accountInfo('frontendOpenOrders', params);
   }
 
+  /**
+   * Historical funding rates for one coin (`fundingHistory`).
+   */
   async getFundingHistory(
     params: GetFundingHistoryRequest,
-  ): Promise<InfoResponse> {
+  ): Promise<FundingHistory[]> {
     return this.info('fundingHistory', {
       ...params,
       coin: await this.nameToCoin(params.coin),
@@ -233,7 +338,12 @@ export class RestClient extends BaseRestClient {
     return this.info('gossipRootIps', {});
   }
 
-  getOrderHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Recent historical orders (`historicalOrders`).
+   *
+   * Returns at most 2000 orders. `status` uses the same values as `getOrderStatus()`.
+   */
+  getOrderHistory(params: AccountRequest = {}): Promise<HistoricalOrder[]> {
     return this.accountInfo('historicalOrders', params);
   }
 
@@ -241,6 +351,12 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('isVip', params);
   }
 
+  /**
+   * L2 order book (`l2Book`).
+   *
+   * At most 20 levels per side. `nSigFigs` aggregates prices. `mantissa` is
+   * only valid when `nSigFigs` is 5.
+   */
   async getOrderBook(
     params: GetOrderBookRequest,
   ): Promise<OrderBookResponse | null> {
@@ -266,6 +382,11 @@ export class RestClient extends BaseRestClient {
     return this.info('marginTable', params);
   }
 
+  /**
+   * Maximum approved builder fee (`maxBuilderFee`).
+   *
+   * The number is in tenths of a basis point. `1` means 0.001%.
+   */
   getMaxBuilderFee(params: GetMaxBuilderFeeRequest): Promise<number> {
     return this.accountInfo('maxBuilderFee', params);
   }
@@ -274,59 +395,144 @@ export class RestClient extends BaseRestClient {
     return this.info('maxMarketOrderNtls', {});
   }
 
+  /**
+   * Perp metadata (`meta`): universe and margin tables.
+   *
+   * `dex` defaults to the empty string, which is the first perp DEX.
+   */
   getPerpMetadata(params: { dex?: string } = {}): Promise<PerpMeta> {
     return this.info('meta', params);
   }
 
-  getPerpAssetContexts(params: { dex?: string } = {}): Promise<InfoResponse> {
+  /**
+   * Perp metadata plus asset contexts (`metaAndAssetCtxs`).
+   *
+   * The tuple is `[meta, contexts]`. Contexts line up with `meta.universe`
+   * and include mark price, funding, open interest, and related fields.
+   * `dex` defaults to the empty string, which is the first perp DEX.
+   */
+  getPerpAssetContexts(
+    params: { dex?: string } = {},
+  ): Promise<PerpMetaAndAssetContexts> {
     return this.info('metaAndAssetCtxs', params);
   }
 
+  /**
+   * Open orders (`openOrders`).
+   *
+   * Spot orders are included only for the first perp DEX. `side` `"B"` is bid
+   * and `"A"` is ask.
+   */
   getOpenOrders(params: AccountDexRequest = {}): Promise<OpenOrder[]> {
     return this.accountInfo('openOrders', params);
   }
 
-  getOrderStatus(params: GetOrderStatusRequest): Promise<InfoResponse> {
+  /**
+   * Order status by order id or client order id (`orderStatus`).
+   *
+   * `status: "unknownOid"` means the order was not found. Otherwise
+   * `status` is `"order"` and `order.status` is the order state.
+   */
+  getOrderStatus(params: GetOrderStatusRequest): Promise<OrderStatusResponse> {
     return this.accountInfo('orderStatus', params);
   }
 
-  getOutcomeMetadata(): Promise<InfoResponse> {
+  /**
+   * Outcome metadata (`outcomeMeta`): outcomes, questions, and deployers.
+   */
+  getOutcomeMetadata(): Promise<OutcomeMetadata> {
     return this.info('outcomeMeta', {});
   }
 
-  getPerpAnnotation(params: { coin: string }): Promise<InfoResponse> {
+  /**
+   * Remaining outcome deployment allowance for a venue (`outcomeDeployerLimits`).
+   *
+   * `venue` is the venue name, for example `"out"`.
+   */
+  getOutcomeDeployerLimits(params: {
+    venue: string;
+  }): Promise<OutcomeDeployerLimits> {
+    return this.info('outcomeDeployerLimits', params);
+  }
+
+  /**
+   * Perp annotation for one coin (`perpAnnotation`).
+   *
+   * Returns `null` when the coin has no annotation.
+   */
+  getPerpAnnotation(params: { coin: string }): Promise<PerpAnnotation | null> {
     return this.info('perpAnnotation', params);
   }
 
-  getPerpCategories(): Promise<InfoResponse> {
+  /**
+   * Perp category for each listed coin (`perpCategories`).
+   *
+   * Each entry is `[coin, category]`.
+   */
+  getPerpCategories(): Promise<PerpCategory[]> {
     return this.info('perpCategories', {});
   }
 
-  getConcisePerpAnnotations(): Promise<InfoResponse> {
+  /**
+   * Concise perp annotations (`perpConciseAnnotations`).
+   *
+   * Each entry is `[coin, annotation]`. `keywords` is omitted when absent.
+   */
+  getConcisePerpAnnotations(): Promise<PerpConciseAnnotation[]> {
     return this.info('perpConciseAnnotations', {});
   }
 
-  getPerpDeployAuctionStatus(): Promise<InfoResponse> {
+  /**
+   * Perp deploy auction status (`perpDeployAuctionStatus`).
+   */
+  getPerpDeployAuctionStatus(): Promise<PerpDeployAuctionStatus> {
     return this.info('perpDeployAuctionStatus', {});
   }
 
-  getPerpDexLimits(params: { dex: string }): Promise<InfoResponse> {
+  /**
+   * Builder-deployed perp market limits (`perpDexLimits`).
+   *
+   * `dex` is required. The empty string is not allowed.
+   */
+  getPerpDexLimits(params: { dex: string }): Promise<PerpDexLimits> {
     return this.info('perpDexLimits', params);
   }
 
-  getPerpDexStatus(params: { dex: string }): Promise<InfoResponse> {
+  /**
+   * Perp DEX deposit status (`perpDexStatus`).
+   *
+   * The empty string is the first perp DEX.
+   */
+  getPerpDexStatus(params: { dex: string }): Promise<PerpDexStatus> {
     return this.info('perpDexStatus', params);
   }
 
-  getPerpDexs(): Promise<InfoResponse> {
+  /**
+   * All perpetual DEXs (`perpDexs`).
+   *
+   * Index 0 is `null`, the default perp DEX. Later entries are
+   * builder-deployed HIP-3 DEXs.
+   */
+  getPerpDexs(): Promise<Array<PerpDex | null>> {
     return this.info('perpDexs', {});
   }
 
+  /**
+   * Coins currently at their open-interest cap (`perpsAtOpenInterestCap`).
+   *
+   * `dex` selects a builder-deployed market. Omitted means the first perp DEX.
+   */
   getPerpsAtOpenInterestCap(params: { dex?: string } = {}): Promise<string[]> {
     return this.info('perpsAtOpenInterestCap', params);
   }
 
-  getPortfolio(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Account value, PnL, and volume history (`portfolio`).
+   *
+   * Each entry is `[period, snapshot]`. Periods include `day`, `week`,
+   * `month`, `allTime`, and the `perp*` variants.
+   */
+  getPortfolio(params: AccountRequest = {}): Promise<PortfolioEntry[]> {
     return this.accountInfo('portfolio', params);
   }
 
@@ -336,7 +542,13 @@ export class RestClient extends BaseRestClient {
     return this.info('preTransferCheck', normalizeAddresses(params));
   }
 
-  getPredictedFundingRates(): Promise<InfoResponse> {
+  /**
+   * Predicted funding rates by venue (`predictedFundings`).
+   *
+   * Only the first perp DEX is supported. Each entry is `[coin, venues]`,
+   * and each venue is `[venue, quote]`, for example `"HlPerp"`.
+   */
+  getPredictedFundingRates(): Promise<PredictedFunding[]> {
     return this.info('predictedFundings', {});
   }
 
@@ -344,11 +556,25 @@ export class RestClient extends BaseRestClient {
     return this.info('recentTrades', params);
   }
 
-  getReferralInfo(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Referral state (`referral`).
+   *
+   * `referredBy` is `null` when the user was not referred. `referrerState.stage`
+   * is `"ready"` or `"needToTrade"`. Claimed rewards now also appear in the
+   * non-funding ledger. `rewardHistory` is legacy.
+   */
+  getReferralInfo(params: AccountRequest = {}): Promise<ReferralInfo> {
     return this.accountInfo('referral', params);
   }
 
-  getSettledOutcome(params: { outcome: number }): Promise<InfoResponse> {
+  /**
+   * Settled outcome (`settledOutcome`).
+   *
+   * Returns `null` when the outcome is still unsettled.
+   */
+  getSettledOutcome(params: {
+    outcome: number;
+  }): Promise<SettledOutcome | null> {
     return this.info('settledOutcome', params);
   }
 
@@ -367,29 +593,55 @@ export class RestClient extends BaseRestClient {
     return { perp, spot, user };
   }
 
+  /**
+   * Spot token balances (`spotClearinghouseState`).
+   *
+   * Under unified account or portfolio margin, this is the trading-account
+   * balance across spot and perps.
+   */
   getSpotBalances(params: AccountRequest = {}): Promise<SpotBalancesResponse> {
     return this.accountInfo('spotClearinghouseState', params);
   }
 
+  /**
+   * Spot deploy state for a user (`spotDeployState`), including the gas auction.
+   */
   getSpotDeployAuctionStatus(
     params: AccountRequest = {},
-  ): Promise<InfoResponse> {
+  ): Promise<SpotDeployStateResponse> {
     return this.accountInfo('spotDeployState', params);
   }
 
+  /**
+   * Spot metadata (`spotMeta`): tokens and trading pairs.
+   */
   getSpotMetadata(): Promise<SpotMeta> {
     return this.info('spotMeta', {});
   }
 
-  getSpotAssetContexts(): Promise<InfoResponse> {
+  /**
+   * Spot metadata plus asset contexts (`spotMetaAndAssetCtxs`).
+   *
+   * The tuple is `[meta, contexts]`. Contexts include mark price, volume,
+   * and supply. `midPx` is `null` when there is no mid.
+   */
+  getSpotAssetContexts(): Promise<SpotMetaAndAssetContexts> {
     return this.info('spotMetaAndAssetCtxs', {});
   }
 
-  getSpotPairDeployAuctionStatus(): Promise<InfoResponse> {
+  /**
+   * Dutch auction for deploying a spot pair (`spotPairDeployAuctionStatus`).
+   */
+  getSpotPairDeployAuctionStatus(): Promise<SpotPairDeployAuctionStatus> {
     return this.info('spotPairDeployAuctionStatus', {});
   }
 
-  getSubAccounts(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Subaccounts of a master (`subAccounts`).
+   *
+   * Returns `null` when the address has no subaccounts.
+   */
+  getSubAccounts(params: AccountRequest = {}): Promise<SubAccount[] | null> {
     return this.accountInfo('subAccounts', params);
   }
 
@@ -399,7 +651,13 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('subAccounts2', params);
   }
 
-  getTokenDetails(params: { tokenId: string }): Promise<InfoResponse> {
+  /**
+   * Token details (`tokenDetails`): supply, prices, and genesis balances.
+   *
+   * `tokenId` is the 34-character onchain id, for example
+   * `0x00000000000000000000000000000000`.
+   */
+  getTokenDetails(params: { tokenId: string }): Promise<TokenDetails> {
     return this.info('tokenDetails', params);
   }
 
@@ -407,7 +665,10 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('twapHistory', params);
   }
 
-  getUserAbstraction(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Account abstraction mode (`userAbstraction`).
+   */
+  getUserAbstraction(params: AccountRequest = {}): Promise<UserAbstraction> {
     return this.accountInfo('userAbstraction', params);
   }
 
@@ -417,38 +678,80 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('userBorrowLendInterest', params);
   }
 
-  getUserDexAbstraction(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Whether HIP-3 DEX abstraction is enabled (`userDexAbstraction`).
+   */
+  getUserDexAbstraction(params: AccountRequest = {}): Promise<boolean> {
     return this.accountInfo('userDexAbstraction', params);
   }
 
-  getUserFees(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * User fee rates and the current fee schedule (`userFees`).
+   */
+  getUserFees(params: AccountRequest = {}): Promise<UserFees> {
     return this.accountInfo('userFees', params);
   }
 
+  /**
+   * Recent fills (`userFills`).
+   *
+   * Returns at most 2000 fills. `builderFee` is omitted when it is zero.
+   * `side` `"B"` is buy and `"A"` is sell.
+   */
   getUserFills(params: GetUserFillsRequest = {}): Promise<UserFill[]> {
     return this.accountInfo('userFills', params);
   }
 
+  /**
+   * Fills in a time range (`userFillsByTime`).
+   *
+   * Returns at most 2000 fills, and only the 10000 most recent fills are available.
+   * Paginate by using the last `time` as the next `startTime`.
+   */
   getUserFillsByTime(params: GetUserFillsByTimeRequest): Promise<UserFill[]> {
     return this.accountInfo('userFillsByTime', params);
   }
 
+  /**
+   * User funding payments (`userFunding`).
+   *
+   * `startTime` is inclusive, in milliseconds. `endTime` defaults to now.
+   */
   getUserFundingHistory(
     params: GetUserFundingHistoryRequest = {},
-  ): Promise<InfoResponse> {
+  ): Promise<UserFunding[]> {
     return this.accountInfo('userFunding', params);
   }
 
+  /**
+   * User non-funding ledger updates (`userNonFundingLedgerUpdates`):
+   * deposits, withdrawals, transfers, and other account events.
+   *
+   * `startTime` is inclusive, in milliseconds. `endTime` defaults to now.
+   * Read `delta.type` to see which delta fields are set.
+   */
   getUserNonFundingLedgerUpdates(
     params: GetUserNonFundingLedgerUpdatesRequest = {},
-  ): Promise<InfoResponse> {
+  ): Promise<UserNonFundingLedgerUpdate[]> {
     return this.accountInfo('userNonFundingLedgerUpdates', params);
   }
 
-  getUserRateLimit(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Address request usage and cap (`userRateLimit`).
+   *
+   * `nRequestsUsed` is usage above the reserved amount.
+   * `nRequestsSurplus` is reserved amount not yet used.
+   */
+  getUserRateLimit(params: AccountRequest = {}): Promise<UserRateLimit> {
     return this.accountInfo('userRateLimit', params);
   }
 
+  /**
+   * Account role (`userRole`): user, agent, vault, subaccount, or missing.
+   *
+   * Query the master or subaccount address itself. An agent wallet address
+   * returns the agent role, not the trading account.
+   */
   getUserRole(params: UserRequest): Promise<UserRoleResponse> {
     return this.info('userRole', normalizeUserRequest(params));
   }
@@ -457,7 +760,12 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('userToMultiSigSigners', params);
   }
 
-  getUserTwapSliceFills(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Recent TWAP slice fills (`userTwapSliceFills`).
+   *
+   * Returns at most 2000 fills. TWAP fill hashes are zero.
+   */
+  getUserTwapSliceFills(params: AccountRequest = {}): Promise<TwapSliceFill[]> {
     return this.accountInfo('userTwapSliceFills', params);
   }
 
@@ -467,7 +775,12 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('userTwapSliceFillsByTime', params);
   }
 
-  getUserVaultDeposits(params: AccountRequest = {}): Promise<InfoResponse> {
+  /**
+   * Vault equity for this user (`userVaultEquities`).
+   */
+  getUserVaultDeposits(
+    params: AccountRequest = {},
+  ): Promise<UserVaultDeposit[]> {
     return this.accountInfo('userVaultEquities', params);
   }
 
@@ -479,7 +792,12 @@ export class RestClient extends BaseRestClient {
     return this.info('validatorSummaries', {});
   }
 
-  getVaultDetails(params: GetVaultDetailsRequest): Promise<InfoResponse> {
+  /**
+   * Vault details (`vaultDetails`).
+   *
+   * Pass `user` to include that address in `followerState`.
+   */
+  getVaultDetails(params: GetVaultDetailsRequest): Promise<VaultDetails> {
     return this.info('vaultDetails', normalizeAddresses(params));
   }
 
@@ -495,6 +813,12 @@ export class RestClient extends BaseRestClient {
     return this.info('alignedQuoteTokenInfo', params);
   }
 
+  /**
+   * Place one or more orders (`order`).
+   *
+   * Each status is `resting`, `filled`, or `error`. The request can succeed
+   * while an individual order is rejected.
+   */
   async submitOrder(
     params: SubmitOrderRequest,
     options: L1RequestOptions = {},
@@ -506,6 +830,11 @@ export class RestClient extends BaseRestClient {
     return this.submitRawL1Action(action, options);
   }
 
+  /**
+   * Place an IOC order around the current mid (`order`).
+   *
+   * `maxSlippage` is a fraction from 0 inclusive to 1 exclusive. The default is 0.05.
+   */
   async submitMarketOrder(
     params: SubmitMarketOrderRequest,
     options: L1RequestOptions = {},
@@ -555,6 +884,11 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Close a perp position with a reduce-only IOC order (`order`).
+   *
+   * Size defaults to the open position size.
+   */
   async submitMarketClose(
     params: SubmitMarketCloseRequest,
     options: L1RequestOptions = {},
@@ -564,19 +898,17 @@ export class RestClient extends BaseRestClient {
     const summary = await this.getPerpAccountSummary(dex ? { dex } : {});
     const requested =
       typeof params.symbol === 'string' ? params.symbol : asset.canonicalName;
-    const position = summary.assetPositions
-      .map(perpPositionCoin)
-      .find(
-        (item) =>
-          item?.coin === asset.canonicalName || item?.coin === requested,
-      );
-    if (!position) {
+    const assetPosition = summary.assetPositions.find(
+      (entry) =>
+        entry.position.coin === asset.canonicalName ||
+        entry.position.coin === requested,
+    );
+    if (!assetPosition) {
       throw new TypeError(`No perpetual position found for "${requested}".`);
     }
 
-    const size =
-      params.size ??
-      (position.szi.startsWith('-') ? position.szi.slice(1) : position.szi);
+    const { szi } = assetPosition.position;
+    const size = params.size ?? (szi.startsWith('-') ? szi.slice(1) : szi);
 
     return this.submitMarketOrder(
       {
@@ -588,7 +920,7 @@ export class RestClient extends BaseRestClient {
           : { maxSlippage: params.maxSlippage }),
         ...(params.price === undefined ? {} : { price: params.price }),
         reduceOnly: true,
-        side: position.szi.startsWith('-') ? 'buy' : 'sell',
+        side: szi.startsWith('-') ? 'buy' : 'sell',
         size,
         symbol: params.symbol,
       },
@@ -596,6 +928,11 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Place a limit order (`order`).
+   *
+   * `postOnly` sends ALO. `timeInForce: "IOC"` sends IOC. Otherwise the order is GTC.
+   */
   async submitLimitOrder(
     params: SubmitLimitOrderRequest,
     options: L1RequestOptions = {},
@@ -628,20 +965,33 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Modify one resting order (`modify`).
+   *
+   * Statuses match `submitOrder()`. `alwaysPlace` sends `a: true` so the new
+   * order is placed even when the cancel fails. `false` is omitted, because
+   * hashing `a: false` is rejected.
+   */
   async modifyOrder(
     params: ModifyOrderRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<OrderResponseData>> {
     return this.submitRawL1Action(
       await this.actionBuilder.actions.modify(params, params.alwaysPlace),
       options,
     );
   }
 
+  /**
+   * Modify multiple resting orders (`batchModify`).
+   *
+   * Statuses match `submitOrder()`. `alwaysPlace` has the same meaning as
+   * on `modifyOrder()`.
+   */
   async modifyOrders(
     params: ModifyOrdersRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<OrderResponseData>> {
     return this.submitRawL1Action(
       await this.actionBuilder.actions.batchModify(
         params.modifies,
@@ -651,10 +1001,16 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Cancel orders by order id (`cancel`).
+   *
+   * Each status is `"success"` or `{ error }`. `fastCancel` sends `f: true`.
+   * Trigger orders are rejected when fast cancel is set. `false` is omitted.
+   */
   async cancelOrders(
     params: CancelOrdersRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<CancelResponseData>> {
     return this.submitRawL1Action(
       await this.actionBuilder.actions.cancel(
         params.cancels,
@@ -664,10 +1020,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Cancel orders by client order id (`cancelByCloid`).
+   *
+   * Statuses match `cancelOrders()`. `fastCancel` has the same meaning.
+   */
   async cancelOrdersByClientOrderId(
     params: CancelOrdersByClientOrderIdRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<CancelResponseData>> {
     return this.submitRawL1Action(
       await this.actionBuilder.actions.cancelByCloid(
         params.cancels,
@@ -677,10 +1038,13 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Set cross or isolated leverage for one asset (`updateLeverage`).
+   */
   updateLeverage(
     params: UpdateLeverageRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1(
       'updateLeverage',
       {
@@ -692,17 +1056,27 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Add or remove isolated margin (`updateIsolatedMargin`).
+   *
+   * `ntli` is a 6-decimal integer. `1000000` is 1 USD.
+   */
   updateIsolatedMargin(
     params: UpdateIsolatedMarginRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('updateIsolatedMargin', params, options);
   }
 
+  /**
+   * Set isolated margin to a target leverage (`topUpIsolatedOnlyMargin`).
+   *
+   * This changes leverage directly. `updateIsolatedMargin()` changes a USDC amount.
+   */
   setIsolatedMarginLeverage(
     params: SetIsolatedMarginLeverageRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1(
       'topUpIsolatedOnlyMargin',
       { ...params, leverage: decimalToWire(params.leverage) },
@@ -710,24 +1084,40 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Place a TWAP order (`twapOrder`).
+   *
+   * A running TWAP returns `{ running: { twapId } }`. A rejected TWAP returns `{ error }`.
+   */
   submitTwapOrder(
     params: SubmitTwapOrderRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<TwapOrderResponseData>> {
     return this.l1('twapOrder', { twap: params }, options);
   }
 
+  /**
+   * Cancel a TWAP order (`twapCancel`).
+   *
+   * `status` is `"success"` or `{ error }`.
+   */
   cancelTwapOrder(
     params: CancelTwapOrderRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<TwapCancelResponseData>> {
     return this.l1('twapCancel', params, options);
   }
 
+  /**
+   * Schedule a cancel-all, or clear one (`scheduleCancel`).
+   *
+   * `time` is a millisecond timestamp at least 5 seconds in the future.
+   * Omit `time` to remove the scheduled cancel. At most 10 triggers per day.
+   */
   setCancelAllAfter(
     params: { time?: number } = {},
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('scheduleCancel', params, options);
   }
 
@@ -744,11 +1134,16 @@ export class RestClient extends BaseRestClient {
     return this.l1('registerReferrer', params, options);
   }
 
+  /**
+   * Approve the configured builder fee (`approveBuilderFee`).
+   *
+   * `maxFeeRate` is a percent string such as `"0.001%"`.
+   */
   async approveBuilderFee(
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     const partner = this.actionBuilder.partnerConfiguration();
-    const response = await this.userSigned(
+    const response = await this.userSigned<ExchangeDefaultResponse>(
       'approveBuilderFee',
       {
         builder: partner.builder.b,
@@ -763,10 +1158,17 @@ export class RestClient extends BaseRestClient {
     return response;
   }
 
+  /**
+   * Approve an API wallet (`approveAgent`).
+   *
+   * An account can have one unnamed agent and up to three named agents.
+   * Append `valid_until {timestamp}` to the name to set an expiration,
+   * at most 180 days ahead.
+   */
   approveApiWallet(
     params: ApproveApiWalletRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'approveAgent',
       {
@@ -778,10 +1180,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Send USDC to another address on HyperCore (`usdSend`).
+   *
+   * This does not touch the EVM bridge. `expiresAfter` is not supported.
+   */
   sendUsd(
     params: SendUsdRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'usdSend',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -790,10 +1197,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Send a spot token to another address on HyperCore (`spotSend`).
+   *
+   * This does not touch the EVM bridge. `token` is `name:tokenId`.
+   */
   sendSpotAsset(
     params: SendSpotAssetRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'spotSend',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -802,10 +1214,13 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Start a USDC withdrawal to the bridge (`withdraw3`).
+   */
   withdrawUsd(
     params: WithdrawUsdRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'withdraw3',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -814,10 +1229,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Move USDC between spot and perp (`usdClassTransfer`).
+   *
+   * `toPerp: true` sends spot to perp.
+   */
   transferUsdBetweenSpotAndPerp(
     params: TransferUsdBetweenSpotAndPerpRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'usdClassTransfer',
       { ...params, amount: decimalOrSubaccountAmount(params.amount) },
@@ -826,10 +1246,16 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Transfer collateral between perp DEXs, spot, users, or subaccounts (`sendAsset`).
+   *
+   * Use `""` for the default USDC perp DEX and `"spot"` for spot.
+   * Only the collateral token can move to or from a perp DEX.
+   */
   sendAsset(
     params: SendAssetRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'sendAsset',
       {
@@ -842,10 +1268,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Send tokens from Core to EVM with calldata (`sendToEvmWithData`).
+   *
+   * The linked contract must implement `coreReceiveWithData`.
+   */
   sendToEvmWithData(
     params: SendToEvmWithDataRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'sendToEvmWithData',
       { ...params, amount: decimalToWire(params.amount) },
@@ -854,10 +1285,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Transfer collateral with an API wallet (`agentSendAsset`).
+   *
+   * Destination must match the source address. Dex names match `sendAsset()`.
+   */
   sendAssetFromApiWallet(
     params: SendAssetFromApiWalletRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1(
       'agentSendAsset',
       {
@@ -870,10 +1306,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Move native token from spot into staking (`cDeposit`).
+   *
+   * `wei` is the amount in wei.
+   */
   depositIntoStaking(
     params: { wei: number },
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'cDeposit',
       params,
@@ -882,10 +1323,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Move native token from staking back to spot (`cWithdraw`).
+   *
+   * The transfer waits in a 7-day unstaking queue.
+   */
   withdrawFromStaking(
     params: { wei: number },
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'cWithdraw',
       params,
@@ -894,10 +1340,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Delegate or undelegate stake to a validator (`tokenDelegate`).
+   *
+   * A delegation to one validator locks for 1 day.
+   */
   delegateOrUndelegateStake(
     params: DelegateOrUndelegateStakeRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'tokenDelegate',
       params,
@@ -965,10 +1416,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Set account abstraction (`userSetAbstraction`).
+   *
+   * `abstraction` is `"disabled"`, `"unifiedAccount"`, or `"portfolioMargin"`.
+   */
   setUserAbstraction(
     params: SetUserAbstractionRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'userSetAbstraction',
       params,
@@ -977,10 +1433,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Enable or disable HIP-3 DEX abstraction (`userDexAbstraction`).
+   *
+   * Deprecated. Prefer `setUserAbstraction()`.
+   */
   setUserDexAbstraction(
     params: UserToggleRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.userSigned(
       'userDexAbstraction',
       params,
@@ -989,16 +1450,26 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Enable HIP-3 DEX abstraction from an API wallet (`agentEnableDexAbstraction`).
+   *
+   * Deprecated. Prefer `setApiWalletAbstraction()`. This only changes `null` to enabled.
+   */
   enableApiWalletDexAbstraction(
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('agentEnableDexAbstraction', {}, options);
   }
 
+  /**
+   * Set account abstraction from an API wallet (`agentSetAbstraction`).
+   *
+   * `"i"` is disabled, `"u"` is unified account, and `"p"` is portfolio margin.
+   */
   setApiWalletAbstraction(
     params: { abstraction: 'i' | 'p' | 'u' },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('agentSetAbstraction', params, options);
   }
 
@@ -1020,7 +1491,12 @@ export class RestClient extends BaseRestClient {
     );
   }
 
-  claimRewards(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+  /**
+   * Claim rewards (`claimRewards`).
+   */
+  claimRewards(
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('claimRewards', {}, options);
   }
 
@@ -1067,14 +1543,25 @@ export class RestClient extends BaseRestClient {
     return this.l1('gossipPriorityBid', params, options);
   }
 
+  /**
+   * Deposit or withdraw from an HIP-3 backstop liquidator (`hip3LiquidatorTransfer`).
+   *
+   * `ntl` is an integer in 1e-6 quote-token units and must be a multiple of
+   * 1000 quote tokens. Only principal can be withdrawn, not PnL.
+   */
   transferHip3LiquidatorFunds(
     params: { dex: string; isDeposit: boolean; ntl: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('hip3LiquidatorTransfer', params, options);
   }
 
-  invalidateNonce(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
+  /**
+   * Mark a nonce as used without another effect (`noop`).
+   */
+  invalidateNonce(
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('noop', {}, options);
   }
 
@@ -1092,10 +1579,15 @@ export class RestClient extends BaseRestClient {
     return this.l1('spotDeploy', params, options);
   }
 
+  /**
+   * Buy extra address request weight (`reserveRequestWeight`).
+   *
+   * Each reserved action costs 0.0005 USDC from the perp balance.
+   */
   reserveAdditionalActions(
     params: { weight: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('reserveRequestWeight', params, options);
   }
 
@@ -1138,10 +1630,13 @@ export class RestClient extends BaseRestClient {
     return this.l1('subAccountTransfer', params, options);
   }
 
+  /**
+   * Deposit or withdraw vault funds (`vaultTransfer`).
+   */
   transferVaultFunds(
     params: TransferVaultFundsRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('vaultTransfer', params, options);
   }
 
@@ -1171,10 +1666,15 @@ export class RestClient extends BaseRestClient {
     );
   }
 
+  /**
+   * Vote the risk-free rate for an aligned quote asset (`validatorL1Stream`).
+   *
+   * `riskFreeRate` is a decimal string such as `"0.04"` for 4%.
+   */
   updateValidatorL1Stream(
     params: { riskFreeRate: string },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1(
       'validatorL1Stream',
       { riskFreeRate: decimalToWire(params.riskFreeRate) },
@@ -1196,17 +1696,31 @@ export class RestClient extends BaseRestClient {
     return this.l1('CValidatorAction', params, options);
   }
 
+  /**
+   * Authorize an AQAv2 role (`authorizeAqav2Role`).
+   *
+   * `token` is the token index, for example `0` for USDC.
+   * `role` is `"technical"` or `"treasury"`.
+   */
   authorizeAqav2Role(
     params: { role: 'technical' | 'treasury'; token: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('authorizeAqav2Role', params, options);
   }
 
+  /**
+   * Split, merge, or negate outcome shares (`userOutcome`).
+   *
+   * `splitOutcome` turns quote tokens into Yes and No shares.
+   * `mergeOutcome` and `mergeQuestion` turn shares back into quote tokens.
+   * `amount: null` merges the maximum. `negateOutcome` converts No shares
+   * into Yes shares of the other outcomes on the same question.
+   */
   submitUserOutcome(
     params: SubmitUserOutcomeRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeDefaultResponse> {
     return this.l1('userOutcome', params, options);
   }
 
