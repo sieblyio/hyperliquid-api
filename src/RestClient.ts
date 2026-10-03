@@ -275,7 +275,7 @@ export class RestClient extends BaseRestClient {
   /**
    * Staking history (`delegatorHistory`).
    *
-   * The documented delta is a delegation or undelegation.
+   * `delta` is one of `delegate`, `cDeposit`, or `withdrawal`.
    */
   getStakingHistory(
     params: AccountRequest = {},
@@ -546,7 +546,8 @@ export class RestClient extends BaseRestClient {
    * Predicted funding rates by venue (`predictedFundings`).
    *
    * Only the first perp DEX is supported. Each entry is `[coin, venues]`,
-   * and each venue is `[venue, quote]`, for example `"HlPerp"`.
+   * and each venue is `[venue, quote]`. `quote` is `null` when that venue
+   * has no predicted rate.
    */
   getPredictedFundingRates(): Promise<PredictedFunding[]> {
     return this.info('predictedFundings', {});
@@ -795,9 +796,12 @@ export class RestClient extends BaseRestClient {
   /**
    * Vault details (`vaultDetails`).
    *
-   * Pass `user` to include that address in `followerState`.
+   * Returns `null` when the vault does not exist. `relationship.type` is
+   * `"parent"` or `"child"`. Pass `user` to include that address in `followerState`.
    */
-  getVaultDetails(params: GetVaultDetailsRequest): Promise<VaultDetails> {
+  getVaultDetails(
+    params: GetVaultDetailsRequest,
+  ): Promise<VaultDetails | null> {
     return this.info('vaultDetails', normalizeAddresses(params));
   }
 

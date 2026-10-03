@@ -53,7 +53,7 @@ export interface OpenOrder {
   coin: string;
   limitPx: string;
   oid: number;
-  origSz: string;
+  origSz?: string;
   side: 'A' | 'B';
   sz: string;
   timestamp: number;
@@ -285,12 +285,12 @@ export interface VaultDetails {
   maxWithdrawable: number;
   name: string;
   portfolio: PortfolioEntry[];
-  relationship: {
-    data: { childAddresses: string[] };
-    type: 'parent';
-  };
+  relationship: VaultRelationship;
   vaultAddress: string;
 }
+
+export type VaultRelationship =
+  { data: { childAddresses: string[] }; type: 'parent' } | { type: 'child' };
 
 export interface UserVaultDeposit {
   equity: string;
@@ -394,14 +394,28 @@ export interface StakingSummary {
   undelegated: string;
 }
 
-export interface StakingHistoryEntry {
-  delta: {
-    delegate: {
-      amount: string;
-      isUndelegate: boolean;
-      validator: string;
+export type StakingHistoryDelta =
+  | {
+      cDeposit: {
+        amount: string;
+      };
+    }
+  | {
+      delegate: {
+        amount: string;
+        isUndelegate: boolean;
+        validator: string;
+      };
+    }
+  | {
+      withdrawal: {
+        amount: string;
+        phase: string;
+      };
     };
-  };
+
+export interface StakingHistoryEntry {
+  delta: StakingHistoryDelta;
   hash: string;
   time: number;
 }
@@ -572,7 +586,7 @@ export interface PredictedFundingQuote {
 
 export type PredictedFunding = [
   coin: string,
-  venues: Array<[venue: string, quote: PredictedFundingQuote]>,
+  venues: Array<[venue: string, quote: PredictedFundingQuote | null]>,
 ];
 
 export interface DeployGasAuction {
