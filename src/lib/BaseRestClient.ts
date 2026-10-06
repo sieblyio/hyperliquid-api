@@ -190,24 +190,24 @@ export abstract class BaseRestClient {
     return this.submitRawInfoRequest<T>({ type, ...fields });
   }
 
-  protected l1(
+  protected l1<T = ExchangeResponse>(
     type: string,
     params: object,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<T> {
     const fields = { ...params } as JsonObject;
     delete fields.type;
     const action = { type, ...fields };
-    return this.submitRawL1Action(action, options);
+    return this.submitRawL1Action<T>(action, options);
   }
 
-  protected userSigned(
+  protected userSigned<T = ExchangeResponse>(
     type: string,
     params: object,
     definition: UserSignedActionDefinition,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeResponse> {
-    return this.submitRawUserSignedAction(
+  ): Promise<T> {
+    return this.submitRawUserSignedAction<T>(
       buildUserSignedAction(type, params),
       definition,
       options,

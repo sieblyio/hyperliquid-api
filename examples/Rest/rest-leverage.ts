@@ -21,23 +21,12 @@ const client = new RestClient({
   // testnet: true,
 });
 
-function ethLeverage(entry: unknown): unknown {
-  if (!entry || typeof entry !== 'object' || !('position' in entry)) {
-    return undefined;
-  }
-  const position = (
-    entry as { position?: { coin?: string; leverage?: unknown } }
-  ).position;
-  return position?.coin === 'ETH' ? position.leverage : undefined;
-}
-
 async function main() {
   try {
     const summary = await client.getPerpAccountSummary();
     for (const entry of summary.assetPositions) {
-      const leverage = ethLeverage(entry);
-      if (leverage !== undefined) {
-        console.log('ETH leverage:', leverage);
+      if (entry.position.coin === 'ETH') {
+        console.log('ETH leverage:', entry.position.leverage);
       }
     }
 

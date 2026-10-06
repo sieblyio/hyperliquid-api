@@ -266,6 +266,10 @@ describe('RestClient Info requests', () => {
       type: 'settledOutcome',
       outcome: 10,
     });
+    await check(() => client.getOutcomeDeployerLimits({ venue: 'out' }), {
+      type: 'outcomeDeployerLimits',
+      venue: 'out',
+    });
     await check(() => client.getSubAccountsWithAllDexStates({ user: USER }), {
       type: 'subAccounts2',
       user: LOWER_USER,

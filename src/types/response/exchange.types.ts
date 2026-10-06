@@ -39,3 +39,41 @@ export type OrderStatus =
 export interface OrderResponseData {
   statuses: OrderStatus[];
 }
+
+export interface CancelErrorStatus {
+  error: string;
+}
+
+export type CancelStatus = 'success' | CancelErrorStatus;
+
+export interface CancelResponseData {
+  statuses: CancelStatus[];
+}
+
+export interface TwapRunningStatus {
+  running: {
+    twapId: number;
+  };
+}
+
+export interface TwapErrorStatus {
+  error: string;
+}
+
+export interface TwapOrderResponseData {
+  status: TwapErrorStatus | TwapRunningStatus;
+}
+
+export interface TwapCancelResponseData {
+  status: 'success' | TwapErrorStatus;
+}
+
+export interface ExchangeDefaultSuccessResponse {
+  response: {
+    type: 'default';
+  };
+  status: 'ok';
+}
+
+export type ExchangeDefaultResponse =
+  ExchangeDefaultSuccessResponse | ExchangeErrorResponse;
