@@ -6,12 +6,11 @@ import { RestClient } from '@siebly/hyperliquid-api';
 // This Hyperliquid API SDK is available on npm via "npm install @siebly/hyperliquid-api"
 // ENDPOINT: /info (subAccounts)
 // METHOD: POST
-// PUBLIC: NO
+// PUBLIC: YES
 
+// Account reads use the public address of the master account, subaccount, or vault.
 const client = new RestClient({
-  privateKey: 'insert_private_key_here',
-  // If this is an API/agent wallet, also pass the master account:
-  // accountAddress: '0x...',
+  accountAddress: '0x...',
 });
 
 client.getSubAccounts(params)

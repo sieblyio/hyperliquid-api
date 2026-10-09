@@ -63,6 +63,7 @@ try {
   for (const requiredPath of [
     'LICENSE.md',
     'README.md',
+    'llms.txt',
     'package.json',
     'dist/cjs/lib/https-agent.browser.js',
     'dist/cjs/lib/event-emitter.browser.js',

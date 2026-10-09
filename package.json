@@ -34,7 +34,8 @@
   "sideEffects": false,
   "packageManager": "npm@11.12.0",
   "files": [
-    "dist/*"
+    "dist/*",
+    "llms.txt"
   ],
   "author": "Siebly.io (https://github.com/sieblyio)",
   "contributors": [

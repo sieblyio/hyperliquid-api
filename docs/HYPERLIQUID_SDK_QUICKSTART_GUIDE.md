@@ -1702,7 +1702,7 @@ A proxy changes the network route, not the account, network, or available produc
 The SDK includes two separate Hyperliquid features:
 
 - Referral code: around the first supported trading action from a client instance, the SDK makes one passive attempt to apply `SIEBLY`. Hyperliquid leaves an existing referrer unchanged. Trading continues if the referral request fails.
-- Builder code: after the account has approved Siebly's builder fee, the SDK can include the builder code on eligible orders. The configured maximum is 0.01%. Approval must be signed by the main wallet, not an API wallet. If a main-wallet private key is configured and approval is missing, the SDK may attempt that approval in the background. An API wallet cannot grant it.
+- Builder code: after the account has approved Siebly's builder fee, the SDK can include the builder code on eligible orders. The configured maximum is 0.1%. Approval must be signed by the main wallet, not an API wallet. If a main-wallet private key is configured and approval is missing, the SDK may attempt that approval in the background. An API wallet cannot grant it.
 
 Builder approval is optional. Call `approveBuilderFee()` only from a client configured with the main wallet signer and only after reviewing Hyperliquid's current [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes). The approval sets a maximum and can be revoked through Hyperliquid.
 

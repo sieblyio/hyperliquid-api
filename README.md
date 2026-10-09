@@ -535,7 +535,7 @@ const masterClient = new RestClient({
 await masterClient.approveBuilderFee();
 ```
 
-The approval remains valid until it is changed or revoked, so it should not be called during every startup. The configured approval limit is 0.01%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
+The approval remains valid until it is changed or revoked, so it should not be called during every startup. The configured approval limit is 0.1%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
 
 ---
 

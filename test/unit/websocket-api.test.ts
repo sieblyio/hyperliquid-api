@@ -10,10 +10,10 @@ import { FakeWebSocket } from '../support/fake-websocket.js';
 const PRIVATE_KEY =
   '0x0123456789012345678901234567890123456789012345678901234567890123';
 const PARTNER = {
-  approvalPercentage: '0.01%',
+  approvalPercentage: '0.1%',
   builder: {
     b: '0x72f1ad41b790228c4bc4c08eb1e007bf6e4448c2',
-    f: 10,
+    f: 100,
   },
   referralCode: 'SIEBLY',
 };
