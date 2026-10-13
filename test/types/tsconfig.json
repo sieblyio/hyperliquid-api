@@ -10,5 +10,5 @@
     "target": "ES2022",
     "types": ["node"]
   },
-  "include": ["public-contract.ts"]
+  "include": ["*.ts"]
 }

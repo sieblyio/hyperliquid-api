@@ -3,17 +3,20 @@ export interface ExchangeErrorResponse {
   status: 'err';
 }
 
-export interface ExchangeSuccessResponse<Data = unknown> {
-  response: {
-    data?: Data;
-    type: string;
-    [key: string]: unknown;
-  };
-  status: 'ok';
-}
-
-export type ExchangeResponse<Data = unknown> =
-  ExchangeErrorResponse | ExchangeSuccessResponse<Data>;
+/**
+ * Exchange result. Omit Data for acknowledgements, provide it for actions
+ * returning data, or use unknown for raw actions with unknown results.
+ */
+export type ExchangeResponse<Data = undefined> =
+  | ExchangeErrorResponse
+  | {
+      response: [Data] extends [undefined]
+        ? { type: 'default' }
+        : unknown extends Data
+          ? { type: string; data?: Data }
+          : { type: string; data: Data };
+      status: 'ok';
+    };
 
 export interface OrderRestingStatus {
   resting: {
@@ -67,13 +70,3 @@ export interface TwapOrderResponseData {
 export interface TwapCancelResponseData {
   status: 'success' | TwapErrorStatus;
 }
-
-export interface ExchangeDefaultSuccessResponse {
-  response: {
-    type: 'default';
-  };
-  status: 'ok';
-}
-
-export type ExchangeDefaultResponse =
-  ExchangeDefaultSuccessResponse | ExchangeErrorResponse;

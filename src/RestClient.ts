@@ -68,7 +68,6 @@ import type {
 } from './types/request/info.types.js';
 import type {
   CancelResponseData,
-  ExchangeDefaultResponse,
   ExchangeResponse,
   OrderResponseData,
   TwapCancelResponseData,
@@ -77,15 +76,23 @@ import type {
 import type {
   AccountBalancesResponse,
   ActiveAssetData,
+  AlignedQuoteTokenStatus,
   AllMidsResponse,
   BorrowLendReserveEntry,
   BorrowLendReserveState,
   BorrowLendUserState,
   Candle,
+  ExchangeStatus,
+  ExtraAgent,
   FrontendOpenOrder,
   FundingHistory,
+  GossipPriorityAuctionStatus,
   HistoricalOrder,
-  InfoResponse,
+  LeadingVault,
+  LegalStatus,
+  LiquidatablePosition,
+  MaxMarketOrderNotional,
+  MultiSigSigners,
   OpenOrder,
   OrderBookResponse,
   OrderStatusResponse,
@@ -99,10 +106,12 @@ import type {
   PerpDex,
   PerpDexLimits,
   PerpDexStatus,
+  PerpMarginTable,
   PerpMeta,
   PerpMetaAndAssetContexts,
   PortfolioEntry,
   PredictedFunding,
+  PreTransferCheck,
   ReferralInfo,
   SettledOutcome,
   SpotBalancesResponse,
@@ -115,9 +124,13 @@ import type {
   StakingReward,
   StakingSummary,
   SubAccount,
+  SubAccountWithAllDexStates,
   TokenDetails,
+  Trade,
+  TwapHistoryEntry,
   TwapSliceFill,
   UserAbstraction,
+  UserBorrowLendInterest,
   UserFees,
   UserFill,
   UserFunding,
@@ -125,7 +138,11 @@ import type {
   UserRateLimit,
   UserRoleResponse,
   UserVaultDeposit,
+  ValidatorL1Vote,
+  ValidatorSummary,
   VaultDetails,
+  VaultSummary,
+  WebData2,
 } from './types/response/info.types.js';
 import type {
   JsonObject,
@@ -299,11 +316,11 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('delegatorSummary', params);
   }
 
-  getExchangeStatus(): Promise<InfoResponse> {
+  getExchangeStatus(): Promise<ExchangeStatus> {
     return this.info('exchangeStatus', {});
   }
 
-  getExtraAgents(params: AccountRequest = {}): Promise<InfoResponse> {
+  getExtraAgents(params: AccountRequest = {}): Promise<ExtraAgent[]> {
     return this.accountInfo('extraAgents', params);
   }
 
@@ -330,11 +347,11 @@ export class RestClient extends BaseRestClient {
     });
   }
 
-  getGossipPriorityAuctionStatus(): Promise<InfoResponse> {
+  getGossipPriorityAuctionStatus(): Promise<GossipPriorityAuctionStatus> {
     return this.info('gossipPriorityAuctionStatus', {});
   }
 
-  getGossipRootIps(): Promise<InfoResponse> {
+  getGossipRootIps(): Promise<string[]> {
     return this.info('gossipRootIps', {});
   }
 
@@ -366,19 +383,19 @@ export class RestClient extends BaseRestClient {
     });
   }
 
-  getLeadingVaults(params: AccountRequest = {}): Promise<InfoResponse> {
+  getLeadingVaults(params: AccountRequest = {}): Promise<LeadingVault[]> {
     return this.accountInfo('leadingVaults', params);
   }
 
-  getLegalStatus(params: AccountRequest = {}): Promise<InfoResponse> {
+  getLegalStatus(params: AccountRequest = {}): Promise<LegalStatus> {
     return this.accountInfo('legalCheck', params);
   }
 
-  getLiquidatablePositions(): Promise<InfoResponse> {
+  getLiquidatablePositions(): Promise<LiquidatablePosition[]> {
     return this.info('liquidatable', {});
   }
 
-  getMarginTable(params: { id: number }): Promise<InfoResponse> {
+  getMarginTable(params: { id: number }): Promise<PerpMarginTable> {
     return this.info('marginTable', params);
   }
 
@@ -391,7 +408,7 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('maxBuilderFee', params);
   }
 
-  getMaxMarketOrderNotionals(): Promise<InfoResponse> {
+  getMaxMarketOrderNotionals(): Promise<MaxMarketOrderNotional[]> {
     return this.info('maxMarketOrderNtls', {});
   }
 
@@ -538,7 +555,7 @@ export class RestClient extends BaseRestClient {
 
   getPreTransferCheck(
     params: GetPreTransferCheckRequest,
-  ): Promise<InfoResponse> {
+  ): Promise<PreTransferCheck> {
     return this.info('preTransferCheck', normalizeAddresses(params));
   }
 
@@ -553,7 +570,7 @@ export class RestClient extends BaseRestClient {
     return this.info('predictedFundings', {});
   }
 
-  getRecentTrades(params: { coin: string }): Promise<InfoResponse> {
+  getRecentTrades(params: { coin: string }): Promise<Trade[]> {
     return this.info('recentTrades', params);
   }
 
@@ -648,7 +665,7 @@ export class RestClient extends BaseRestClient {
 
   getSubAccountsWithAllDexStates(
     params: AccountRequest = {},
-  ): Promise<InfoResponse> {
+  ): Promise<SubAccountWithAllDexStates[] | null> {
     return this.accountInfo('subAccounts2', params);
   }
 
@@ -662,7 +679,7 @@ export class RestClient extends BaseRestClient {
     return this.info('tokenDetails', params);
   }
 
-  getTwapHistory(params: AccountRequest = {}): Promise<InfoResponse> {
+  getTwapHistory(params: AccountRequest = {}): Promise<TwapHistoryEntry[]> {
     return this.accountInfo('twapHistory', params);
   }
 
@@ -675,7 +692,7 @@ export class RestClient extends BaseRestClient {
 
   getUserBorrowLendInterest(
     params: GetUserBorrowLendInterestRequest,
-  ): Promise<InfoResponse> {
+  ): Promise<UserBorrowLendInterest[]> {
     return this.accountInfo('userBorrowLendInterest', params);
   }
 
@@ -757,7 +774,9 @@ export class RestClient extends BaseRestClient {
     return this.info('userRole', normalizeUserRequest(params));
   }
 
-  getMultiSigSigners(params: AccountRequest = {}): Promise<InfoResponse> {
+  getMultiSigSigners(
+    params: AccountRequest = {},
+  ): Promise<MultiSigSigners | null> {
     return this.accountInfo('userToMultiSigSigners', params);
   }
 
@@ -772,7 +791,7 @@ export class RestClient extends BaseRestClient {
 
   getUserTwapSliceFillsByTime(
     params: GetUserTwapSliceFillsByTimeRequest,
-  ): Promise<InfoResponse> {
+  ): Promise<TwapSliceFill[]> {
     return this.accountInfo('userTwapSliceFillsByTime', params);
   }
 
@@ -785,11 +804,11 @@ export class RestClient extends BaseRestClient {
     return this.accountInfo('userVaultEquities', params);
   }
 
-  getValidatorL1Votes(): Promise<InfoResponse> {
+  getValidatorL1Votes(): Promise<ValidatorL1Vote[]> {
     return this.info('validatorL1Votes', {});
   }
 
-  getValidatorSummaries(): Promise<InfoResponse> {
+  getValidatorSummaries(): Promise<ValidatorSummary[]> {
     return this.info('validatorSummaries', {});
   }
 
@@ -797,7 +816,7 @@ export class RestClient extends BaseRestClient {
    * Vault details (`vaultDetails`).
    *
    * Returns `null` when the vault does not exist. `relationship.type` is
-   * `"parent"` or `"child"`. Pass `user` to include that address in `followerState`.
+   * `"normal"`, `"parent"`, or `"child"`. Pass `user` for `followerState`.
    */
   getVaultDetails(
     params: GetVaultDetailsRequest,
@@ -805,15 +824,18 @@ export class RestClient extends BaseRestClient {
     return this.info('vaultDetails', normalizeAddresses(params));
   }
 
-  getVaultSummaries(): Promise<InfoResponse> {
+  getVaultSummaries(): Promise<VaultSummary[]> {
     return this.info('vaultSummaries', {});
   }
 
-  getWebData2(params: AccountRequest = {}): Promise<InfoResponse> {
+  getWebData2(params: AccountRequest = {}): Promise<WebData2> {
     return this.accountInfo('webData2', params);
   }
 
-  getAlignedQuoteTokenStatus(params: { token: number }): Promise<InfoResponse> {
+  /** Published response schema; the public API currently rejects this request type. */
+  getAlignedQuoteTokenStatus(params: {
+    token: number;
+  }): Promise<AlignedQuoteTokenStatus> {
     return this.info('alignedQuoteTokenInfo', params);
   }
 
@@ -1048,7 +1070,7 @@ export class RestClient extends BaseRestClient {
   updateLeverage(
     params: UpdateLeverageRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1(
       'updateLeverage',
       {
@@ -1068,7 +1090,7 @@ export class RestClient extends BaseRestClient {
   updateIsolatedMargin(
     params: UpdateIsolatedMarginRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('updateIsolatedMargin', params, options);
   }
 
@@ -1080,7 +1102,7 @@ export class RestClient extends BaseRestClient {
   setIsolatedMarginLeverage(
     params: SetIsolatedMarginLeverageRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1(
       'topUpIsolatedOnlyMargin',
       { ...params, leverage: decimalToWire(params.leverage) },
@@ -1121,7 +1143,7 @@ export class RestClient extends BaseRestClient {
   setCancelAllAfter(
     params: { time?: number } = {},
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('scheduleCancel', params, options);
   }
 
@@ -1145,9 +1167,9 @@ export class RestClient extends BaseRestClient {
    */
   async approveBuilderFee(
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     const partner = this.actionBuilder.partnerConfiguration();
-    const response = await this.userSigned<ExchangeDefaultResponse>(
+    const response = await this.userSigned<ExchangeResponse>(
       'approveBuilderFee',
       {
         builder: partner.builder.b,
@@ -1172,7 +1194,7 @@ export class RestClient extends BaseRestClient {
   approveApiWallet(
     params: ApproveApiWalletRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'approveAgent',
       {
@@ -1192,7 +1214,7 @@ export class RestClient extends BaseRestClient {
   sendUsd(
     params: SendUsdRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'usdSend',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -1209,7 +1231,7 @@ export class RestClient extends BaseRestClient {
   sendSpotAsset(
     params: SendSpotAssetRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'spotSend',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -1224,7 +1246,7 @@ export class RestClient extends BaseRestClient {
   withdrawUsd(
     params: WithdrawUsdRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'withdraw3',
       { ...params, amount: decimalToWire(params.amount), time: 0 },
@@ -1241,7 +1263,7 @@ export class RestClient extends BaseRestClient {
   transferUsdBetweenSpotAndPerp(
     params: TransferUsdBetweenSpotAndPerpRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'usdClassTransfer',
       { ...params, amount: decimalOrSubaccountAmount(params.amount) },
@@ -1259,7 +1281,7 @@ export class RestClient extends BaseRestClient {
   sendAsset(
     params: SendAssetRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'sendAsset',
       {
@@ -1280,7 +1302,7 @@ export class RestClient extends BaseRestClient {
   sendToEvmWithData(
     params: SendToEvmWithDataRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'sendToEvmWithData',
       { ...params, amount: decimalToWire(params.amount) },
@@ -1297,7 +1319,7 @@ export class RestClient extends BaseRestClient {
   sendAssetFromApiWallet(
     params: SendAssetFromApiWalletRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1(
       'agentSendAsset',
       {
@@ -1318,7 +1340,7 @@ export class RestClient extends BaseRestClient {
   depositIntoStaking(
     params: { wei: number },
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'cDeposit',
       params,
@@ -1335,7 +1357,7 @@ export class RestClient extends BaseRestClient {
   withdrawFromStaking(
     params: { wei: number },
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'cWithdraw',
       params,
@@ -1352,7 +1374,7 @@ export class RestClient extends BaseRestClient {
   delegateOrUndelegateStake(
     params: DelegateOrUndelegateStakeRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'tokenDelegate',
       params,
@@ -1428,7 +1450,7 @@ export class RestClient extends BaseRestClient {
   setUserAbstraction(
     params: SetUserAbstractionRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'userSetAbstraction',
       params,
@@ -1445,7 +1467,7 @@ export class RestClient extends BaseRestClient {
   setUserDexAbstraction(
     params: UserToggleRequest,
     options: UserSignedRequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.userSigned(
       'userDexAbstraction',
       params,
@@ -1461,7 +1483,7 @@ export class RestClient extends BaseRestClient {
    */
   enableApiWalletDexAbstraction(
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('agentEnableDexAbstraction', {}, options);
   }
 
@@ -1473,7 +1495,7 @@ export class RestClient extends BaseRestClient {
   setApiWalletAbstraction(
     params: { abstraction: 'i' | 'p' | 'u' },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('agentSetAbstraction', params, options);
   }
 
@@ -1498,16 +1520,14 @@ export class RestClient extends BaseRestClient {
   /**
    * Claim rewards (`claimRewards`).
    */
-  claimRewards(
-    options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  claimRewards(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
     return this.l1('claimRewards', {}, options);
   }
 
   createSubAccount(
     params: { name: string },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse> {
+  ): Promise<ExchangeResponse<string>> {
     return this.l1('createSubAccount', params, options);
   }
 
@@ -1515,9 +1535,7 @@ export class RestClient extends BaseRestClient {
     params: { description: string; initialUsd: number; name: string },
     options: L1RequestOptions = {},
   ): Promise<ExchangeResponse<string>> {
-    return this.l1('createVault', { ...params, nonce: 0 }, options) as Promise<
-      ExchangeResponse<string>
-    >;
+    return this.l1('createVault', { ...params, nonce: 0 }, options);
   }
 
   setEvmBigBlocks(
@@ -1556,16 +1574,14 @@ export class RestClient extends BaseRestClient {
   transferHip3LiquidatorFunds(
     params: { dex: string; isDeposit: boolean; ntl: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('hip3LiquidatorTransfer', params, options);
   }
 
   /**
    * Mark a nonce as used without another effect (`noop`).
    */
-  invalidateNonce(
-    options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  invalidateNonce(options: L1RequestOptions = {}): Promise<ExchangeResponse> {
     return this.l1('noop', {}, options);
   }
 
@@ -1591,7 +1607,7 @@ export class RestClient extends BaseRestClient {
   reserveAdditionalActions(
     params: { weight: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('reserveRequestWeight', params, options);
   }
 
@@ -1640,7 +1656,7 @@ export class RestClient extends BaseRestClient {
   transferVaultFunds(
     params: TransferVaultFundsRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('vaultTransfer', params, options);
   }
 
@@ -1678,7 +1694,7 @@ export class RestClient extends BaseRestClient {
   updateValidatorL1Stream(
     params: { riskFreeRate: string },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1(
       'validatorL1Stream',
       { riskFreeRate: decimalToWire(params.riskFreeRate) },
@@ -1709,7 +1725,7 @@ export class RestClient extends BaseRestClient {
   authorizeAqav2Role(
     params: { role: 'technical' | 'treasury'; token: number },
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('authorizeAqav2Role', params, options);
   }
 
@@ -1724,7 +1740,7 @@ export class RestClient extends BaseRestClient {
   submitUserOutcome(
     params: SubmitUserOutcomeRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeDefaultResponse> {
+  ): Promise<ExchangeResponse> {
     return this.l1('userOutcome', params, options);
   }
 

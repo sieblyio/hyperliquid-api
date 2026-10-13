@@ -3,6 +3,80 @@ export type InfoResponse =
 
 export type AllMidsResponse = Record<string, string>;
 
+export interface ExchangeStatus {
+  specialStatuses: string | null;
+  time: number;
+}
+
+export interface ExtraAgent {
+  address: string;
+  name: string;
+  validUntil: number | null;
+}
+
+export type GossipPriorityAuctionStatus = [
+  previousWinnerIps: Array<string | null>,
+  auctions: DeployGasAuction[],
+];
+
+export interface LeadingVault {
+  address: string;
+  name: string;
+}
+
+export interface LegalStatus {
+  acceptedTerms: boolean;
+  restrictions: 'a' | 'n' | 'o' | 'u';
+  userAllowed: boolean;
+}
+
+export interface LiquidatablePosition {
+  marginAvailable: [number, number];
+  /** Isolated positions are known; other position-index variants are undocumented. */
+  positionIndex: {
+    isolated?: { asset: number };
+    [variant: string]: unknown;
+  };
+  user: string;
+}
+
+export type MaxMarketOrderNotional = [
+  maxLeverage: number,
+  maxMarketOrderNtl: string,
+];
+
+export interface PreTransferCheck {
+  fee: string;
+  isSanctioned: boolean;
+  userExists: boolean;
+  userHasSentTx: boolean;
+}
+
+export interface Trade {
+  coin: string;
+  hash: string;
+  px: string;
+  side: 'A' | 'B';
+  sz: string;
+  tid: number;
+  time: number;
+  users: [buyer: string, seller: string];
+}
+
+export interface MultiSigSigners {
+  authorizedUsers: string[];
+  threshold: number;
+}
+
+/** Documented response; the public API may reject this request type. */
+export interface AlignedQuoteTokenStatus {
+  dailyAmountOwed: Array<[date: string, amount: string]>;
+  evmMintedSupply: string;
+  firstAlignedTime: number | null;
+  isAligned: boolean;
+  predictedRate: string;
+}
+
 export type UserRoleResponse =
   | { role: 'agent'; data: { user: string } }
   | { role: 'missing' | 'user' | 'vault' }
@@ -50,6 +124,7 @@ export interface Candle {
 }
 
 export interface OpenOrder {
+  cloid?: string | null;
   coin: string;
   limitPx: string;
   oid: number;
@@ -178,6 +253,7 @@ export type OrderState =
   | 'delistedCanceled'
   | 'filled'
   | 'insufficientSpotBalanceRejected'
+  | 'internalCancel'
   | 'iocCancelRejected'
   | 'liquidatedCanceled'
   | 'marginCanceled'
@@ -187,6 +263,7 @@ export type OrderState =
   | 'openInterestCapCanceled'
   | 'openInterestIncreaseRejected'
   | 'oracleRejected'
+  | 'outcomeSettledCanceled'
   | 'perpMarginRejected'
   | 'perpMaxPositionRejected'
   | 'positionFlipAtOpenInterestCapRejected'
@@ -199,6 +276,7 @@ export type OrderState =
   | 'siblingFilledCanceled'
   | 'tickRejected'
   | 'tooAggressiveAtOpenInterestCapRejected'
+  | 'tooManyOpenOrdersRejected'
   | 'triggered'
   | 'vaultWithdrawalCanceled';
 
@@ -229,6 +307,39 @@ export interface TwapSliceFill {
   twapId: number;
 }
 
+export interface TwapState {
+  coin: string;
+  executedNtl: string;
+  executedSz: string;
+  minutes: number;
+  randomize: boolean;
+  reduceOnly: boolean;
+  side: 'A' | 'B';
+  stopPx?: string | null;
+  sz: string;
+  timestamp: number;
+  trigger?: { above: boolean; px: string } | null;
+  user: string;
+}
+
+export type TwapStatus =
+  | {
+      status:
+        | 'activated'
+        | 'finished'
+        | 'stopped'
+        | 'terminated'
+        | 'waitingForTrigger';
+    }
+  | { description: string; status: 'error' };
+
+export interface TwapHistoryEntry {
+  state: TwapState;
+  status: TwapStatus;
+  time: number;
+  twapId?: number;
+}
+
 export interface SubAccount {
   clearinghouseState: PerpAccountSummaryResponse;
   master: string;
@@ -236,6 +347,17 @@ export interface SubAccount {
   spotState: {
     balances: SpotBalance[];
   };
+  subAccountUser: string;
+}
+
+export interface SubAccountWithAllDexStates {
+  abstraction?: Exclude<UserAbstraction, 'default'>;
+  dexToClearinghouseState: Array<
+    [dex: string, state: PerpAccountSummaryResponse]
+  >;
+  master: string;
+  name: string;
+  spotState: SpotBalancesResponse;
   subAccountUser: string;
 }
 
@@ -290,7 +412,18 @@ export interface VaultDetails {
 }
 
 export type VaultRelationship =
-  { data: { childAddresses: string[] }; type: 'parent' } | { type: 'child' };
+  | { data: { childAddresses: string[] }; type: 'parent' }
+  | { type: 'child' | 'normal' };
+
+export interface VaultSummary {
+  createTimeMillis: number;
+  isClosed: boolean;
+  leader: string;
+  name: string;
+  relationship: VaultRelationship;
+  tvl: string;
+  vaultAddress: string;
+}
 
 export interface UserVaultDeposit {
   equity: string;
@@ -313,6 +446,7 @@ export interface ReferralUser {
 }
 
 export type ReferrerState =
+  | { stage: 'needToCreateCode' }
   | {
       data: { code: string; referralStates: ReferralUser[] };
       stage: 'ready';
@@ -328,9 +462,16 @@ export interface ReferralInfo {
   cumVlm: string;
   referredBy: { code: string; referrer: string } | null;
   referrerState: ReferrerState;
-  rewardHistory: unknown[];
+  rewardHistory: ReferralReward[];
   tokenToState: Array<[token: number, state: ReferralTokenState]>;
   unclaimedRewards: string;
+}
+
+export interface ReferralReward {
+  earned: string;
+  referralVlm: string;
+  time: number;
+  vlm: string;
 }
 
 export interface UserDailyVolume {
@@ -374,6 +515,7 @@ export interface UserFees {
   feeTrialReward?: string;
   nextTrialAvailableTimestamp: number | null;
   stakingLink: { stakingUser: string; type: 'tradingUser' } | null;
+  /** Non-null trial payloads have no documented schema. */
   trial: unknown;
   userAddRate: string;
   userCrossRate: string;
@@ -436,6 +578,13 @@ export type UserAbstraction =
 export interface BorrowLendBalance {
   basis: string;
   value: string;
+}
+
+export interface UserBorrowLendInterest {
+  borrow: string;
+  supply: string;
+  time: number;
+  token: string;
 }
 
 export interface BorrowLendTokenState {
@@ -552,26 +701,91 @@ export interface UserFunding {
   time: number;
 }
 
-/**
- * Non-funding ledger delta. Which fields are present depends on `type`
- * (deposit, withdraw, transfer, staking, deploy auction, and others).
- */
-export interface UserNonFundingLedgerDelta {
-  amount?: string;
-  destination?: string;
-  destinationDex?: string;
-  fee?: string;
-  feeToken?: string;
-  isDeposit?: boolean;
-  nativeTokenFee?: string;
-  nonce?: number;
-  sourceDex?: string;
-  token?: string;
-  type: string;
-  usdc?: string;
-  usdcValue?: string;
-  user?: string;
-}
+/** Non-funding ledger entries, shared by Info and WebSocket history. */
+export type UserNonFundingLedgerDelta =
+  | { toPerp: boolean; type: 'accountClassTransfer'; usdc: string }
+  | { type: 'deposit'; usdc: string }
+  | { fee: string; nonce: number; type: 'withdraw'; usdc: string }
+  | {
+      destination: string;
+      fee: string;
+      type: 'internalTransfer';
+      usdc: string;
+      user: string;
+    }
+  | {
+      destination: string;
+      type: 'subAccountTransfer';
+      usdc: string;
+      user: string;
+    }
+  | {
+      accountValue: string;
+      leverageType: 'Cross' | 'Isolated';
+      liquidatedNtlPos?: string;
+      liquidatedPositions: Array<{ coin: string; szi: string }>;
+      type: 'liquidation';
+    }
+  | { amount: string; token?: string; type: 'rewardsClaim' }
+  | {
+      amount: string;
+      destination: string;
+      fee: string;
+      feeToken?: string;
+      nativeTokenFee?: string;
+      nonce?: number | null;
+      token: string;
+      type: 'spotTransfer';
+      usdcValue: string;
+      user: string;
+    }
+  | { fee?: string; type: 'vaultCreate'; usdc: string; vault: string }
+  | { type: 'vaultDeposit' | 'vaultDistribution'; usdc: string; vault: string }
+  | {
+      basis: string;
+      closingCost: string;
+      commission: string;
+      netWithdrawnUsd: string;
+      requestedUsd: string;
+      type: 'vaultWithdraw';
+      user: string;
+      vault: string;
+    }
+  | { type: 'vaultLeaderCommission'; usdc: string; user: string }
+  | {
+      amount: string;
+      destination: string;
+      destinationDex: string;
+      fee: string;
+      feeToken: string;
+      nativeTokenFee: string;
+      nonce: number;
+      sourceDex: string;
+      token: string;
+      type: 'send';
+      usdcValue: string;
+      user: string;
+    }
+  | { amount: string; token: string; type: 'deployGasAuction' | 'spotGenesis' }
+  | {
+      amount: string;
+      isDeposit: boolean;
+      token: string;
+      type: 'cStakingTransfer';
+    }
+  | {
+      amount: string;
+      interestAmount: string;
+      operation: 'borrow' | 'repay' | 'supply' | 'withdraw';
+      token: string;
+      type: 'borrowLend';
+    }
+  | {
+      amount: string;
+      dex: string;
+      token: string;
+      type: 'activateDexAbstraction';
+    };
 
 export interface UserNonFundingLedgerUpdate {
   delta: UserNonFundingLedgerDelta;
@@ -787,4 +1001,120 @@ export interface SettledOutcome {
 export interface OutcomeDeployerLimits {
   nActiveOutcomesRemaining: number;
   nDailyOutcomesRemaining: number;
+}
+
+export interface ValidatorStats {
+  nSamples: number;
+  predictedApr: string;
+  uptimeFraction: string;
+}
+
+export interface ValidatorSummary {
+  commission: string;
+  description: string;
+  isActive: boolean;
+  isJailed: boolean;
+  name: string;
+  nRecentBlocks: number;
+  signer: string;
+  /** Wire number; large stakes can exceed JavaScript's safe integer range. */
+  stake: number;
+  stats: Array<[period: 'day' | 'month' | 'week', stats: ValidatorStats]>;
+  unjailableAfter: number | null;
+  validator: string;
+}
+
+export type OutcomeGovernanceAction =
+  | {
+      registerTokensAndStandaloneOutcome: {
+        nameAndDescription: [string, string];
+        quoteToken: number;
+      };
+    }
+  | {
+      registerTokensAndQuestion: {
+        fallbackNameAndDescription: [string, string];
+        namedOutcomes: Array<[string, string]>;
+        questionNameAndDescription: [string, string];
+        quoteToken: number;
+      };
+    }
+  | {
+      registerTemplate: {
+        id: string;
+        keywordToHint: Array<
+          [keyword: string, hint: 'date' | 'dateTime' | 'hlPerp' | 'string']
+        >;
+        nameAndDescription: [string, string];
+        role: { standaloneOutcome: { sideNames: [string, string] } };
+      };
+    }
+  | {
+      settleOutcome: {
+        details: string;
+        outcome: number;
+        settleFraction: string;
+      };
+    }
+  | {
+      settleQuestion: {
+        question: number;
+        settleFractionsAndDetails: Array<
+          [outcome: number, fractionAndDetails: [string, string]]
+        >;
+      };
+    }
+  | {
+      settleQuestion2: {
+        nameAndDescription: [string, string];
+        outcomeSettlements: Array<{
+          details: string;
+          nameAndDescription: [string, string];
+          outcome: number;
+          settleFraction: string;
+          sideNames: [string, string];
+        }>;
+        question: number;
+      };
+    };
+
+export type ValidatorL1VoteAction =
+  | { C: string[] }
+  | { D: string }
+  | {
+      E: {
+        evmRebalanceContract: string;
+        technicalStaker: string;
+        token: number;
+        treasuryEvmAddress: string;
+        treasuryStaker: string;
+      };
+    }
+  | { O: OutcomeGovernanceAction };
+
+export interface ValidatorL1Vote {
+  action: ValidatorL1VoteAction;
+  expireTime: number;
+  quorumReached: boolean;
+  votes: string[];
+}
+
+export interface WebData2 {
+  agentAddress: string | null;
+  agentValidUntil: number | null;
+  assetCtxs: PerpAssetContext[];
+  clearinghouseState: PerpAccountSummaryResponse;
+  cumLedger: string;
+  isVault: boolean;
+  leadingVaults: LeadingVault[];
+  meta: PerpMeta;
+  openOrders: FrontendOpenOrder[];
+  optOutOfSpotDusting?: true;
+  perpsAtOpenInterestCap?: string[];
+  serverTime: number;
+  spotAssetCtxs: SpotAssetContext[];
+  spotState?: SpotBalancesResponse;
+  totalVaultEquity: string;
+  twapStates: Array<[twapId: number, state: TwapState]>;
+  user: string;
 }

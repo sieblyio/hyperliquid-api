@@ -374,7 +374,8 @@ export class WebsocketClient extends BaseWebsocketClient<
     const response = recordValue(data?.response);
     const actionResponse =
       response?.type === 'action'
-        ? (recordValue(response.payload) as ExchangeResponse | undefined)
+        ? (recordValue(response.payload) as
+            ExchangeResponse<unknown> | undefined)
         : undefined;
     if (
       !data ||

@@ -1,6 +1,7 @@
 import type { WsKey } from './ws-general.js';
 import type {
-  AssetContextEvent,
+  ActivePerpAssetContextEvent,
+  ActiveSpotAssetContextEvent,
   UserEvent,
   WebsocketSubscription,
   WebsocketSubscriptionData,
@@ -18,8 +19,10 @@ export type WebsocketMessageEvent<TWsKey extends string = WsKey> = {
     data: K extends 'user'
       ? UserEvent
       : K extends 'activeSpotAssetCtx'
-        ? AssetContextEvent
-        : WebsocketSubscriptionData[K & keyof WebsocketSubscriptionData];
+        ? ActiveSpotAssetContextEvent
+        : K extends 'activeAssetCtx'
+          ? ActivePerpAssetContextEvent
+          : WebsocketSubscriptionData[K & keyof WebsocketSubscriptionData];
     wsKey: TWsKey;
   };
 }[WebsocketChannel];

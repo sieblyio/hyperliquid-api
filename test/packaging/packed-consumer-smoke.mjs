@@ -154,6 +154,22 @@ ${assertions}
     ),
   ]);
 
+  // Exercise the same response contracts against the published declarations.
+  const responseContract = (
+    await readFile(
+      path.join(repoRoot, 'test/types/response-contract.ts'),
+      'utf8',
+    )
+  ).replace('../../src/index.js', '@siebly/hyperliquid-api');
+  await writeFile(
+    path.join(consumerRoot, 'src/response-contract.ts'),
+    responseContract,
+  );
+  await writeFile(
+    path.join(consumerRoot, 'src/response-contract.cts'),
+    responseContract,
+  );
+
   runNode(['esm.mjs'], consumerRoot);
   runNode(['commonjs.cjs'], consumerRoot);
 
@@ -213,7 +229,7 @@ ${assertions}
       target: 'ES2022',
       types: [],
     },
-    include: ['src/**/*.ts'],
+    include: ['src/**/*.ts', 'src/**/*.cts'],
   };
   for (const configuration of [
     { fileName: 'tsconfig.bundler.json', resolution: 'Bundler' },

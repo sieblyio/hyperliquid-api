@@ -52,7 +52,7 @@ function expectSignatureAccepted(error: unknown): void {
   expect(message).not.toMatch(SIGNATURE_FAILURE);
 }
 
-function exchangeErrorText(result: ExchangeResponse): string {
+function exchangeErrorText(result: ExchangeResponse<unknown>): string {
   if (result.status === 'err') {
     return result.response;
   }
@@ -64,7 +64,7 @@ function exchangeErrorText(result: ExchangeResponse): string {
     .join(' | ');
 }
 
-function expectSignedExchangeResult(result: ExchangeResponse): void {
+function expectSignedExchangeResult(result: ExchangeResponse<unknown>): void {
   const text = exchangeErrorText(result);
   expect(text).not.toMatch(SIGNATURE_FAILURE);
   if (result.status === 'ok' && !text) {
@@ -74,7 +74,7 @@ function expectSignedExchangeResult(result: ExchangeResponse): void {
   expect(text.length).toBeGreaterThan(0);
 }
 
-function expectSignedBusinessFailure(result: ExchangeResponse): void {
+function expectSignedBusinessFailure(result: ExchangeResponse<unknown>): void {
   const text = exchangeErrorText(result);
   expect(text).not.toMatch(SIGNATURE_FAILURE);
   expect(text.length).toBeGreaterThan(0);

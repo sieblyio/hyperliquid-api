@@ -103,6 +103,8 @@ Node.js 24 or newer and npm 11 or newer are supported.
 
 Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST API, WebSocket, and WebSocket API samples.
 
+Exchange methods share one response wrapper: `ExchangeResponse` for acknowledgements, or `ExchangeResponse<T>` when the response contains data, such as `ExchangeResponse<OrderResponseData>` for orders and `ExchangeResponse<string>` for a new vault or subaccount address. Check `status === 'ok'` before reading `response.data`. Raw Exchange methods use `ExchangeResponse<unknown>` because the response depends on the submitted action. The same types apply to `RestClient` and `WebsocketAPIClient`.
+
 ## Issues & Discussion
 
 - Issues? Check the [issues tab](https://github.com/sieblyio/hyperliquid-api/issues).

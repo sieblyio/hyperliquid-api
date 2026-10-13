@@ -131,7 +131,7 @@ export abstract class BaseRestClient {
     return this.post<T>('/info', sanitizeObjectForWire({ ...request }));
   }
 
-  async submitRawL1Action<T = ExchangeResponse>(
+  async submitRawL1Action<T = ExchangeResponse<unknown>>(
     action: JsonObject,
     options: RawL1RequestOptions = {},
   ): Promise<T> {
@@ -140,7 +140,7 @@ export abstract class BaseRestClient {
     return this.post<T>('/exchange', envelope);
   }
 
-  async submitRawUserSignedAction<T = ExchangeResponse>(
+  async submitRawUserSignedAction<T = ExchangeResponse<unknown>>(
     action: JsonObject,
     definition: UserSignedActionDefinition,
     options: RawUserSignedRequestOptions = {},
@@ -154,7 +154,7 @@ export abstract class BaseRestClient {
     return this.post<T>('/exchange', envelope);
   }
 
-  async submitMultiSigL1Action<T = ExchangeResponse>(
+  async submitMultiSigL1Action<T = ExchangeResponse<unknown>>(
     action: JsonObject,
     options: MultiSigL1RequestOptions,
   ): Promise<T> {
@@ -168,7 +168,7 @@ export abstract class BaseRestClient {
     return this.post<T>('/exchange', envelope);
   }
 
-  async submitMultiSigUserSignedAction<T = ExchangeResponse>(
+  async submitMultiSigUserSignedAction<T = ExchangeResponse<unknown>>(
     action: JsonObject,
     definition: UserSignedActionDefinition,
     options: MultiSigUserSignedRequestOptions,

@@ -1,8 +1,21 @@
 import type {
+  ActiveAssetData,
   Candle,
+  HistoricalOrder,
+  LeadingVault,
   OpenOrder,
   OrderBookResponse,
+  OrderState,
+  PerpAccountSummaryResponse,
+  PerpAssetContext,
+  SpotAssetContext,
+  SpotBalancesResponse,
+  Trade,
+  TwapHistoryEntry,
+  TwapSliceFill,
+  TwapState,
   UserFill,
+  UserNonFundingLedgerUpdate,
 } from '../response/info.types.js';
 
 export type CandleInterval =
@@ -92,40 +105,39 @@ export interface AllMidsEvent {
 }
 
 export interface AssetContextEvent {
-  coin?: string;
-  ctx?: Record<string, unknown>;
-  dex?: string;
-  [key: string]: unknown;
+  coin: string;
+  ctx: PerpAssetContext | SpotAssetContext;
+}
+
+export interface ActivePerpAssetContextEvent extends AssetContextEvent {
+  ctx: PerpAssetContext;
+}
+
+export interface ActiveSpotAssetContextEvent extends AssetContextEvent {
+  ctx: SpotAssetContext;
 }
 
 export interface AssetCtxsEvent {
-  ctxs: Record<string, unknown>[];
+  ctxs: PerpAssetContext[];
   dex: string;
 }
 
 export interface AllDexsAssetCtxsEvent {
-  ctxs: Array<[dex: string, contexts: Record<string, unknown>[]]>;
+  ctxs: Array<[dex: string, contexts: PerpAssetContext[]]>;
 }
 
 export interface ClearinghouseStateEvent {
-  clearinghouseState: Record<string, unknown>;
+  clearinghouseState: PerpAccountSummaryResponse;
   dex: string;
   user: string;
 }
 
 export interface AllDexsClearinghouseStateEvent {
-  clearinghouseStates: Array<[dex: string, state: Record<string, unknown>]>;
+  clearinghouseStates: Array<[dex: string, state: PerpAccountSummaryResponse]>;
   user: string;
 }
 
-export interface ActiveAssetDataEvent {
-  availableToTrade: [string, string];
-  coin: string;
-  leverage: Record<string, unknown>;
-  maxTradeSzs: [string, string];
-  user: string;
-  [key: string]: unknown;
-}
+export type ActiveAssetDataEvent = ActiveAssetData;
 
 export interface BboEvent {
   bbo: [
@@ -136,16 +148,7 @@ export interface BboEvent {
   time: number;
 }
 
-export interface TradeEvent {
-  coin: string;
-  hash: string;
-  px: string;
-  side: 'A' | 'B';
-  sz: string;
-  tid: number;
-  time: number;
-  users: [string, string];
-}
+export type TradeEvent = Trade;
 
 export interface NotificationEvent {
   notification: string;
@@ -153,7 +156,7 @@ export interface NotificationEvent {
 
 export interface OrderUpdateEvent {
   order: OpenOrder;
-  status: string;
+  status: OrderState;
   statusTimestamp: number;
 }
 
@@ -164,7 +167,7 @@ export interface FastAssetCtxsEvent {
   };
 }
 
-export type SpotAssetCtxsEvent = Array<Record<string, unknown>>;
+export type SpotAssetCtxsEvent = SpotAssetContext[];
 
 export interface OutcomeMetaUpdatesEvent {
   updates: Array<
@@ -219,36 +222,36 @@ export interface UserFundingsEvent {
 
 export interface UserHistoricalOrdersEvent {
   isSnapshot?: boolean;
-  orderHistory: unknown[];
+  orderHistory: HistoricalOrder[];
   user: string;
 }
 
 export interface UserNonFundingLedgerUpdatesEvent {
   isSnapshot?: boolean;
-  nonFundingLedgerUpdates: unknown[];
+  nonFundingLedgerUpdates: UserNonFundingLedgerUpdate[];
   user: string;
 }
 
 export interface UserTwapHistoryEvent {
-  history: unknown[];
+  history: TwapHistoryEntry[];
   isSnapshot?: boolean;
   user: string;
 }
 
 export interface UserTwapSliceFillsEvent {
   isSnapshot?: boolean;
-  twapSliceFills: unknown[];
+  twapSliceFills: TwapSliceFill[];
   user: string;
 }
 
 export interface SpotStateEvent {
-  spotState: Record<string, unknown>;
+  spotState: SpotBalancesResponse;
   user: string;
 }
 
 export interface TwapStatesEvent {
   dex: string;
-  states: Array<[twapId: number, state: Record<string, unknown>]>;
+  states: Array<[twapId: number, state: TwapState]>;
   user: string;
 }
 
@@ -274,11 +277,17 @@ export type UserEvent =
       };
     }
   | { nonUserCancel: Array<{ coin: string; oid: number }> }
-  | { twapHistory: unknown[] }
-  | { twapSliceFills: unknown[] };
+  | { twapHistory: TwapHistoryEntry[] }
+  | { twapSliceFills: TwapSliceFill[] };
+
+export interface WebData3PerpDexState {
+  leadingVaults?: LeadingVault[];
+  perpsAtOpenInterestCap?: string[];
+  totalVaultEquity: string;
+}
 
 export interface WebData3Event {
-  perpDexStates: Record<string, unknown>[];
+  perpDexStates: WebData3PerpDexState[];
   userState: {
     abstraction?: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
     agentAddress: string | null;
@@ -290,7 +299,6 @@ export interface WebData3Event {
     serverTime: number;
     user: string;
   };
-  [key: string]: unknown;
 }
 
 export type GenericWebsocketEvent =
