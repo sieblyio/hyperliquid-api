@@ -6,7 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dt/%40siebly%2Fhyperliquid-api)][1]
 [![last commit](https://img.shields.io/github/last-commit/sieblyio/hyperliquid-api)][1]
 [![Telegram](https://img.shields.io/badge/chat-on%20telegram-blue.svg)](https://t.me/nodetraders)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sieblyio/hyperliquid-api)
+[![Hyperliquid Tutorial](https://img.shields.io/badge/Hyperliquid%20Tutorial-siebly.io-blue)](https://siebly.io/sdk/hyperliquid/javascript/tutorial)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@siebly/hyperliquid-api">
