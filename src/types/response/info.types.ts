@@ -795,7 +795,7 @@ export interface UserNonFundingLedgerUpdate {
 }
 
 export interface PredictedFundingQuote {
-  fundingIntervalHours: number;
+  fundingIntervalHours?: number;
   fundingRate: string;
   nextFundingTime: number;
 }
