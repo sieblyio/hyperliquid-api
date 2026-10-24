@@ -248,6 +248,10 @@ export class ActionBuilder {
     this.builderFeeApproved = true;
   }
 
+  clearBuilderFeeApproval(): void {
+    this.builderFeeApproved = false;
+  }
+
   hasSigner(): boolean {
     return this.signer !== undefined;
   }
