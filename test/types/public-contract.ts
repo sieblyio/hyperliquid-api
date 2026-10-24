@@ -71,9 +71,6 @@ void rest.submitMarketOrder({
   symbol: 'HYPE/USDC',
 });
 void rest.submitMarketClose({ symbol: 'ETH' });
-void rest.approveBuilderFee();
-void rest.approveBuilderFee({ maxFeeRate: '0%' });
-void rest.approveBuilderFee({ maxFeeRate: '0.05%', nonce: 1 });
 void rest.getOrderBook({ coin: 'HYPE/USDC' });
 void rest.nameToCoin('HYPE/USDC');
 void rest.submitLimitOrder({

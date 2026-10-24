@@ -115,20 +115,6 @@ export function builderFeeToApprovalPercentage(builderFee: number): string {
   return `${whole}${fraction ? `.${fraction}` : ''}%`;
 }
 
-/** Inverse of `builderFeeToApprovalPercentage`. `undefined` when the string is not a fee percent. */
-export function approvalPercentageToBuilderFee(
-  percentage: string,
-): number | undefined {
-  const match = /^(\d+)(?:\.(\d{1,3}))?%$/.exec(percentage);
-  if (!match) {
-    return undefined;
-  }
-
-  const units =
-    Number(match[1]) * 1000 + Number((match[2] ?? '').padEnd(3, '0'));
-  return Number.isSafeInteger(units) ? units : undefined;
-}
-
 export function getPartnerConfiguration(): PartnerConfiguration {
   const builderFee = SIEBLY_BUILDER_FEE;
 

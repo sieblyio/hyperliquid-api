@@ -93,10 +93,6 @@ export abstract class BaseRestClient {
 
   private builderApprovalState: BuilderApprovalState = 'unchecked';
 
-  private builderAutoApprovalPromise: Promise<void> | undefined;
-
-  private builderAutoApprovalSuppressed = false;
-
   private builderPreflightDeadline: number | undefined;
 
   private referralAttempted = false;
@@ -224,14 +220,7 @@ export abstract class BaseRestClient {
 
   protected confirmBuilderFeeApproval(): void {
     this.builderApprovalState = 'approved';
-    this.builderAutoApprovalSuppressed = false;
     this.actionBuilder.confirmBuilderFeeApproval();
-  }
-
-  protected clearBuilderFeeApproval(): void {
-    this.builderApprovalState = 'unapproved';
-    this.builderAutoApprovalSuppressed = true;
-    this.actionBuilder.clearBuilderFeeApproval();
   }
 
   protected async post<T>(path: string, body: unknown): Promise<T> {
@@ -329,11 +318,6 @@ export abstract class BaseRestClient {
       this.builderApprovalPromise = this.checkBuilderApproval(resolveOwner);
     }
     await this.waitForBuilderApprovalCheck(this.builderApprovalPromise);
-    // First orders wait out an in-flight auto-approval so they include the
-    // builder. Failure resolves the promise and the order still sends.
-    if (this.builderAutoApprovalPromise) {
-      await this.builderAutoApprovalPromise;
-    }
   }
 
   private async checkBuilderApproval(
@@ -377,13 +361,9 @@ export abstract class BaseRestClient {
       }
     }
 
-    if (
-      this.builderApprovalState === 'unapproved' &&
-      owner?.canAutoApprove &&
-      !this.builderAutoApprovalSuppressed
-    ) {
+    if (this.builderApprovalState === 'unapproved' && owner?.canAutoApprove) {
       const partner = this.actionBuilder.partnerConfiguration();
-      const approval = this.userSigned(
+      void this.userSigned(
         'approveBuilderFee',
         {
           builder: partner.builder.b,
@@ -402,8 +382,6 @@ export abstract class BaseRestClient {
           this.builderApprovalState = 'unapproved';
           this.warnForBuilderApproval();
         });
-      this.builderAutoApprovalPromise = approval;
-      await approval;
       return;
     }
     this.warnForBuilderApproval();

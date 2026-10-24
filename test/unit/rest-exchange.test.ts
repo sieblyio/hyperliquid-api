@@ -912,9 +912,8 @@ describe('RestClient Exchange requests', () => {
     });
   });
 
-  test('keeps referral passive and waits for a private-key builder approval', async () => {
+  test('keeps referral passive and approves a private-key master in the background', async () => {
     const instance = client({ accountAddress: USER });
-    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
     instance.infoBehavior = async (request) =>
       request.type === 'maxBuilderFee' ? 0 : {};
     let releaseReferral: (() => void) | undefined;
@@ -941,8 +940,9 @@ describe('RestClient Exchange requests', () => {
       return { response: { type: 'default' }, status: 'ok' };
     };
 
-    const pendingOrder = instance.submitOrder(ORDER_INPUT);
-    await approvalStarted;
+    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
+      status: 'ok',
+    });
     expect(instance.requests[0]).toEqual({
       body: {
         builder: BUILDER,
@@ -951,23 +951,14 @@ describe('RestClient Exchange requests', () => {
       },
       path: '/info',
     });
+    expect(findAction(instance, 'order')).not.toHaveProperty('builder');
+    await approvalStarted;
     expect(
       actions(instance).filter((action) => action.type === 'order'),
-    ).toHaveLength(0);
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
     ).toHaveLength(1);
-    expect(findAction(instance, 'approveBuilderFee')).toMatchObject({
-      maxFeeRate: PARTNER.approvalPercentage,
-    });
 
     releaseApproval?.();
-    await expect(pendingOrder).resolves.toMatchObject({ status: 'ok' });
-    expect(findAction(instance, 'order')).toMatchObject({
-      builder: PARTNER.builder,
-    });
-    expect(warning).not.toHaveBeenCalled();
-
+    await settleBackgroundWork();
     await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
       status: 'ok',
     });
@@ -986,124 +977,6 @@ describe('RestClient Exchange requests', () => {
     ).toMatchObject({ builder: PARTNER.builder });
 
     releaseReferral?.();
-    warning.mockRestore();
-  });
-
-  test('sends the order without a builder when private-key auto-approval fails', async () => {
-    const instance = client({ accountAddress: USER });
-    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    instance.infoBehavior = async (request) =>
-      request.type === 'maxBuilderFee' ? 0 : {};
-    instance.behavior = async (action) => {
-      if (action.type === 'approveBuilderFee') {
-        throw new Error('approval rejected');
-      }
-      return { response: { type: 'default' }, status: 'ok' };
-    };
-
-    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
-      status: 'ok',
-    });
-    expect(findAction(instance, 'order')).not.toHaveProperty('builder');
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
-    ).toHaveLength(1);
-    expect(warning).toHaveBeenCalledTimes(1);
-    expect(warning).toHaveBeenCalledWith(
-      expect.stringContaining('is missing or below the configured fee'),
-    );
-
-    await expect(instance.submitOrder(ORDER_INPUT)).resolves.toMatchObject({
-      status: 'ok',
-    });
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
-    ).toHaveLength(1);
-    expect(
-      actions(instance)
-        .filter((action) => action.type === 'order')
-        .every((action) => action.builder === undefined),
-    ).toBe(true);
-    warning.mockRestore();
-  });
-
-  test('waits for one in-flight auto-approval before concurrent first orders', async () => {
-    const instance = client({ accountAddress: USER });
-    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    instance.infoBehavior = async (request) =>
-      request.type === 'maxBuilderFee' ? 0 : {};
-    let releaseApproval: (() => void) | undefined;
-    const approvalPending = new Promise<void>((resolve) => {
-      releaseApproval = resolve;
-    });
-    instance.behavior = async (action) => {
-      if (action.type === 'approveBuilderFee') {
-        await approvalPending;
-      }
-      return { response: { type: 'default' }, status: 'ok' };
-    };
-
-    const first = instance.submitOrder(ORDER_INPUT);
-    const second = instance.submitOrder(ORDER_INPUT);
-    await settleBackgroundWork();
-    expect(
-      actions(instance).filter((action) => action.type === 'order'),
-    ).toHaveLength(0);
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
-    ).toHaveLength(1);
-
-    releaseApproval?.();
-    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
-    expect(
-      actions(instance).filter((action) => action.type === 'order'),
-    ).toEqual([
-      expect.objectContaining({ builder: PARTNER.builder }),
-      expect.objectContaining({ builder: PARTNER.builder }),
-    ]);
-    expect(warning).not.toHaveBeenCalled();
-    warning.mockRestore();
-  });
-
-  test('approveBuilderFee accepts a custom maxFeeRate and 0% revokes it', async () => {
-    const instance = client({ accountAddress: USER });
-    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    instance.infoBehavior = async (request) =>
-      request.type === 'maxBuilderFee' ? 0 : {};
-
-    await instance.approveBuilderFee({ maxFeeRate: '1%', nonce: 50 });
-    expect(findAction(instance, 'approveBuilderFee')).toMatchObject({
-      builder: BUILDER,
-      maxFeeRate: '1%',
-      nonce: 50,
-    });
-    await instance.submitOrder(ORDER_INPUT);
-    expect(findAction(instance, 'order')).toMatchObject({
-      builder: PARTNER.builder,
-    });
-
-    await instance.approveBuilderFee({ maxFeeRate: '0%' });
-    await instance.submitOrder(ORDER_INPUT);
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
-    ).toEqual([
-      expect.objectContaining({ maxFeeRate: '1%' }),
-      expect.objectContaining({ maxFeeRate: '0%' }),
-    ]);
-    expect(
-      actions(instance).filter((action) => action.type === 'order')[1],
-    ).not.toHaveProperty('builder');
-    expect(warning).toHaveBeenCalledWith(
-      expect.stringContaining('is missing or below the configured fee'),
-    );
-
-    await expect(instance.approveBuilderFee({ maxFeeRate: '0' })).rejects.toThrow(
-      'maxFeeRate must be a percent string',
-    );
-    expect(
-      actions(instance).filter((action) => action.type === 'approveBuilderFee'),
-    ).toHaveLength(2);
-    warning.mockRestore();
   });
 
   test('checks a configured API wallet owner once and tags its first order', async () => {

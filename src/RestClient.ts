@@ -5,7 +5,6 @@ import { BaseRestClient } from './lib/BaseRestClient.js';
 import { decimalToWire } from './lib/decimal.js';
 import { normalizeAddresses } from './lib/normalize-addresses.js';
 import {
-  approvalPercentageToBuilderFee,
   decimalOrSubaccountAmount,
   floorDecimalPlaces,
   marketLimitPrice,
@@ -1169,41 +1168,22 @@ export class RestClient extends BaseRestClient {
    * Approve the configured builder fee (`approveBuilderFee`).
    *
    * `maxFeeRate` is a percent string such as `"0.001%"`.
-   * Omit it to approve the configured Siebly rate. Pass another percent
-   * string to set a different maximum, or `"0%"` to revoke approval.
-   * A lower rate stops this client from auto-approving the configured rate
-   * on later orders.
    */
   async approveBuilderFee(
-    options: UserSignedRequestOptions & { maxFeeRate?: string } = {},
+    options: UserSignedRequestOptions = {},
   ): Promise<ExchangeResponse> {
     const partner = this.actionBuilder.partnerConfiguration();
-    const maxFeeRate = options.maxFeeRate ?? partner.approvalPercentage;
-    if (
-      options.maxFeeRate !== undefined &&
-      approvalPercentageToBuilderFee(options.maxFeeRate) === undefined
-    ) {
-      throw new TypeError(
-        'maxFeeRate must be a percent string such as "0.1%" or "0%".',
-      );
-    }
-
     const response = await this.userSigned<ExchangeResponse>(
       'approveBuilderFee',
       {
         builder: partner.builder.b,
-        maxFeeRate,
+        maxFeeRate: partner.approvalPercentage,
       },
       USER_SIGNED_ACTIONS.approveBuilderFee,
       options,
     );
     if (response.status === 'ok') {
-      const approvedUnits = approvalPercentageToBuilderFee(maxFeeRate);
-      if (approvedUnits !== undefined && approvedUnits >= partner.builder.f) {
-        this.confirmBuilderFeeApproval();
-      } else {
-        this.clearBuilderFeeApproval();
-      }
+      this.confirmBuilderFeeApproval();
     }
     return response;
   }
