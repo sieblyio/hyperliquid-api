@@ -1,6 +1,6 @@
 {
   "name": "@siebly/hyperliquid-api",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
   "scripts": {
     "clean": "node scripts/clean.mjs",
