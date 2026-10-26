@@ -4,17 +4,15 @@ import { RestClient } from '@siebly/hyperliquid-api';
 
 // This example shows how to call this Hyperliquid API endpoint with either node.js, javascript (js) or typescript (ts) with the npm module "@siebly/hyperliquid-api" for Hyperliquid exchange
 // This Hyperliquid API SDK is available on npm via "npm install @siebly/hyperliquid-api"
-// ENDPOINT: /exchange (approveBuilderFee)
+// ENDPOINT: /info (outcomeDeployerLimits)
 // METHOD: POST
-// PUBLIC: NO
+// PUBLIC: YES
 
-const client = new RestClient({
-  privateKey: 'insert_private_key_here',
-  // If this is an API/agent wallet, also pass the master account:
-  // accountAddress: '0x...',
-});
+const client = new RestClient();
+// Private methods need a key:
+// const client = new RestClient({ privateKey: 'insert_private_key_here' });
 
-client.approveBuilderFee(params)
+client.getOutcomeDeployerLimits(params)
   .then((response) => {
     console.log(response);
   })

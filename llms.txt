@@ -38,7 +38,7 @@ Notes:
 ------
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: .github/, examples/apidoc/, docs/images/, docs/endpointFunctionList.md, test/, src/lib/, dist/, tmp/, llms.txt
+- Files matching these patterns are excluded: .github/, examples/apidoc/, docs/images/, docs/endpointFunctionList.md, test/, src/lib/, dist/
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Content has been compressed - code blocks are separated by ⋮---- delimiter
@@ -95,7 +95,6 @@ src/
 .nvmrc
 .prettierrc
 eslint.config.cjs
-hyperliquid-api.code-workspace
 jest.config.cjs
 LICENSE.md
 package.json
@@ -109,20 +108,6 @@ tsconfig.linting.json
 ================================================================
 Files
 ================================================================
-
-================
-File: hyperliquid-api.code-workspace
-================
-{
-  "folders": [
-    {
-      "path": ".",
-    },
-  ],
-  "settings": {
-    "git.ignoreLimitWarning": true,
-  },
-}
 
 ================
 File: scripts/clean.mjs
@@ -228,254 +213,6 @@ export interface GetVaultDetailsRequest {
   user?: string;
   vaultAddress: string;
 }
-
-================
-File: src/types/response/exchange.types.ts
-================
-export interface ExchangeErrorResponse {
-  response: string;
-  status: 'err';
-}
-⋮----
-export interface ExchangeSuccessResponse<Data = unknown> {
-  response: {
-    data?: Data;
-    type: string;
-    [key: string]: unknown;
-  };
-  status: 'ok';
-}
-⋮----
-export type ExchangeResponse<Data = unknown> =
-  ExchangeErrorResponse | ExchangeSuccessResponse<Data>;
-⋮----
-export interface OrderRestingStatus {
-  resting: {
-    oid: number;
-  };
-}
-⋮----
-export interface OrderFilledStatus {
-  filled: {
-    avgPx: string;
-    oid: number;
-    totalSz: string;
-  };
-}
-⋮----
-export interface OrderErrorStatus {
-  error: string;
-}
-⋮----
-export type OrderStatus =
-  OrderErrorStatus | OrderFilledStatus | OrderRestingStatus;
-⋮----
-export interface OrderResponseData {
-  statuses: OrderStatus[];
-}
-
-================
-File: src/types/response/info.types.ts
-================
-export type InfoResponse =
-  Record<string, unknown> | unknown[] | boolean | number | string | null;
-⋮----
-export type AllMidsResponse = Record<string, string>;
-⋮----
-export type UserRoleResponse =
-  | { role: 'agent'; data: { user: string } }
-  | { role: 'missing' | 'user' | 'vault' }
-  | { role: 'subAccount'; data: { master: string } };
-⋮----
-export interface OrderBookLevel {
-  n: number;
-  px: string;
-  sz: string;
-}
-⋮----
-export interface OrderBookResponse {
-  coin: string;
-  fast?: true;
-  levels: [OrderBookLevel[], OrderBookLevel[]];
-  spread?: string;
-  time: number;
-}
-⋮----
-export interface Candle {
-  T: number;
-  c: string;
-  h: string;
-  i:
-    | '1d'
-    | '12h'
-    | '15m'
-    | '1h'
-    | '1m'
-    | '1M'
-    | '2h'
-    | '30m'
-    | '3d'
-    | '3m'
-    | '4h'
-    | '5m'
-    | '8h'
-    | '1w';
-  l: string;
-  n: number;
-  o: string;
-  s: string;
-  t: number;
-  v: string;
-}
-⋮----
-export interface OpenOrder {
-  coin: string;
-  limitPx: string;
-  oid: number;
-  origSz: string;
-  side: 'A' | 'B';
-  sz: string;
-  timestamp: number;
-  [key: string]: unknown;
-}
-⋮----
-export interface SpotBalance {
-  coin: string;
-  entryNtl: string;
-  hold: string;
-  token: number;
-  total: string;
-}
-⋮----
-export interface SpotBalancesResponse {
-  balances: SpotBalance[];
-  tokenToAvailableAfterMaintenance?: Array<[token: number, available: string]>;
-}
-⋮----
-export interface PerpMarginSummary {
-  accountValue: string;
-  totalMarginUsed: string;
-  totalNtlPos: string;
-  totalRawUsd: string;
-}
-⋮----
-export interface PerpAccountSummaryResponse {
-  assetPositions: unknown[];
-  crossMaintenanceMarginUsed: string;
-  crossMarginSummary: PerpMarginSummary;
-  marginSummary: PerpMarginSummary;
-  time?: number;
-  withdrawable: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface AccountBalancesResponse {
-  perp: PerpAccountSummaryResponse;
-  spot: SpotBalancesResponse;
-  user: string;
-}
-⋮----
-export interface UserFill {
-  closedPnl: string;
-  coin: string;
-  crossed: boolean;
-  dir: string;
-  fee: string;
-  hash: string;
-  oid: number;
-  px: string;
-  side: 'A' | 'B';
-  sz: string;
-  time: number;
-  tid: number;
-  [key: string]: unknown;
-}
-⋮----
-export interface PerpMeta {
-  universe: Array<{
-    isDelisted?: boolean;
-    maxLeverage: number;
-    name: string;
-    onlyIsolated?: boolean;
-    szDecimals: number;
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
-}
-⋮----
-export interface SpotMeta {
-  tokens: Array<{
-    index: number;
-    name: string;
-    tokenId: string;
-    weiDecimals: number;
-    szDecimals: number;
-    [key: string]: unknown;
-  }>;
-  universe: Array<{
-    index: number;
-    name: string;
-    tokens: number[];
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
-}
-
-================
-File: src/types/websockets/ws-events.ts
-================
-import type { WsKey } from './ws-general.js';
-import type {
-  AssetContextEvent,
-  UserEvent,
-  WebsocketSubscription,
-  WebsocketSubscriptionData,
-} from './ws-subscriptions.js';
-⋮----
-export type WebsocketChannel =
-  | Exclude<keyof WebsocketSubscriptionData, 'userEvents'>
-  | 'activeSpotAssetCtx'
-  | 'user';
-⋮----
-/** The original wire envelope, with its physical connection identified by wsKey. */
-export type WebsocketMessageEvent<TWsKey extends string = WsKey> = {
-  [K in WebsocketChannel]: {
-    channel: K;
-    data: K extends 'user'
-      ? UserEvent
-      : K extends 'activeSpotAssetCtx'
-        ? AssetContextEvent
-        : WebsocketSubscriptionData[K & keyof WebsocketSubscriptionData];
-    wsKey: TWsKey;
-  };
-}[WebsocketChannel];
-⋮----
-export interface WebsocketSubscriptionResponseEvent<
-  TWsKey extends string = WsKey,
-> {
-  channel: 'subscriptionResponse';
-  data: {
-    method: 'subscribe' | 'unsubscribe';
-    subscription: WebsocketSubscription;
-  };
-  wsKey: TWsKey;
-}
-⋮----
-export interface WebsocketPostResponseEvent<TWsKey extends string = WsKey> {
-  channel: 'post';
-  data: {
-    id: number;
-    response: {
-      type: 'action' | 'error' | 'info';
-      payload: unknown;
-    };
-  };
-  wsKey: TWsKey;
-}
-⋮----
-export type WebsocketResponseEvent<TWsKey extends string = WsKey> =
-  | WebsocketSubscriptionResponseEvent<TWsKey>
-  | WebsocketPostResponseEvent<TWsKey>;
 
 ================
 File: src/constants.ts
@@ -603,6 +340,1019 @@ File: tsconfig.linting.json
     "eslint.config.cjs",
     "jest.config.cjs"
   ]
+}
+
+================
+File: examples/Rest/rest-cancel-open-orders.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Cancel every open order on the authenticated account.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-cancel-open-orders.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+async function main()
+
+================
+File: examples/Rest/rest-limit-order.ts
+================
+import {
+  type ExchangeResponse,
+  type OrderResponseData,
+  RestClient,
+} from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Place a far-from-market GTC limit, look it up by oid and client order id,
+ * then cancel by cloid. Hyperliquid requires a minimum order value of $10.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-limit-order.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+function firstRestingOid(
+  result: ExchangeResponse<OrderResponseData>,
+): number | undefined
+⋮----
+async function main()
+
+================
+File: examples/Rest/rest-market-order.ts
+================
+import {
+  type ExchangeResponse,
+  type OrderResponseData,
+  RestClient,
+} from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * CEX-style market order helpers. submitMarketOrder() loads the midpoint,
+ * applies maxSlippage (default 5%), rounds, and sends an IOC order.
+ *
+ * WARNING: this submits a real order, then tries to close it.
+ * Size is just above Hyperliquid's $10 minimum so a small account can run it.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-market-order.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+function describeOrder(result: ExchangeResponse<OrderResponseData>): unknown
+⋮----
+async function main()
+⋮----
+// Reject the request if it cannot be sent quickly.
+⋮----
+// Looks up the BTC perpetual position, infers buy/sell from signed size,
+// and submits a reduce-only IOC. Omit size to close the full position.
+
+================
+File: examples/Rest/rest-private.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Private Info reads. These attach your account address and do not L1-sign.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
+ *
+ * If the key is an API/agent wallet, also pass the master account:
+ * HYPERLIQUID_ACCOUNT_ADDRESS='0x...'
+ */
+⋮----
+// Optional: if this is an API/agent wallet, pass the master/sub account:
+// accountAddress: process.env.HYPERLIQUID_ACCOUNT_ADDRESS,
+// testnet: true,
+⋮----
+async function main()
+⋮----
+// Trading examples live in the other Rest/*.ts files. Those submit real
+// testnet orders. Start there only after this read path works.
+
+================
+File: examples/Rest/rest-public.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Public Info calls do not need a private key.
+ *
+ * npx tsx examples/Rest/rest-public.ts
+ */
+⋮----
+// Use testnet instead:
+// const client = new RestClient({ testnet: true });
+⋮----
+async function main()
+⋮----
+// nSigFigs is optional aggregation. Some nSigFigs+mantissa combos 500 on
+// Hyperliquid's side; start with nSigFigs alone.
+⋮----
+// Info remaps pair aliases like the official Python SDK: HYPE/USDC -> @107.
+// PURR/USDC stays PURR/USDC because that is the universe name.
+
+================
+File: examples/Rest/rest-rounding.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Hyperliquid tick/lot rules, for when you send raw submitOrder() wires.
+ *
+ * submitMarketOrder() already rounds size down and builds the IOC protection
+ * price. Use this example when you need the same rules for a manual wire.
+ *
+ * Prices: 5 significant figures, at most 6 (perp) or 8 (spot) minus szDecimals.
+ * Integer prices are always allowed.
+ *
+ * npx tsx examples/Rest/rest-rounding.ts
+ */
+⋮----
+function roundPrice(
+  px: number,
+  szDecimals: number,
+  maxDecimals: number,
+): number
+⋮----
+async function main()
+
+================
+File: examples/Rest/rest-schedule-cancel.ts
+================
+import {
+  type ExchangeResponse,
+  type OrderResponseData,
+  RestClient,
+} from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Dead-man's switch: place a resting limit, then schedule cancel-all after 10s.
+ * Hyperliquid only enables this after $1M traded volume; the example still
+ * places and cancels the limit so the order path is exercised either way.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-schedule-cancel.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+function firstRestingOid(
+  result: ExchangeResponse<OrderResponseData>,
+): number | undefined
+⋮----
+async function main()
+
+================
+File: examples/Rest/rest-spot-order.ts
+================
+import {
+  type ExchangeResponse,
+  type OrderResponseData,
+  RestClient,
+} from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Spot limit order on PURR/USDC. Spot size is always the base asset quantity.
+ * Hyperliquid requires a minimum order value of 10 USDC.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-spot-order.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+function firstRestingOid(
+  result: ExchangeResponse<OrderResponseData>,
+): number | undefined
+⋮----
+async function main()
+⋮----
+// Numeric spot IDs also work. @107 is the HYPE/USDC alias on mainnet;
+// testnet IDs differ. Prefer the pair name.
+// const other = await client.submitLimitOrder({
+//   price: '12',
+//   side: 'buy',
+//   size: '1',
+//   symbol: '@8',
+// });
+
+================
+File: examples/Rest/rest-tpsl.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Take-profit / stop-loss via native wire orders.
+ *
+ * 1. A standalone reduce-only stop.
+ * 2. A grouped entry + TP + SL (`grouping: 'normalTpsl'`).
+ *
+ * WARNING: this submits real orders. Prices are far from typical ETH mids so
+ * the entry should rest. Cancel leftovers if you stop the script.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-tpsl.ts
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-tpsl.ts --is_buy
+ */
+⋮----
+// testnet: true,
+⋮----
+async function main()
+
+================
+File: examples/README.md
+================
+# Hyperliquid API - Examples
+
+This folder contains ready to go examples demonstrating the SDK, written in TypeScript (they also work in JavaScript after dropping type annotations).
+
+## Getting started
+
+- Clone the project, or install the module: `npm install @siebly/hyperliquid-api`.
+- Edit the sample as needed (some samples require a private key, or a change from `../src/index.js` to `@siebly/hyperliquid-api`).
+- Execute with tsx: `npx tsx examples/Rest/rest-public.ts`.
+
+Samples that refer to credentials via `process.env.HYPERLIQUID_PRIVATE_KEY` can be spawned with environment variables. Unix/macOS example:
+
+```
+HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
+```
+
+If the key is an API/agent wallet, also pass the master account:
+
+```
+HYPERLIQUID_PRIVATE_KEY='0xabc' HYPERLIQUID_ACCOUNT_ADDRESS='0x...' npx tsx examples/Rest/rest-private.ts
+```
+
+Trading examples submit real orders on mainnet by default. Sizes are small and limit prices are far from market. Uncomment `testnet: true` in a sample to use testnet. Start with `rest-public.ts` and `rest-private.ts` before the order samples.
+
+### REST APIs
+
+All REST examples live in [examples/Rest](./Rest/).
+
+- `rest-public.ts` - Public Info: mids, books, candles, trades, metadata, asset aliases.
+- `rest-private.ts` - Authenticated Info reads: balances, positions, open orders, fills. No orders.
+- `rest-market-order.ts` - `submitMarketOrder()` then `submitMarketClose()`.
+- `rest-limit-order.ts` - GTC limit with client order id, status lookup, cancel by cloid.
+- `rest-spot-order.ts` - Spot limit on `PURR/USDC`, then cancel.
+- `rest-tpsl.ts` - Standalone stop plus grouped entry + TP/SL.
+- `rest-leverage.ts` - Cross/isolated leverage and isolated margin.
+- `rest-cancel-open-orders.ts` - Cancel every open order.
+- `rest-schedule-cancel.ts` - Dead-man's switch via `setCancelAllAfter()`.
+- `rest-rounding.ts` - Tick/lot rules for raw `submitOrder()` wires.
+
+### WebSockets
+
+All WebSocket examples live in [examples/Websocket](./Websocket/).
+
+#### Consumers
+
+These receive data from Hyperliquid WebSockets (market data, account updates). Data emits through `on('message')` with the original `channel`, `data`, and `wsKey`. Subscription acknowledgements emit through `on('response')`. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the same client. Use `subscribe()` and `unsubscribe()` to manage one topic or an array independently of listeners.
+
+- `ws-public.ts` - Public mids, book, trades, candles, bbo, asset context.
+- `ws-private.ts` - Account streams: fills, order updates, open orders, notifications. Needs `HYPERLIQUID_ADDRESS`.
+
+#### WebSocket API
+
+These send commands over Hyperliquid's WebSocket POST protocol. `WebsocketAPIClient` has the same methods as `RestClient`.
+
+- `WS-API/ws-api-client.ts` - Public Info over WS, plus an optional limit + cancel when `HYPERLIQUID_PRIVATE_KEY` is set.
+
+================
+File: scripts/postbuild.mjs
+================
+async function copySourceDeclarations(directory)
+
+================
+File: src/types/websockets/ws-events.ts
+================
+import type { WsKey } from './ws-general.js';
+import type {
+  ActivePerpAssetContextEvent,
+  ActiveSpotAssetContextEvent,
+  UserEvent,
+  WebsocketSubscription,
+  WebsocketSubscriptionData,
+} from './ws-subscriptions.js';
+⋮----
+export type WebsocketChannel =
+  | Exclude<keyof WebsocketSubscriptionData, 'userEvents'>
+  | 'activeSpotAssetCtx'
+  | 'user';
+⋮----
+/** The original wire envelope, with its physical connection identified by wsKey. */
+export type WebsocketMessageEvent<TWsKey extends string = WsKey> = {
+  [K in WebsocketChannel]: {
+    channel: K;
+    data: K extends 'user'
+      ? UserEvent
+      : K extends 'activeSpotAssetCtx'
+        ? ActiveSpotAssetContextEvent
+        : K extends 'activeAssetCtx'
+          ? ActivePerpAssetContextEvent
+          : WebsocketSubscriptionData[K & keyof WebsocketSubscriptionData];
+    wsKey: TWsKey;
+  };
+}[WebsocketChannel];
+⋮----
+export interface WebsocketSubscriptionResponseEvent<
+  TWsKey extends string = WsKey,
+> {
+  channel: 'subscriptionResponse';
+  data: {
+    method: 'subscribe' | 'unsubscribe';
+    subscription: WebsocketSubscription;
+  };
+  wsKey: TWsKey;
+}
+⋮----
+export interface WebsocketPostResponseEvent<TWsKey extends string = WsKey> {
+  channel: 'post';
+  data: {
+    id: number;
+    response: {
+      type: 'action' | 'error' | 'info';
+      payload: unknown;
+    };
+  };
+  wsKey: TWsKey;
+}
+⋮----
+export type WebsocketResponseEvent<TWsKey extends string = WsKey> =
+  | WebsocketSubscriptionResponseEvent<TWsKey>
+  | WebsocketPostResponseEvent<TWsKey>;
+
+================
+File: src/types/websockets/ws-portable.ts
+================
+export interface WebSocketMessageEvent {
+  data: ArrayBuffer | ArrayBufferView | Blob | string;
+}
+⋮----
+export interface WebSocketCloseEvent {
+  code?: number;
+  reason?: string;
+}
+⋮----
+export interface WebSocketLike {
+  binaryType?: string;
+  close(code?: number, reason?: string): void;
+  onclose: ((event: WebSocketCloseEvent) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onmessage: ((event: WebSocketMessageEvent) => void) | null;
+  onopen: (() => void) | null;
+  readonly readyState: number;
+  send(data: string): void;
+  /** Node.js extension used when a failed connection cannot close gracefully. */
+  terminate?(): void;
+}
+⋮----
+close(code?: number, reason?: string): void;
+⋮----
+send(data: string): void;
+/** Node.js extension used when a failed connection cannot close gracefully. */
+terminate?(): void;
+⋮----
+/** SDK-owned types keep Node's emitter declarations out of browser consumers. */
+export interface EventEmitterLike<
+  TEvents extends { [K in keyof TEvents]: unknown[] },
+> {
+  addListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  on<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  once<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  prependListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  prependOnceListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  off<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  removeListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+  removeAllListeners(event?: keyof TEvents): this;
+  setMaxListeners(count: number): this;
+  getMaxListeners(): number;
+  listeners<K extends keyof TEvents>(
+    event: K,
+  ): Array<(...args: TEvents[K]) => void>;
+  rawListeners<K extends keyof TEvents>(
+    event: K,
+  ): Array<(...args: TEvents[K]) => void>;
+  emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
+  listenerCount<K extends keyof TEvents>(
+    event: K,
+    listener?: (...args: TEvents[K]) => void,
+  ): number;
+  eventNames(): Array<keyof TEvents>;
+}
+⋮----
+addListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+on<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+once<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+prependListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+prependOnceListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+off<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+removeListener<K extends keyof TEvents>(
+    event: K,
+    listener: (...args: TEvents[K]) => void,
+  ): this;
+removeAllListeners(event?: keyof TEvents): this;
+setMaxListeners(count: number): this;
+getMaxListeners(): number;
+listeners<K extends keyof TEvents>(
+    event: K,
+): Array<(...args: TEvents[K])
+rawListeners<K extends keyof TEvents>(
+    event: K,
+): Array<(...args: TEvents[K])
+emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
+listenerCount<K extends keyof TEvents>(
+    event: K,
+    listener?: (...args: TEvents[K]) => void,
+  ): number;
+eventNames(): Array<keyof TEvents>;
+⋮----
+export interface EventEmitterConstructor {
+  new <
+    TEvents extends { [K in keyof TEvents]: unknown[] },
+  >(): EventEmitterLike<TEvents>;
+}
+⋮----
+export interface WebSocketConstructor {
+  new (url: string): WebSocketLike;
+  readonly CLOSED?: number;
+  readonly CLOSING?: number;
+  readonly CONNECTING?: number;
+  readonly OPEN?: number;
+}
+
+================
+File: src/types/shared.types.ts
+================
+import type { AxiosRequestConfig } from 'axios';
+⋮----
+export type HyperliquidNetwork = 'mainnet' | 'testnet';
+export type HyperliquidChain = 'Mainnet' | 'Testnet';
+⋮----
+export type JsonPrimitive = boolean | number | string | null;
+export type JsonValue =
+  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = Record<string, unknown>;
+⋮----
+export interface Signature {
+  r: string;
+  s: string;
+  v: number;
+}
+⋮----
+export interface TypedDataField {
+  name: string;
+  type: string;
+}
+⋮----
+export interface TypedDataDomain {
+  chainId: bigint | number | string;
+  name: string;
+  verifyingContract: string;
+  version: string;
+}
+⋮----
+export type TypedDataTypes = Record<string, TypedDataField[]>;
+⋮----
+/**
+ * Portable signer contract used by the SDK.
+ *
+ * ethers Wallet and most browser wallet adapters already satisfy this shape.
+ */
+export interface HyperliquidSigner {
+  address?: string;
+  getAddress?: () => Promise<string> | string;
+  signTypedData: (
+    domain: TypedDataDomain,
+    types: TypedDataTypes,
+    value: Record<string, unknown>,
+  ) => Promise<string>;
+}
+⋮----
+export interface NonceProvider {
+  nextNonce(signerAddress: string): Promise<number> | number;
+}
+⋮----
+nextNonce(signerAddress: string): Promise<number> | number;
+⋮----
+export type RestClientNetworkOptions = Omit<
+  AxiosRequestConfig,
+  'baseURL' | 'data' | 'method' | 'url'
+>;
+⋮----
+export interface RequestOptions {
+  signal?: AbortSignal;
+  timeout?: number;
+}
+⋮----
+export interface RestClientOptions {
+  accountAddress?: string;
+  assetCacheTtlMs?: number;
+  baseUrl?: string;
+  keepAlive?: boolean;
+  keepAliveMsecs?: number;
+  nonceProvider?: NonceProvider;
+  privateKey?: string;
+  signer?: HyperliquidSigner;
+  testnet?: boolean;
+  vaultAddress?: string;
+}
+⋮----
+export interface ExchangeRequestEnvelope<Action = JsonObject> {
+  action: Action;
+  expiresAfter: number | null;
+  nonce: number;
+  signature: Signature;
+  vaultAddress: string | null;
+}
+⋮----
+export interface BuilderCode {
+  b: string;
+  f: number;
+}
+⋮----
+export interface UserSignedActionDefinition {
+  payloadTypes: TypedDataField[];
+  primaryType: string;
+}
+⋮----
+export interface UserSignedActionInput {
+  [key: string]: unknown;
+  type: string;
+}
+⋮----
+export interface UserSignedActionOptions {
+  nonce?: number;
+  payloadMultiSigUser?: string;
+  outerSigner?: string;
+}
+⋮----
+export interface L1ActionOptions {
+  expiresAfter?: number;
+  nonce?: number;
+  vaultAddress?: string | null;
+}
+
+================
+File: tsconfig.extensions.json
+================
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true
+  },
+  "include": ["src/**/*.*", "examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples/apidoc", "examples/tstests"]
+}
+
+================
+File: examples/Rest/rest-leverage.ts
+================
+import { RestClient } from '../../src/index.js';
+⋮----
+// or
+// import { RestClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Read ETH leverage, then set cross and isolated leverage.
+ *
+ * Unix:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-leverage.ts
+ */
+⋮----
+// testnet: true,
+⋮----
+async function main()
+
+================
+File: examples/Websocket/WS-API/ws-api-client.ts
+================
+import {
+  DefaultLogger,
+  type ExchangeResponse,
+  type OrderResponseData,
+  WebsocketAPIClient,
+} from '../../../src/index.js';
+⋮----
+// or
+// import { DefaultLogger, WebsocketAPIClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * WebsocketAPIClient has the same Info and Exchange methods as RestClient, but
+ * sends them over Hyperliquid's correlated WebSocket POST protocol.
+ *
+ * Public example:
+ * npx tsx examples/Websocket/WS-API/ws-api-client.ts
+ *
+ * Private example:
+ * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Websocket/WS-API/ws-api-client.ts
+ */
+⋮----
+// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+⋮----
+// testnet: true,
+⋮----
+function firstRestingOid(
+  result: ExchangeResponse<OrderResponseData>,
+): number | undefined
+⋮----
+async function main()
+⋮----
+// Optional: open the WS API connection early so the first call is not a
+// cold start. connect() happens automatically on the first request.
+// await wsClient.connect();
+
+================
+File: examples/Websocket/ws-private.ts
+================
+import { DefaultLogger, WebsocketClient } from '../../src/index.js';
+⋮----
+// or
+// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
+⋮----
+/**
+ * Account streams. These need a wallet address, not a private key. The SDK
+ * isolates user streams whose server events omit the user onto per-user
+ * connections.
+ *
+ * Data emits through on('message'), with the original channel and wsKey.
+ * Subscription acknowledgements emit through on('response').
+ *
+ * Unix:
+ * HYPERLIQUID_ADDRESS='0xabc' npx tsx examples/Websocket/ws-private.ts
+ */
+⋮----
+// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
+⋮----
+// testnet: true,
+⋮----
+async function main()
+
+================
+File: src/types/request/exchange.types.ts
+================
+import type {
+  AssetIdentifier,
+  CancelByCloidWireInput,
+  CancelWireInput,
+  Grouping,
+  ModifyWireInput,
+  OrderWireInput,
+} from '../../lib/action-factory.js';
+import type {
+  HyperliquidSigner,
+  JsonObject,
+  L1ActionOptions,
+  UserSignedActionOptions,
+} from '../shared.types.js';
+⋮----
+export type L1RequestOptions = L1ActionOptions;
+export type UserSignedRequestOptions = UserSignedActionOptions;
+export type RawL1RequestOptions = L1ActionOptions;
+export type RawUserSignedRequestOptions = UserSignedActionOptions;
+⋮----
+export interface MultiSigL1RequestOptions extends RawL1RequestOptions {
+  multiSigUser: string;
+  signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
+}
+⋮----
+export interface MultiSigUserSignedRequestOptions extends RawUserSignedRequestOptions {
+  multiSigUser: string;
+  signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
+}
+⋮----
+export interface SubmitOrderRequest {
+  grouping?: Grouping;
+  orders: OrderWireInput[];
+}
+⋮----
+export type OrderSide = 'buy' | 'sell';
+⋮----
+export interface SubmitMarketOrderRequest {
+  clientOrderId?: string;
+  maxSlippage?: number;
+  price?: string;
+  reduceOnly?: boolean;
+  side: OrderSide;
+  size: string;
+  symbol: AssetIdentifier;
+}
+⋮----
+export interface SubmitMarketCloseRequest {
+  clientOrderId?: string;
+  maxSlippage?: number;
+  price?: string;
+  size?: string;
+  symbol: AssetIdentifier;
+}
+⋮----
+export interface SubmitLimitOrderRequest {
+  clientOrderId?: string;
+  postOnly?: boolean;
+  price: string;
+  reduceOnly?: boolean;
+  side: OrderSide;
+  size: string;
+  symbol: AssetIdentifier;
+  timeInForce?: 'GTC' | 'IOC';
+}
+⋮----
+export interface ModifyOrderRequest extends ModifyWireInput {
+  alwaysPlace?: true;
+}
+⋮----
+export interface ModifyOrdersRequest {
+  alwaysPlace?: true;
+  modifies: ModifyWireInput[];
+}
+⋮----
+export interface CancelOrdersRequest {
+  cancels: CancelWireInput[];
+  fastCancel?: true;
+}
+⋮----
+export interface CancelOrdersByClientOrderIdRequest {
+  cancels: CancelByCloidWireInput[];
+  fastCancel?: true;
+}
+⋮----
+export interface UpdateLeverageRequest {
+  asset: AssetIdentifier;
+  isCross: boolean;
+  leverage: number;
+}
+⋮----
+export interface UpdateIsolatedMarginRequest {
+  asset: AssetIdentifier;
+  isBuy: boolean;
+  ntli: number;
+}
+⋮----
+export interface SetIsolatedMarginLeverageRequest {
+  asset: AssetIdentifier;
+  leverage: string;
+}
+⋮----
+export interface SubmitTwapOrderRequest {
+  a: AssetIdentifier;
+  b: boolean;
+  m: number;
+  r: boolean;
+  s: string;
+  t: boolean;
+}
+⋮----
+export interface CancelTwapOrderRequest {
+  a: AssetIdentifier;
+  t: number;
+}
+⋮----
+export interface TransferUsdToOrFromSubAccountRequest {
+  isDeposit: boolean;
+  subAccountUser: string;
+  usd: number;
+}
+⋮----
+export interface TransferSpotToOrFromSubAccountRequest {
+  amount: string;
+  isDeposit: boolean;
+  subAccountUser: string;
+  token: string;
+}
+⋮----
+export interface TransferVaultFundsRequest {
+  isDeposit: boolean;
+  usd: number;
+  vaultAddress: string;
+}
+⋮----
+export interface SendAssetRequest {
+  amount: string;
+  destination: string;
+  destinationDex: string;
+  fromSubAccount?: string;
+  sourceDex: string;
+  token: string;
+}
+⋮----
+export type SendAssetFromApiWalletRequest = SendAssetRequest;
+⋮----
+export interface SendUsdRequest {
+  amount: string;
+  destination: string;
+}
+⋮----
+export interface SendSpotAssetRequest extends SendUsdRequest {
+  token: string;
+}
+⋮----
+export type WithdrawUsdRequest = SendUsdRequest;
+⋮----
+export interface TransferUsdBetweenSpotAndPerpRequest {
+  amount: string;
+  toPerp: boolean;
+}
+⋮----
+export interface SendToEvmWithDataRequest {
+  addressEncoding: 'base58' | 'hex';
+  amount: string;
+  data: string;
+  destinationChainId: number;
+  destinationRecipient: string;
+  gasLimit: number;
+  sourceDex: string;
+  token: string;
+}
+⋮----
+export interface ApproveApiWalletRequest {
+  agentAddress: string;
+  agentName?: string | null;
+}
+⋮----
+export interface ConvertToMultiSigUserRequest {
+  signers: {
+    authorizedUsers: string[];
+    threshold: number;
+  } | null;
+}
+⋮----
+export interface DelegateOrUndelegateStakeRequest {
+  isUndelegate: boolean;
+  validator: string;
+  wei: number;
+}
+⋮----
+export interface LinkStakingAccountRequest {
+  isFinalize: boolean;
+  user: string;
+}
+⋮----
+export interface UserToggleRequest {
+  enabled: boolean;
+  user: string;
+}
+⋮----
+export interface SetUserAbstractionRequest {
+  abstraction: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
+  user: string;
+}
+⋮----
+export type DeployPerpRequest = Omit<JsonObject, 'type'>;
+export type DeploySpotRequest = Omit<JsonObject, 'type'>;
+export type SubmitUserOutcomeRequest = Omit<JsonObject, 'type'>;
+
+================
+File: src/types/response/exchange.types.ts
+================
+export interface ExchangeErrorResponse {
+  response: string;
+  status: 'err';
+}
+⋮----
+/**
+ * Exchange result. Omit Data for acknowledgements, provide it for actions
+ * returning data, or use unknown for raw actions with unknown results.
+ */
+export type ExchangeResponse<Data = undefined> =
+  | ExchangeErrorResponse
+  | {
+      response: [Data] extends [undefined]
+        ? { type: 'default' }
+        : unknown extends Data
+          ? { type: string; data?: Data }
+          : { type: string; data: Data };
+      status: 'ok';
+    };
+⋮----
+export interface OrderRestingStatus {
+  resting: {
+    oid: number;
+  };
+}
+⋮----
+export interface OrderFilledStatus {
+  filled: {
+    avgPx: string;
+    oid: number;
+    totalSz: string;
+  };
+}
+⋮----
+export interface OrderErrorStatus {
+  error: string;
+}
+⋮----
+export type OrderStatus =
+  OrderErrorStatus | OrderFilledStatus | OrderRestingStatus;
+⋮----
+export interface OrderResponseData {
+  statuses: OrderStatus[];
+}
+⋮----
+export interface CancelErrorStatus {
+  error: string;
+}
+⋮----
+export type CancelStatus = 'success' | CancelErrorStatus;
+⋮----
+export interface CancelResponseData {
+  statuses: CancelStatus[];
+}
+⋮----
+export interface TwapRunningStatus {
+  running: {
+    twapId: number;
+  };
+}
+⋮----
+export interface TwapErrorStatus {
+  error: string;
+}
+⋮----
+export interface TwapOrderResponseData {
+  status: TwapErrorStatus | TwapRunningStatus;
+}
+⋮----
+export interface TwapCancelResponseData {
+  status: 'success' | TwapErrorStatus;
 }
 
 ================
@@ -2312,7 +3062,7 @@ A proxy changes the network route, not the account, network, or available produc
 The SDK includes two separate Hyperliquid features:
 
 - Referral code: around the first supported trading action from a client instance, the SDK makes one passive attempt to apply `SIEBLY`. Hyperliquid leaves an existing referrer unchanged. Trading continues if the referral request fails.
-- Builder code: after the account has approved Siebly's builder fee, the SDK can include the builder code on eligible orders. The configured maximum is 0.01%. Approval must be signed by the main wallet, not an API wallet. If a main-wallet private key is configured and approval is missing, the SDK may attempt that approval in the background. An API wallet cannot grant it.
+- Builder code: after the account has approved Siebly's builder fee, the SDK can include the builder code on eligible orders. The configured maximum is 0.1%. Approval must be signed by the main wallet, not an API wallet. If a main-wallet private key is configured and approval is missing, the SDK may attempt that approval in the background. An API wallet cannot grant it.
 
 Builder approval is optional. Call `approveBuilderFee()` only from a client configured with the main wallet signer and only after reviewing Hyperliquid's current [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes). The approval sets a maximum and can be revoked through Hyperliquid.
 
@@ -2409,1356 +3159,6 @@ No. `testnet`, `baseUrl`, and `wsUrl` select the destination. A proxy only chang
 5. Add client order IDs, action deadlines, dead-man-switch refresh, and scoped recovery before moving a strategy to Mainnet.
 
 Continue with the [Hyperliquid SDK examples](https://siebly.io/examples/Hyperliquid), browse the [source repository](https://github.com/sieblyio/hyperliquid-api), and check the [official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api) for current exchange behavior.
-
-================
-File: examples/Rest/rest-cancel-open-orders.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Cancel every open order on the authenticated account.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-cancel-open-orders.ts
- */
-⋮----
-// testnet: true,
-⋮----
-async function main()
-
-================
-File: examples/Rest/rest-leverage.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Read ETH leverage, then set cross and isolated leverage.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-leverage.ts
- */
-⋮----
-// testnet: true,
-⋮----
-function ethLeverage(entry: unknown): unknown
-⋮----
-async function main()
-
-================
-File: examples/Rest/rest-limit-order.ts
-================
-import {
-  type ExchangeResponse,
-  type OrderResponseData,
-  RestClient,
-} from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Place a far-from-market GTC limit, look it up by oid and client order id,
- * then cancel by cloid. Hyperliquid requires a minimum order value of $10.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-limit-order.ts
- */
-⋮----
-// testnet: true,
-⋮----
-function firstRestingOid(
-  result: ExchangeResponse<OrderResponseData>,
-): number | undefined
-⋮----
-async function main()
-
-================
-File: examples/Rest/rest-market-order.ts
-================
-import {
-  type ExchangeResponse,
-  type OrderResponseData,
-  RestClient,
-} from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * CEX-style market order helpers. submitMarketOrder() loads the midpoint,
- * applies maxSlippage (default 5%), rounds, and sends an IOC order.
- *
- * WARNING: this submits a real order, then tries to close it.
- * Size is just above Hyperliquid's $10 minimum so a small account can run it.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-market-order.ts
- */
-⋮----
-// testnet: true,
-⋮----
-function describeOrder(result: ExchangeResponse<OrderResponseData>): unknown
-⋮----
-async function main()
-⋮----
-// Reject the request if it cannot be sent quickly.
-⋮----
-// Looks up the BTC perpetual position, infers buy/sell from signed size,
-// and submits a reduce-only IOC. Omit size to close the full position.
-
-================
-File: examples/Rest/rest-private.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Private Info reads. These attach your account address and do not L1-sign.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
- *
- * If the key is an API/agent wallet, also pass the master account:
- * HYPERLIQUID_ACCOUNT_ADDRESS='0x...'
- */
-⋮----
-// Optional: if this is an API/agent wallet, pass the master/sub account:
-// accountAddress: process.env.HYPERLIQUID_ACCOUNT_ADDRESS,
-// testnet: true,
-⋮----
-async function main()
-⋮----
-// Trading examples live in the other Rest/*.ts files. Those submit real
-// testnet orders. Start there only after this read path works.
-
-================
-File: examples/Rest/rest-public.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Public Info calls do not need a private key.
- *
- * npx tsx examples/Rest/rest-public.ts
- */
-⋮----
-// Use testnet instead:
-// const client = new RestClient({ testnet: true });
-⋮----
-async function main()
-⋮----
-// nSigFigs is optional aggregation. Some nSigFigs+mantissa combos 500 on
-// Hyperliquid's side; start with nSigFigs alone.
-⋮----
-// Info remaps pair aliases like the official Python SDK: HYPE/USDC -> @107.
-// PURR/USDC stays PURR/USDC because that is the universe name.
-
-================
-File: examples/Rest/rest-rounding.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Hyperliquid tick/lot rules, for when you send raw submitOrder() wires.
- *
- * submitMarketOrder() already rounds size down and builds the IOC protection
- * price. Use this example when you need the same rules for a manual wire.
- *
- * Prices: 5 significant figures, at most 6 (perp) or 8 (spot) minus szDecimals.
- * Integer prices are always allowed.
- *
- * npx tsx examples/Rest/rest-rounding.ts
- */
-⋮----
-function roundPrice(
-  px: number,
-  szDecimals: number,
-  maxDecimals: number,
-): number
-⋮----
-async function main()
-
-================
-File: examples/Rest/rest-schedule-cancel.ts
-================
-import {
-  type ExchangeResponse,
-  type OrderResponseData,
-  RestClient,
-} from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Dead-man's switch: place a resting limit, then schedule cancel-all after 10s.
- * Hyperliquid only enables this after $1M traded volume; the example still
- * places and cancels the limit so the order path is exercised either way.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-schedule-cancel.ts
- */
-⋮----
-// testnet: true,
-⋮----
-function firstRestingOid(
-  result: ExchangeResponse<OrderResponseData>,
-): number | undefined
-⋮----
-async function main()
-
-================
-File: examples/Rest/rest-spot-order.ts
-================
-import {
-  type ExchangeResponse,
-  type OrderResponseData,
-  RestClient,
-} from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Spot limit order on PURR/USDC. Spot size is always the base asset quantity.
- * Hyperliquid requires a minimum order value of 10 USDC.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-spot-order.ts
- */
-⋮----
-// testnet: true,
-⋮----
-function firstRestingOid(
-  result: ExchangeResponse<OrderResponseData>,
-): number | undefined
-⋮----
-async function main()
-⋮----
-// Numeric spot IDs also work. @107 is the HYPE/USDC alias on mainnet;
-// testnet IDs differ. Prefer the pair name.
-// const other = await client.submitLimitOrder({
-//   price: '12',
-//   side: 'buy',
-//   size: '1',
-//   symbol: '@8',
-// });
-
-================
-File: examples/Rest/rest-tpsl.ts
-================
-import { RestClient } from '../../src/index.js';
-⋮----
-// or
-// import { RestClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Take-profit / stop-loss via native wire orders.
- *
- * 1. A standalone reduce-only stop.
- * 2. A grouped entry + TP + SL (`grouping: 'normalTpsl'`).
- *
- * WARNING: this submits real orders. Prices are far from typical ETH mids so
- * the entry should rest. Cancel leftovers if you stop the script.
- *
- * Unix:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-tpsl.ts
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-tpsl.ts --is_buy
- */
-⋮----
-// testnet: true,
-⋮----
-async function main()
-
-================
-File: examples/README.md
-================
-# Hyperliquid API - Examples
-
-This folder contains ready to go examples demonstrating the SDK, written in TypeScript (they also work in JavaScript after dropping type annotations).
-
-## Getting started
-
-- Clone the project, or install the module: `npm install @siebly/hyperliquid-api`.
-- Edit the sample as needed (some samples require a private key, or a change from `../src/index.js` to `@siebly/hyperliquid-api`).
-- Execute with tsx: `npx tsx examples/Rest/rest-public.ts`.
-
-Samples that refer to credentials via `process.env.HYPERLIQUID_PRIVATE_KEY` can be spawned with environment variables. Unix/macOS example:
-
-```
-HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Rest/rest-private.ts
-```
-
-If the key is an API/agent wallet, also pass the master account:
-
-```
-HYPERLIQUID_PRIVATE_KEY='0xabc' HYPERLIQUID_ACCOUNT_ADDRESS='0x...' npx tsx examples/Rest/rest-private.ts
-```
-
-Trading examples submit real orders on mainnet by default. Sizes are small and limit prices are far from market. Uncomment `testnet: true` in a sample to use testnet. Start with `rest-public.ts` and `rest-private.ts` before the order samples.
-
-### REST APIs
-
-All REST examples live in [examples/Rest](./Rest/).
-
-- `rest-public.ts` - Public Info: mids, books, candles, trades, metadata, asset aliases.
-- `rest-private.ts` - Authenticated Info reads: balances, positions, open orders, fills. No orders.
-- `rest-market-order.ts` - `submitMarketOrder()` then `submitMarketClose()`.
-- `rest-limit-order.ts` - GTC limit with client order id, status lookup, cancel by cloid.
-- `rest-spot-order.ts` - Spot limit on `PURR/USDC`, then cancel.
-- `rest-tpsl.ts` - Standalone stop plus grouped entry + TP/SL.
-- `rest-leverage.ts` - Cross/isolated leverage and isolated margin.
-- `rest-cancel-open-orders.ts` - Cancel every open order.
-- `rest-schedule-cancel.ts` - Dead-man's switch via `setCancelAllAfter()`.
-- `rest-rounding.ts` - Tick/lot rules for raw `submitOrder()` wires.
-
-### WebSockets
-
-All WebSocket examples live in [examples/Websocket](./Websocket/).
-
-#### Consumers
-
-These receive data from Hyperliquid WebSockets (market data, account updates). Data emits through `on('message')` with the original `channel`, `data`, and `wsKey`. Subscription acknowledgements emit through `on('response')`. Lifecycle events (`open`, `reconnecting`, `reconnected`, `exception`, `close`) fire on the same client. Use `subscribe()` and `unsubscribe()` to manage one topic or an array independently of listeners.
-
-- `ws-public.ts` - Public mids, book, trades, candles, bbo, asset context.
-- `ws-private.ts` - Account streams: fills, order updates, open orders, notifications. Needs `HYPERLIQUID_ADDRESS`.
-
-#### WebSocket API
-
-These send commands over Hyperliquid's WebSocket POST protocol. `WebsocketAPIClient` has the same methods as `RestClient`.
-
-- `WS-API/ws-api-client.ts` - Public Info over WS, plus an optional limit + cancel when `HYPERLIQUID_PRIVATE_KEY` is set.
-
-================
-File: scripts/postbuild.mjs
-================
-async function copySourceDeclarations(directory)
-
-================
-File: src/types/websockets/ws-portable.ts
-================
-export interface WebSocketMessageEvent {
-  data: ArrayBuffer | ArrayBufferView | Blob | string;
-}
-⋮----
-export interface WebSocketCloseEvent {
-  code?: number;
-  reason?: string;
-}
-⋮----
-export interface WebSocketLike {
-  binaryType?: string;
-  close(code?: number, reason?: string): void;
-  onclose: ((event: WebSocketCloseEvent) => void) | null;
-  onerror: ((event: unknown) => void) | null;
-  onmessage: ((event: WebSocketMessageEvent) => void) | null;
-  onopen: (() => void) | null;
-  readonly readyState: number;
-  send(data: string): void;
-  /** Node.js extension used when a failed connection cannot close gracefully. */
-  terminate?(): void;
-}
-⋮----
-close(code?: number, reason?: string): void;
-⋮----
-send(data: string): void;
-/** Node.js extension used when a failed connection cannot close gracefully. */
-terminate?(): void;
-⋮----
-/** SDK-owned types keep Node's emitter declarations out of browser consumers. */
-export interface EventEmitterLike<
-  TEvents extends { [K in keyof TEvents]: unknown[] },
-> {
-  addListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  on<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  once<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  prependListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  prependOnceListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  off<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  removeListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-  removeAllListeners(event?: keyof TEvents): this;
-  setMaxListeners(count: number): this;
-  getMaxListeners(): number;
-  listeners<K extends keyof TEvents>(
-    event: K,
-  ): Array<(...args: TEvents[K]) => void>;
-  rawListeners<K extends keyof TEvents>(
-    event: K,
-  ): Array<(...args: TEvents[K]) => void>;
-  emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
-  listenerCount<K extends keyof TEvents>(
-    event: K,
-    listener?: (...args: TEvents[K]) => void,
-  ): number;
-  eventNames(): Array<keyof TEvents>;
-}
-⋮----
-addListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-on<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-once<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-prependListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-prependOnceListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-off<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-removeListener<K extends keyof TEvents>(
-    event: K,
-    listener: (...args: TEvents[K]) => void,
-  ): this;
-removeAllListeners(event?: keyof TEvents): this;
-setMaxListeners(count: number): this;
-getMaxListeners(): number;
-listeners<K extends keyof TEvents>(
-    event: K,
-): Array<(...args: TEvents[K])
-rawListeners<K extends keyof TEvents>(
-    event: K,
-): Array<(...args: TEvents[K])
-emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean;
-listenerCount<K extends keyof TEvents>(
-    event: K,
-    listener?: (...args: TEvents[K]) => void,
-  ): number;
-eventNames(): Array<keyof TEvents>;
-⋮----
-export interface EventEmitterConstructor {
-  new <
-    TEvents extends { [K in keyof TEvents]: unknown[] },
-  >(): EventEmitterLike<TEvents>;
-}
-⋮----
-export interface WebSocketConstructor {
-  new (url: string): WebSocketLike;
-  readonly CLOSED?: number;
-  readonly CLOSING?: number;
-  readonly CONNECTING?: number;
-  readonly OPEN?: number;
-}
-
-================
-File: src/types/websockets/ws-subscriptions.ts
-================
-import type {
-  Candle,
-  OpenOrder,
-  OrderBookResponse,
-  UserFill,
-} from '../response/info.types.js';
-⋮----
-export type CandleInterval =
-  | '1d'
-  | '12h'
-  | '15m'
-  | '1h'
-  | '1m'
-  | '1M'
-  | '2h'
-  | '30m'
-  | '3d'
-  | '3m'
-  | '4h'
-  | '5m'
-  | '6h'
-  | '8h'
-  | '1w';
-⋮----
-export type UserSubscriptionType =
-  | 'activeAssetData'
-  | 'allDexsClearinghouseState'
-  | 'clearinghouseState'
-  | 'notification'
-  | 'openOrders'
-  | 'orderUpdates'
-  | 'spotState'
-  | 'twapStates'
-  | 'userEvents'
-  | 'userFills'
-  | 'userFundings'
-  | 'userHistoricalOrders'
-  | 'userNonFundingLedgerUpdates'
-  | 'userTwapHistory'
-  | 'userTwapSliceFills'
-  | 'webData3';
-⋮----
-export type WebsocketSubscription =
-  | { dex?: string; type: 'allMids' }
-  | { dex?: string; type: 'assetCtxs' }
-  | { coin: string; type: 'activeAssetCtx' }
-  | { coin: string; user: string; type: 'activeAssetData' }
-  | { type: 'allDexsAssetCtxs' }
-  | { user: string; type: 'allDexsClearinghouseState' }
-  | { coin: string; type: 'bbo' }
-  | { coin: string; interval: CandleInterval; type: 'candle' }
-  | { dex?: string; user: string; type: 'clearinghouseState' }
-  | { type: 'fastAssetCtxs' }
-  | {
-      coin: string;
-      fast?: boolean;
-      mantissa?: 1 | 2 | 5 | null;
-      nSigFigs?: 2 | 3 | 4 | 5 | null;
-      type: 'l2Book';
-    }
-  | { user: string; type: 'notification' }
-  | { dex?: string; user: string; type: 'openOrders' }
-  | { user: string; type: 'orderUpdates' }
-  | { type: 'outcomeMetaUpdates' }
-  | { type: 'spotAssetCtxs' }
-  | {
-      ignorePortfolioMargin?: boolean;
-      isPortfolioMargin?: never;
-      user: string;
-      type: 'spotState';
-    }
-  | {
-      ignorePortfolioMargin?: never;
-      isPortfolioMargin?: boolean;
-      user: string;
-      type: 'spotState';
-    }
-  | { coin: string; type: 'trades' }
-  | { dex?: string; user: string; type: 'twapStates' }
-  | { user: string; type: 'userEvents' }
-  | { aggregateByTime?: boolean; user: string; type: 'userFills' }
-  | { user: string; type: 'userFundings' }
-  | { user: string; type: 'userHistoricalOrders' }
-  | { user: string; type: 'userNonFundingLedgerUpdates' }
-  | { user: string; type: 'userTwapHistory' }
-  | { user: string; type: 'userTwapSliceFills' }
-  | { user: string; type: 'webData3' };
-⋮----
-export interface AllMidsEvent {
-  dex?: string;
-  mids: Record<string, string>;
-}
-⋮----
-export interface AssetContextEvent {
-  coin?: string;
-  ctx?: Record<string, unknown>;
-  dex?: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface AssetCtxsEvent {
-  ctxs: Record<string, unknown>[];
-  dex: string;
-}
-⋮----
-export interface AllDexsAssetCtxsEvent {
-  ctxs: Array<[dex: string, contexts: Record<string, unknown>[]]>;
-}
-⋮----
-export interface ClearinghouseStateEvent {
-  clearinghouseState: Record<string, unknown>;
-  dex: string;
-  user: string;
-}
-⋮----
-export interface AllDexsClearinghouseStateEvent {
-  clearinghouseStates: Array<[dex: string, state: Record<string, unknown>]>;
-  user: string;
-}
-⋮----
-export interface ActiveAssetDataEvent {
-  availableToTrade: [string, string];
-  coin: string;
-  leverage: Record<string, unknown>;
-  maxTradeSzs: [string, string];
-  user: string;
-  [key: string]: unknown;
-}
-⋮----
-export interface BboEvent {
-  bbo: [
-    bid: { n: number; px: string; sz: string } | null,
-    offer: { n: number; px: string; sz: string } | null,
-  ];
-  coin: string;
-  time: number;
-}
-⋮----
-export interface TradeEvent {
-  coin: string;
-  hash: string;
-  px: string;
-  side: 'A' | 'B';
-  sz: string;
-  tid: number;
-  time: number;
-  users: [string, string];
-}
-⋮----
-export interface NotificationEvent {
-  notification: string;
-}
-⋮----
-export interface OrderUpdateEvent {
-  order: OpenOrder;
-  status: string;
-  statusTimestamp: number;
-}
-⋮----
-export interface FastAssetCtxsEvent {
-  [coin: string]: {
-    markPx?: string;
-    midPx?: string | null;
-  };
-}
-⋮----
-export type SpotAssetCtxsEvent = Array<Record<string, unknown>>;
-⋮----
-export interface OutcomeMetaUpdatesEvent {
-  updates: Array<
-    | {
-        outcomeCreated: {
-          description: string;
-          name: string;
-          outcome: number;
-          quoteToken: string;
-          sideSpecs: Array<{ name: string; token?: number }>;
-        };
-      }
-    | { outcomeSettled: { outcome: number } }
-    | {
-        questionUpdated: {
-          description: string;
-          fallbackOutcome: number;
-          name: string;
-          namedOutcomes: number[];
-          question: number;
-          settledNamedOutcomes: number[];
-        };
-      }
-    | { questionSettled: { question: number } }
-  >;
-}
-⋮----
-export interface UserFillsEvent {
-  fills: UserFill[];
-  isSnapshot?: boolean;
-  user: string;
-}
-⋮----
-export interface OpenOrdersEvent {
-  dex: string;
-  orders: OpenOrder[];
-  user: string;
-}
-⋮----
-export interface UserFundingsEvent {
-  fundings: Array<{
-    coin: string;
-    fundingRate: string;
-    nSamples: number | null;
-    szi: string;
-    time: number;
-    usdc: string;
-  }>;
-  isSnapshot?: boolean;
-  user: string;
-}
-⋮----
-export interface UserHistoricalOrdersEvent {
-  isSnapshot?: boolean;
-  orderHistory: unknown[];
-  user: string;
-}
-⋮----
-export interface UserNonFundingLedgerUpdatesEvent {
-  isSnapshot?: boolean;
-  nonFundingLedgerUpdates: unknown[];
-  user: string;
-}
-⋮----
-export interface UserTwapHistoryEvent {
-  history: unknown[];
-  isSnapshot?: boolean;
-  user: string;
-}
-⋮----
-export interface UserTwapSliceFillsEvent {
-  isSnapshot?: boolean;
-  twapSliceFills: unknown[];
-  user: string;
-}
-⋮----
-export interface SpotStateEvent {
-  spotState: Record<string, unknown>;
-  user: string;
-}
-⋮----
-export interface TwapStatesEvent {
-  dex: string;
-  states: Array<[twapId: number, state: Record<string, unknown>]>;
-  user: string;
-}
-⋮----
-export type UserEvent =
-  | { fills: UserFill[] }
-  | {
-      funding: {
-        coin: string;
-        fundingRate: string;
-        nSamples: number | null;
-        szi: string;
-        time: number;
-        usdc: string;
-      };
-    }
-  | {
-      liquidation: {
-        lid: number;
-        liquidated_account_value: string;
-        liquidated_ntl_pos: string;
-        liquidated_user: string;
-        liquidator: string;
-      };
-    }
-  | { nonUserCancel: Array<{ coin: string; oid: number }> }
-  | { twapHistory: unknown[] }
-  | { twapSliceFills: unknown[] };
-⋮----
-export interface WebData3Event {
-  perpDexStates: Record<string, unknown>[];
-  userState: {
-    abstraction?: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
-    agentAddress: string | null;
-    agentValidUntil: number | null;
-    cumLedger: string;
-    dexAbstractionEnabled?: boolean;
-    isVault: boolean;
-    optOutOfSpotDusting?: true;
-    serverTime: number;
-    user: string;
-  };
-  [key: string]: unknown;
-}
-⋮----
-export type GenericWebsocketEvent =
-  Record<string, unknown> | unknown[] | string | number | boolean | null;
-⋮----
-/** Payload types keyed by subscription type. Wire envelopes are defined in ws-events. */
-export interface WebsocketSubscriptionData {
-  activeAssetCtx: AssetContextEvent;
-  activeAssetData: ActiveAssetDataEvent;
-  allDexsAssetCtxs: AllDexsAssetCtxsEvent;
-  allDexsClearinghouseState: AllDexsClearinghouseStateEvent;
-  allMids: AllMidsEvent;
-  assetCtxs: AssetCtxsEvent;
-  bbo: BboEvent;
-  candle: Candle;
-  clearinghouseState: ClearinghouseStateEvent;
-  fastAssetCtxs: FastAssetCtxsEvent;
-  l2Book: OrderBookResponse;
-  notification: NotificationEvent;
-  openOrders: OpenOrdersEvent;
-  orderUpdates: OrderUpdateEvent[];
-  outcomeMetaUpdates: OutcomeMetaUpdatesEvent;
-  spotAssetCtxs: SpotAssetCtxsEvent;
-  spotState: SpotStateEvent;
-  trades: TradeEvent[];
-  twapStates: TwapStatesEvent;
-  userEvents: UserEvent;
-  userFills: UserFillsEvent;
-  userFundings: UserFundingsEvent;
-  userHistoricalOrders: UserHistoricalOrdersEvent;
-  userNonFundingLedgerUpdates: UserNonFundingLedgerUpdatesEvent;
-  userTwapHistory: UserTwapHistoryEvent;
-  userTwapSliceFills: UserTwapSliceFillsEvent;
-  webData3: WebData3Event;
-}
-⋮----
-export type WebsocketEventFor<S extends WebsocketSubscription> =
-  WebsocketSubscriptionData[S['type']];
-
-================
-File: src/types/shared.types.ts
-================
-import type { AxiosRequestConfig } from 'axios';
-⋮----
-export type HyperliquidNetwork = 'mainnet' | 'testnet';
-export type HyperliquidChain = 'Mainnet' | 'Testnet';
-⋮----
-export type JsonPrimitive = boolean | number | string | null;
-export type JsonValue =
-  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-export type JsonObject = Record<string, unknown>;
-⋮----
-export interface Signature {
-  r: string;
-  s: string;
-  v: number;
-}
-⋮----
-export interface TypedDataField {
-  name: string;
-  type: string;
-}
-⋮----
-export interface TypedDataDomain {
-  chainId: bigint | number | string;
-  name: string;
-  verifyingContract: string;
-  version: string;
-}
-⋮----
-export type TypedDataTypes = Record<string, TypedDataField[]>;
-⋮----
-/**
- * Portable signer contract used by the SDK.
- *
- * ethers Wallet and most browser wallet adapters already satisfy this shape.
- */
-export interface HyperliquidSigner {
-  address?: string;
-  getAddress?: () => Promise<string> | string;
-  signTypedData: (
-    domain: TypedDataDomain,
-    types: TypedDataTypes,
-    value: Record<string, unknown>,
-  ) => Promise<string>;
-}
-⋮----
-export interface NonceProvider {
-  nextNonce(signerAddress: string): Promise<number> | number;
-}
-⋮----
-nextNonce(signerAddress: string): Promise<number> | number;
-⋮----
-export type RestClientNetworkOptions = Omit<
-  AxiosRequestConfig,
-  'baseURL' | 'data' | 'method' | 'url'
->;
-⋮----
-export interface RequestOptions {
-  signal?: AbortSignal;
-  timeout?: number;
-}
-⋮----
-export interface RestClientOptions {
-  accountAddress?: string;
-  assetCacheTtlMs?: number;
-  baseUrl?: string;
-  keepAlive?: boolean;
-  keepAliveMsecs?: number;
-  nonceProvider?: NonceProvider;
-  privateKey?: string;
-  signer?: HyperliquidSigner;
-  testnet?: boolean;
-  vaultAddress?: string;
-}
-⋮----
-export interface ExchangeRequestEnvelope<Action = JsonObject> {
-  action: Action;
-  expiresAfter: number | null;
-  nonce: number;
-  signature: Signature;
-  vaultAddress: string | null;
-}
-⋮----
-export interface BuilderCode {
-  b: string;
-  f: number;
-}
-⋮----
-export interface UserSignedActionDefinition {
-  payloadTypes: TypedDataField[];
-  primaryType: string;
-}
-⋮----
-export interface UserSignedActionInput {
-  [key: string]: unknown;
-  type: string;
-}
-⋮----
-export interface UserSignedActionOptions {
-  nonce?: number;
-  payloadMultiSigUser?: string;
-  outerSigner?: string;
-}
-⋮----
-export interface L1ActionOptions {
-  expiresAfter?: number;
-  nonce?: number;
-  vaultAddress?: string | null;
-}
-
-================
-File: tsconfig.extensions.json
-================
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "declaration": false,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "noEmit": true
-  },
-  "include": ["src/**/*.*", "examples/**/*.ts"],
-  "exclude": ["node_modules", "dist", "examples/apidoc", "examples/tstests"]
-}
-
-================
-File: examples/Websocket/WS-API/ws-api-client.ts
-================
-import {
-  DefaultLogger,
-  type ExchangeResponse,
-  type OrderResponseData,
-  WebsocketAPIClient,
-} from '../../../src/index.js';
-⋮----
-// or
-// import { DefaultLogger, WebsocketAPIClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * WebsocketAPIClient has the same Info and Exchange methods as RestClient, but
- * sends them over Hyperliquid's correlated WebSocket POST protocol.
- *
- * Public example:
- * npx tsx examples/Websocket/WS-API/ws-api-client.ts
- *
- * Private example:
- * HYPERLIQUID_PRIVATE_KEY='0xabc' npx tsx examples/Websocket/WS-API/ws-api-client.ts
- */
-⋮----
-// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
-⋮----
-// testnet: true,
-⋮----
-function firstRestingOid(
-  result: ExchangeResponse<OrderResponseData>,
-): number | undefined
-⋮----
-async function main()
-⋮----
-// Optional: open the WS API connection early so the first call is not a
-// cold start. connect() happens automatically on the first request.
-// await wsClient.connect();
-
-================
-File: examples/Websocket/ws-private.ts
-================
-import { DefaultLogger, WebsocketClient } from '../../src/index.js';
-⋮----
-// or
-// import { DefaultLogger, WebsocketClient } from '@siebly/hyperliquid-api';
-⋮----
-/**
- * Account streams. These need a wallet address, not a private key. The SDK
- * isolates user streams whose server events omit the user onto per-user
- * connections.
- *
- * Data emits through on('message'), with the original channel and wsKey.
- * Subscription acknowledgements emit through on('response').
- *
- * Unix:
- * HYPERLIQUID_ADDRESS='0xabc' npx tsx examples/Websocket/ws-private.ts
- */
-⋮----
-// trace: (...params: unknown[]) => console.log(new Date(), 'trace', ...params),
-⋮----
-// testnet: true,
-⋮----
-async function main()
-
-================
-File: src/types/request/exchange.types.ts
-================
-import type {
-  AssetIdentifier,
-  CancelByCloidWireInput,
-  CancelWireInput,
-  Grouping,
-  ModifyWireInput,
-  OrderWireInput,
-} from '../../lib/action-factory.js';
-import type {
-  HyperliquidSigner,
-  JsonObject,
-  L1ActionOptions,
-  UserSignedActionOptions,
-} from '../shared.types.js';
-⋮----
-export type L1RequestOptions = L1ActionOptions;
-export type UserSignedRequestOptions = UserSignedActionOptions;
-export type RawL1RequestOptions = L1ActionOptions;
-export type RawUserSignedRequestOptions = UserSignedActionOptions;
-⋮----
-export interface MultiSigL1RequestOptions extends RawL1RequestOptions {
-  multiSigUser: string;
-  signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
-}
-⋮----
-export interface MultiSigUserSignedRequestOptions extends RawUserSignedRequestOptions {
-  multiSigUser: string;
-  signers: readonly [HyperliquidSigner, ...HyperliquidSigner[]];
-}
-⋮----
-export interface SubmitOrderRequest {
-  grouping?: Grouping;
-  orders: OrderWireInput[];
-}
-⋮----
-export type OrderSide = 'buy' | 'sell';
-⋮----
-export interface SubmitMarketOrderRequest {
-  clientOrderId?: string;
-  maxSlippage?: number;
-  price?: string;
-  reduceOnly?: boolean;
-  side: OrderSide;
-  size: string;
-  symbol: AssetIdentifier;
-}
-⋮----
-export interface SubmitMarketCloseRequest {
-  clientOrderId?: string;
-  maxSlippage?: number;
-  price?: string;
-  size?: string;
-  symbol: AssetIdentifier;
-}
-⋮----
-export interface SubmitLimitOrderRequest {
-  clientOrderId?: string;
-  postOnly?: boolean;
-  price: string;
-  reduceOnly?: boolean;
-  side: OrderSide;
-  size: string;
-  symbol: AssetIdentifier;
-  timeInForce?: 'GTC' | 'IOC';
-}
-⋮----
-export interface ModifyOrderRequest extends ModifyWireInput {
-  alwaysPlace?: true;
-}
-⋮----
-export interface ModifyOrdersRequest {
-  alwaysPlace?: true;
-  modifies: ModifyWireInput[];
-}
-⋮----
-export interface CancelOrdersRequest {
-  cancels: CancelWireInput[];
-  fastCancel?: true;
-}
-⋮----
-export interface CancelOrdersByClientOrderIdRequest {
-  cancels: CancelByCloidWireInput[];
-  fastCancel?: true;
-}
-⋮----
-export interface UpdateLeverageRequest {
-  asset: AssetIdentifier;
-  isCross: boolean;
-  leverage: number;
-}
-⋮----
-export interface UpdateIsolatedMarginRequest {
-  asset: AssetIdentifier;
-  isBuy: boolean;
-  ntli: number;
-}
-⋮----
-export interface SetIsolatedMarginLeverageRequest {
-  asset: AssetIdentifier;
-  leverage: string;
-}
-⋮----
-export interface SubmitTwapOrderRequest {
-  a: AssetIdentifier;
-  b: boolean;
-  m: number;
-  r: boolean;
-  s: string;
-  t: boolean;
-}
-⋮----
-export interface CancelTwapOrderRequest {
-  a: AssetIdentifier;
-  t: number;
-}
-⋮----
-export interface TransferUsdToOrFromSubAccountRequest {
-  isDeposit: boolean;
-  subAccountUser: string;
-  usd: number;
-}
-⋮----
-export interface TransferSpotToOrFromSubAccountRequest {
-  amount: string;
-  isDeposit: boolean;
-  subAccountUser: string;
-  token: string;
-}
-⋮----
-export interface TransferVaultFundsRequest {
-  isDeposit: boolean;
-  usd: number;
-  vaultAddress: string;
-}
-⋮----
-export interface SendAssetRequest {
-  amount: string;
-  destination: string;
-  destinationDex: string;
-  fromSubAccount?: string;
-  sourceDex: string;
-  token: string;
-}
-⋮----
-export type SendAssetFromApiWalletRequest = SendAssetRequest;
-⋮----
-export interface SendUsdRequest {
-  amount: string;
-  destination: string;
-}
-⋮----
-export interface SendSpotAssetRequest extends SendUsdRequest {
-  token: string;
-}
-⋮----
-export type WithdrawUsdRequest = SendUsdRequest;
-⋮----
-export interface TransferUsdBetweenSpotAndPerpRequest {
-  amount: string;
-  toPerp: boolean;
-}
-⋮----
-export interface SendToEvmWithDataRequest {
-  addressEncoding: 'base58' | 'hex';
-  amount: string;
-  data: string;
-  destinationChainId: number;
-  destinationRecipient: string;
-  gasLimit: number;
-  sourceDex: string;
-  token: string;
-}
-⋮----
-export interface ApproveApiWalletRequest {
-  agentAddress: string;
-  agentName?: string | null;
-}
-⋮----
-export interface ConvertToMultiSigUserRequest {
-  signers: {
-    authorizedUsers: string[];
-    threshold: number;
-  } | null;
-}
-⋮----
-export interface DelegateOrUndelegateStakeRequest {
-  isUndelegate: boolean;
-  validator: string;
-  wei: number;
-}
-⋮----
-export interface LinkStakingAccountRequest {
-  isFinalize: boolean;
-  user: string;
-}
-⋮----
-export interface UserToggleRequest {
-  enabled: boolean;
-  user: string;
-}
-⋮----
-export interface SetUserAbstractionRequest {
-  abstraction: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
-  user: string;
-}
-⋮----
-export type DeployPerpRequest = Omit<JsonObject, 'type'>;
-export type DeploySpotRequest = Omit<JsonObject, 'type'>;
-export type SubmitUserOutcomeRequest = Omit<JsonObject, 'type'>;
-
-================
-File: .gitignore
-================
-hyperliquidref
-!.gitkeep
-.DS_Store
-*.log
-*.tgz
-.env
-.env.test
-localtest.sh
-.eslintcache
-.npm
-.tmp-packed*
-coverage
-dist
-node_modules
-README_BEFORE_RELEASE.md
-examples/tstests
-/tmp/
-localtest.sh
-
-================
-File: package.json
-================
-{
-  "name": "@siebly/hyperliquid-api",
-  "version": "0.0.1",
-  "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
-  "scripts": {
-    "clean": "node scripts/clean.mjs",
-    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
-    "lint": "eslint src",
-    "test": "jest --passWithNoTests",
-    "test:extensions": "tsc -p tsconfig.extensions.json",
-    "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
-    "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
-    "test:unit": "jest --passWithNoTests --runInBand test/unit"
-  },
-  "main": "dist/cjs/index.js",
-  "module": "dist/mjs/index.js",
-  "types": "dist/mjs/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/mjs/index.d.ts",
-      "browser": "./dist/mjs/index.js",
-      "import": "./dist/mjs/index.js",
-      "require": "./dist/cjs/index.js",
-      "default": "./dist/mjs/index.js"
-    }
-  },
-  "browser": {
-    "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
-    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js",
-    "./dist/cjs/lib/event-emitter.js": "./dist/cjs/lib/event-emitter.browser.js",
-    "./dist/mjs/lib/event-emitter.js": "./dist/mjs/lib/event-emitter.browser.js"
-  },
-  "type": "module",
-  "sideEffects": false,
-  "packageManager": "npm@11.12.0",
-  "files": [
-    "dist/*"
-  ],
-  "author": "Siebly.io (https://github.com/sieblyio)",
-  "contributors": [
-    "Tiago Siebler (https://github.com/tiagosiebler)"
-  ],
-  "dependencies": {
-    "@msgpack/msgpack": "^3.1.2",
-    "axios": "1.18.1",
-    "ethers": "^6.16.0",
-    "events": "3.3.0",
-    "fflate": "^0.8.2",
-    "isomorphic-ws": "^5.0.0",
-    "ws": "8.21.0"
-  },
-  "devDependencies": {
-    "@eslint/compat": "2.1.0",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.14",
-    "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
-    "esbuild": "0.27.2",
-    "eslint": "^10.3.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "eslint-plugin-require-extensions": "0.1.3",
-    "eslint-plugin-simple-import-sort": "^13.0.0",
-    "jest": "^30.4.2",
-    "prettier": "^3.8.3",
-    "typescript": "^6.0.3"
-  },
-  "overrides": {
-    "@babel/core": "7.29.6",
-    "form-data": "4.0.6",
-    "js-yaml": "3.15.2"
-  },
-  "keywords": [
-    "hyperliquid",
-    "hyperliquid api",
-    "hyperliquid nodejs",
-    "hyperliquid javascript",
-    "hyperliquid typescript",
-    "hyperliquid websocket",
-    "hip-3",
-    "algo trading",
-    "api",
-    "sdk",
-    "websocket",
-    "rest",
-    "trading bots",
-    "cryptocurrency",
-    "siebly",
-    "siebly.io"
-  ],
-  "funding": {
-    "type": "individual",
-    "url": "https://github.com/sponsors/tiagosiebler"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sieblyio/hyperliquid-api.git"
-  },
-  "bugs": {
-    "url": "https://github.com/sieblyio/hyperliquid-api/issues"
-  },
-  "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
-  "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=11.0.0"
-  }
-}
 
 ================
 File: examples/Websocket/ws-public.ts
@@ -3882,617 +3282,351 @@ export type WebsocketLifecycleCallback = (
 ) => void;
 
 ================
+File: src/types/websockets/ws-subscriptions.ts
+================
+import type {
+  ActiveAssetData,
+  Candle,
+  HistoricalOrder,
+  LeadingVault,
+  OpenOrder,
+  OrderBookResponse,
+  OrderState,
+  PerpAccountSummaryResponse,
+  PerpAssetContext,
+  SpotAssetContext,
+  SpotBalancesResponse,
+  Trade,
+  TwapHistoryEntry,
+  TwapSliceFill,
+  TwapState,
+  UserFill,
+  UserNonFundingLedgerUpdate,
+} from '../response/info.types.js';
+⋮----
+export type CandleInterval =
+  | '1d'
+  | '12h'
+  | '15m'
+  | '1h'
+  | '1m'
+  | '1M'
+  | '2h'
+  | '30m'
+  | '3d'
+  | '3m'
+  | '4h'
+  | '5m'
+  | '8h'
+  | '1w';
+⋮----
+export type UserSubscriptionType =
+  | 'activeAssetData'
+  | 'allDexsClearinghouseState'
+  | 'clearinghouseState'
+  | 'notification'
+  | 'openOrders'
+  | 'orderUpdates'
+  | 'spotState'
+  | 'twapStates'
+  | 'userEvents'
+  | 'userFills'
+  | 'userFundings'
+  | 'userHistoricalOrders'
+  | 'userNonFundingLedgerUpdates'
+  | 'userTwapHistory'
+  | 'userTwapSliceFills'
+  | 'webData3';
+⋮----
+export type WebsocketSubscription =
+  | { dex?: string; type: 'allMids' }
+  | { dex?: string; type: 'assetCtxs' }
+  | { coin: string; type: 'activeAssetCtx' }
+  | { coin: string; user: string; type: 'activeAssetData' }
+  | { type: 'allDexsAssetCtxs' }
+  | { user: string; type: 'allDexsClearinghouseState' }
+  | { coin: string; type: 'bbo' }
+  | { coin: string; interval: CandleInterval; type: 'candle' }
+  | { dex?: string; user: string; type: 'clearinghouseState' }
+  | { type: 'fastAssetCtxs' }
+  | {
+      coin: string;
+      fast?: boolean;
+      mantissa?: 1 | 2 | 5 | null;
+      nSigFigs?: 2 | 3 | 4 | 5 | null;
+      type: 'l2Book';
+    }
+  | { user: string; type: 'notification' }
+  | { dex?: string; user: string; type: 'openOrders' }
+  | { user: string; type: 'orderUpdates' }
+  | { type: 'outcomeMetaUpdates' }
+  | { type: 'spotAssetCtxs' }
+  | {
+      ignorePortfolioMargin?: boolean;
+      isPortfolioMargin?: never;
+      user: string;
+      type: 'spotState';
+    }
+  | {
+      ignorePortfolioMargin?: never;
+      isPortfolioMargin?: boolean;
+      user: string;
+      type: 'spotState';
+    }
+  | { coin: string; type: 'trades' }
+  | { dex?: string; user: string; type: 'twapStates' }
+  | { user: string; type: 'userEvents' }
+  | { aggregateByTime?: boolean; user: string; type: 'userFills' }
+  | { user: string; type: 'userFundings' }
+  | { user: string; type: 'userHistoricalOrders' }
+  | { user: string; type: 'userNonFundingLedgerUpdates' }
+  | { user: string; type: 'userTwapHistory' }
+  | { user: string; type: 'userTwapSliceFills' }
+  | { user: string; type: 'webData3' };
+⋮----
+export interface AllMidsEvent {
+  dex?: string;
+  mids: Record<string, string>;
+}
+⋮----
+export interface AssetContextEvent {
+  coin: string;
+  ctx: PerpAssetContext | SpotAssetContext;
+}
+⋮----
+export interface ActivePerpAssetContextEvent extends AssetContextEvent {
+  ctx: PerpAssetContext;
+}
+⋮----
+export interface ActiveSpotAssetContextEvent extends AssetContextEvent {
+  ctx: SpotAssetContext;
+}
+⋮----
+export interface AssetCtxsEvent {
+  ctxs: PerpAssetContext[];
+  dex: string;
+}
+⋮----
+export interface AllDexsAssetCtxsEvent {
+  ctxs: Array<[dex: string, contexts: PerpAssetContext[]]>;
+}
+⋮----
+export interface ClearinghouseStateEvent {
+  clearinghouseState: PerpAccountSummaryResponse;
+  dex: string;
+  user: string;
+}
+⋮----
+export interface AllDexsClearinghouseStateEvent {
+  clearinghouseStates: Array<[dex: string, state: PerpAccountSummaryResponse]>;
+  user: string;
+}
+⋮----
+export type ActiveAssetDataEvent = ActiveAssetData;
+⋮----
+export interface BboEvent {
+  bbo: [
+    bid: { n: number; px: string; sz: string } | null,
+    offer: { n: number; px: string; sz: string } | null,
+  ];
+  coin: string;
+  time: number;
+}
+⋮----
+export type TradeEvent = Trade;
+⋮----
+export interface NotificationEvent {
+  notification: string;
+}
+⋮----
+export interface OrderUpdateEvent {
+  order: OpenOrder;
+  status: OrderState;
+  statusTimestamp: number;
+}
+⋮----
+export interface FastAssetCtxsEvent {
+  [coin: string]: {
+    markPx?: string;
+    midPx?: string | null;
+  };
+}
+⋮----
+export type SpotAssetCtxsEvent = SpotAssetContext[];
+⋮----
+export interface OutcomeMetaUpdatesEvent {
+  updates: Array<
+    | {
+        outcomeCreated: {
+          description: string;
+          name: string;
+          outcome: number;
+          quoteToken: string;
+          sideSpecs: Array<{ name: string; token?: number }>;
+        };
+      }
+    | { outcomeSettled: { outcome: number } }
+    | {
+        questionUpdated: {
+          description: string;
+          fallbackOutcome: number;
+          name: string;
+          namedOutcomes: number[];
+          question: number;
+          settledNamedOutcomes: number[];
+        };
+      }
+    | { questionSettled: { question: number } }
+  >;
+}
+⋮----
+export interface UserFillsEvent {
+  fills: UserFill[];
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface OpenOrdersEvent {
+  dex: string;
+  orders: OpenOrder[];
+  user: string;
+}
+⋮----
+export interface UserFundingsEvent {
+  fundings: Array<{
+    coin: string;
+    fundingRate: string;
+    nSamples: number | null;
+    szi: string;
+    time: number;
+    usdc: string;
+  }>;
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface UserHistoricalOrdersEvent {
+  isSnapshot?: boolean;
+  orderHistory: HistoricalOrder[];
+  user: string;
+}
+⋮----
+export interface UserNonFundingLedgerUpdatesEvent {
+  isSnapshot?: boolean;
+  nonFundingLedgerUpdates: UserNonFundingLedgerUpdate[];
+  user: string;
+}
+⋮----
+export interface UserTwapHistoryEvent {
+  history: TwapHistoryEntry[];
+  isSnapshot?: boolean;
+  user: string;
+}
+⋮----
+export interface UserTwapSliceFillsEvent {
+  isSnapshot?: boolean;
+  twapSliceFills: TwapSliceFill[];
+  user: string;
+}
+⋮----
+export interface SpotStateEvent {
+  spotState: SpotBalancesResponse;
+  user: string;
+}
+⋮----
+export interface TwapStatesEvent {
+  dex: string;
+  states: Array<[twapId: number, state: TwapState]>;
+  user: string;
+}
+⋮----
+export type UserEvent =
+  | { fills: UserFill[] }
+  | {
+      funding: {
+        coin: string;
+        fundingRate: string;
+        nSamples: number | null;
+        szi: string;
+        time: number;
+        usdc: string;
+      };
+    }
+  | {
+      liquidation: {
+        lid: number;
+        liquidated_account_value: string;
+        liquidated_ntl_pos: string;
+        liquidated_user: string;
+        liquidator: string;
+      };
+    }
+  | { nonUserCancel: Array<{ coin: string; oid: number }> }
+  | { twapHistory: TwapHistoryEntry[] }
+  | { twapSliceFills: TwapSliceFill[] };
+⋮----
+export interface WebData3PerpDexState {
+  leadingVaults?: LeadingVault[];
+  perpsAtOpenInterestCap?: string[];
+  totalVaultEquity: string;
+}
+⋮----
+export interface WebData3Event {
+  perpDexStates: WebData3PerpDexState[];
+  userState: {
+    abstraction?: 'disabled' | 'portfolioMargin' | 'unifiedAccount';
+    agentAddress: string | null;
+    agentValidUntil: number | null;
+    cumLedger: string;
+    dexAbstractionEnabled?: boolean;
+    isVault: boolean;
+    optOutOfSpotDusting?: true;
+    serverTime: number;
+    user: string;
+  };
+}
+⋮----
+export type GenericWebsocketEvent =
+  Record<string, unknown> | unknown[] | string | number | boolean | null;
+⋮----
+/** Payload types keyed by subscription type. Wire envelopes are defined in ws-events. */
+export interface WebsocketSubscriptionData {
+  activeAssetCtx: AssetContextEvent;
+  activeAssetData: ActiveAssetDataEvent;
+  allDexsAssetCtxs: AllDexsAssetCtxsEvent;
+  allDexsClearinghouseState: AllDexsClearinghouseStateEvent;
+  allMids: AllMidsEvent;
+  assetCtxs: AssetCtxsEvent;
+  bbo: BboEvent;
+  candle: Candle;
+  clearinghouseState: ClearinghouseStateEvent;
+  fastAssetCtxs: FastAssetCtxsEvent;
+  l2Book: OrderBookResponse;
+  notification: NotificationEvent;
+  openOrders: OpenOrdersEvent;
+  orderUpdates: OrderUpdateEvent[];
+  outcomeMetaUpdates: OutcomeMetaUpdatesEvent;
+  spotAssetCtxs: SpotAssetCtxsEvent;
+  spotState: SpotStateEvent;
+  trades: TradeEvent[];
+  twapStates: TwapStatesEvent;
+  userEvents: UserEvent;
+  userFills: UserFillsEvent;
+  userFundings: UserFundingsEvent;
+  userHistoricalOrders: UserHistoricalOrdersEvent;
+  userNonFundingLedgerUpdates: UserNonFundingLedgerUpdatesEvent;
+  userTwapHistory: UserTwapHistoryEvent;
+  userTwapSliceFills: UserTwapSliceFillsEvent;
+  webData3: WebData3Event;
+}
+⋮----
+export type WebsocketEventFor<S extends WebsocketSubscription> =
+  WebsocketSubscriptionData[S['type']];
+
+================
 File: src/index.ts
 ================
 
-
-================
-File: src/RestClient.ts
-================
-import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
-import type { AssetIdentifier } from './lib/action-factory.js';
-import type { ResolvedAsset } from './lib/asset-resolver.js';
-import { BaseRestClient } from './lib/BaseRestClient.js';
-import { decimalToWire } from './lib/decimal.js';
-import { normalizeAddresses } from './lib/normalize-addresses.js';
-import {
-  decimalOrSubaccountAmount,
-  floorDecimalPlaces,
-  marketLimitPrice,
-  normalizeUserRequest,
-  positiveDecimal,
-} from './lib/request-utils.js';
-import { USER_SIGNED_ACTIONS } from './lib/user-signed-actions.js';
-import type {
-  ApproveApiWalletRequest,
-  CancelOrdersByClientOrderIdRequest,
-  CancelOrdersRequest,
-  CancelTwapOrderRequest,
-  ConvertToMultiSigUserRequest,
-  DelegateOrUndelegateStakeRequest,
-  DeployPerpRequest,
-  DeploySpotRequest,
-  L1RequestOptions,
-  LinkStakingAccountRequest,
-  ModifyOrderRequest,
-  ModifyOrdersRequest,
-  SendAssetFromApiWalletRequest,
-  SendAssetRequest,
-  SendSpotAssetRequest,
-  SendToEvmWithDataRequest,
-  SendUsdRequest,
-  SetIsolatedMarginLeverageRequest,
-  SetUserAbstractionRequest,
-  SubmitLimitOrderRequest,
-  SubmitMarketCloseRequest,
-  SubmitMarketOrderRequest,
-  SubmitOrderRequest,
-  SubmitTwapOrderRequest,
-  SubmitUserOutcomeRequest,
-  TransferSpotToOrFromSubAccountRequest,
-  TransferUsdBetweenSpotAndPerpRequest,
-  TransferUsdToOrFromSubAccountRequest,
-  TransferVaultFundsRequest,
-  UpdateIsolatedMarginRequest,
-  UpdateLeverageRequest,
-  UserSignedRequestOptions,
-  UserToggleRequest,
-  WithdrawUsdRequest,
-} from './types/request/exchange.types.js';
-import type {
-  AccountDexRequest,
-  AccountRequest,
-  GetCandlesRequest,
-  GetFundingHistoryRequest,
-  GetMaxBuilderFeeRequest,
-  GetOrderBookRequest,
-  GetOrderStatusRequest,
-  GetPreTransferCheckRequest,
-  GetUserBorrowLendInterestRequest,
-  GetUserFillsByTimeRequest,
-  GetUserFillsRequest,
-  GetUserFundingHistoryRequest,
-  GetUserNonFundingLedgerUpdatesRequest,
-  GetUserTwapSliceFillsByTimeRequest,
-  GetVaultDetailsRequest,
-  UserRequest,
-} from './types/request/info.types.js';
-import type {
-  ExchangeResponse,
-  OrderResponseData,
-} from './types/response/exchange.types.js';
-import type {
-  AccountBalancesResponse,
-  AllMidsResponse,
-  Candle,
-  InfoResponse,
-  OpenOrder,
-  OrderBookResponse,
-  PerpAccountSummaryResponse,
-  PerpMeta,
-  SpotBalancesResponse,
-  SpotMeta,
-  UserFill,
-  UserRoleResponse,
-} from './types/response/info.types.js';
-import type {
-  JsonObject,
-  RestClientNetworkOptions,
-  RestClientOptions,
-} from './types/shared.types.js';
-⋮----
-type InfoParams = object;
-⋮----
-function hip3Dex(canonicalName: string): string | undefined
-⋮----
-function perpPositionCoin(
-  entry: unknown,
-):
-⋮----
-export class RestClient extends BaseRestClient
-⋮----
-constructor(
-    options: RestClientOptions = {},
-    networkOptions: RestClientNetworkOptions = {},
-)
-⋮----
-resolveAsset(identifier: AssetIdentifier): Promise<ResolvedAsset>
-⋮----
-nameToCoin(name: string): Promise<string>
-⋮----
-refreshAssetMetadata(): Promise<void>
-⋮----
-getAccountAddress(): Promise<string>
-⋮----
-getAllMids(params:
-⋮----
-getActiveAssetData(
-    params: AccountRequest & { coin: string },
-): Promise<InfoResponse>
-⋮----
-getAllBorrowLendReserveStates(): Promise<InfoResponse>
-⋮----
-getAllPerpMetadata(): Promise<InfoResponse>
-⋮----
-getApprovedBuilders(params: AccountRequest =
-⋮----
-getBorrowLendReserveState(params:
-⋮----
-getUserBorrowLendState(params: AccountRequest =
-⋮----
-async getCandles(params: GetCandlesRequest): Promise<Candle[]>
-⋮----
-getPerpAccountSummary(
-    params: AccountDexRequest = {},
-): Promise<PerpAccountSummaryResponse>
-⋮----
-getStakingDelegations(params: AccountRequest =
-⋮----
-getStakingHistory(params: AccountRequest =
-⋮----
-getStakingRewards(params: AccountRequest =
-⋮----
-getStakingSummary(params: AccountRequest =
-⋮----
-getExchangeStatus(): Promise<InfoResponse>
-⋮----
-getExtraAgents(params: AccountRequest =
-⋮----
-getFrontendOpenOrders(params: AccountDexRequest =
-⋮----
-async getFundingHistory(
-    params: GetFundingHistoryRequest,
-): Promise<InfoResponse>
-⋮----
-getGossipPriorityAuctionStatus(): Promise<InfoResponse>
-⋮----
-getGossipRootIps(): Promise<InfoResponse>
-⋮----
-getOrderHistory(params: AccountRequest =
-⋮----
-getVipStatus(params: AccountRequest =
-⋮----
-async getOrderBook(
-    params: GetOrderBookRequest,
-): Promise<OrderBookResponse | null>
-⋮----
-getLeadingVaults(params: AccountRequest =
-⋮----
-getLegalStatus(params: AccountRequest =
-⋮----
-getLiquidatablePositions(): Promise<InfoResponse>
-⋮----
-getMarginTable(params:
-⋮----
-getMaxBuilderFee(params: GetMaxBuilderFeeRequest): Promise<number>
-⋮----
-getMaxMarketOrderNotionals(): Promise<InfoResponse>
-⋮----
-getPerpMetadata(params:
-⋮----
-getPerpAssetContexts(params:
-⋮----
-getOpenOrders(params: AccountDexRequest =
-⋮----
-getOrderStatus(params: GetOrderStatusRequest): Promise<InfoResponse>
-⋮----
-getOutcomeMetadata(): Promise<InfoResponse>
-⋮----
-getPerpAnnotation(params:
-⋮----
-getPerpCategories(): Promise<InfoResponse>
-⋮----
-getConcisePerpAnnotations(): Promise<InfoResponse>
-⋮----
-getPerpDeployAuctionStatus(): Promise<InfoResponse>
-⋮----
-getPerpDexLimits(params:
-⋮----
-getPerpDexStatus(params:
-⋮----
-getPerpDexs(): Promise<InfoResponse>
-⋮----
-getPerpsAtOpenInterestCap(params:
-⋮----
-getPortfolio(params: AccountRequest =
-⋮----
-getPreTransferCheck(
-    params: GetPreTransferCheckRequest,
-): Promise<InfoResponse>
-⋮----
-getPredictedFundingRates(): Promise<InfoResponse>
-⋮----
-getRecentTrades(params:
-⋮----
-getReferralInfo(params: AccountRequest =
-⋮----
-getSettledOutcome(params:
-⋮----
-async getBalances(
-    params: AccountDexRequest = {},
-): Promise<AccountBalancesResponse>
-⋮----
-getSpotBalances(params: AccountRequest =
-⋮----
-getSpotDeployAuctionStatus(
-    params: AccountRequest = {},
-): Promise<InfoResponse>
-⋮----
-getSpotMetadata(): Promise<SpotMeta>
-⋮----
-getSpotAssetContexts(): Promise<InfoResponse>
-⋮----
-getSpotPairDeployAuctionStatus(): Promise<InfoResponse>
-⋮----
-getSubAccounts(params: AccountRequest =
-⋮----
-getSubAccountsWithAllDexStates(
-    params: AccountRequest = {},
-): Promise<InfoResponse>
-⋮----
-getTokenDetails(params:
-⋮----
-getTwapHistory(params: AccountRequest =
-⋮----
-getUserAbstraction(params: AccountRequest =
-⋮----
-getUserBorrowLendInterest(
-    params: GetUserBorrowLendInterestRequest,
-): Promise<InfoResponse>
-⋮----
-getUserDexAbstraction(params: AccountRequest =
-⋮----
-getUserFees(params: AccountRequest =
-⋮----
-getUserFills(params: GetUserFillsRequest =
-⋮----
-getUserFillsByTime(params: GetUserFillsByTimeRequest): Promise<UserFill[]>
-⋮----
-getUserFundingHistory(
-    params: GetUserFundingHistoryRequest = {},
-): Promise<InfoResponse>
-⋮----
-getUserNonFundingLedgerUpdates(
-    params: GetUserNonFundingLedgerUpdatesRequest = {},
-): Promise<InfoResponse>
-⋮----
-getUserRateLimit(params: AccountRequest =
-⋮----
-getUserRole(params: UserRequest): Promise<UserRoleResponse>
-⋮----
-getMultiSigSigners(params: AccountRequest =
-⋮----
-getUserTwapSliceFills(params: AccountRequest =
-⋮----
-getUserTwapSliceFillsByTime(
-    params: GetUserTwapSliceFillsByTimeRequest,
-): Promise<InfoResponse>
-⋮----
-getUserVaultDeposits(params: AccountRequest =
-⋮----
-getValidatorL1Votes(): Promise<InfoResponse>
-⋮----
-getValidatorSummaries(): Promise<InfoResponse>
-⋮----
-getVaultDetails(params: GetVaultDetailsRequest): Promise<InfoResponse>
-⋮----
-getVaultSummaries(): Promise<InfoResponse>
-⋮----
-getWebData2(params: AccountRequest =
-⋮----
-getAlignedQuoteTokenStatus(params:
-⋮----
-async submitOrder(
-    params: SubmitOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse<OrderResponseData>>
-⋮----
-async submitMarketOrder(
-    params: SubmitMarketOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse<OrderResponseData>>
-⋮----
-async submitMarketClose(
-    params: SubmitMarketCloseRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse<OrderResponseData>>
-⋮----
-async submitLimitOrder(
-    params: SubmitLimitOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse<OrderResponseData>>
-⋮----
-async modifyOrder(
-    params: ModifyOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-async modifyOrders(
-    params: ModifyOrdersRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-async cancelOrders(
-    params: CancelOrdersRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-async cancelOrdersByClientOrderId(
-    params: CancelOrdersByClientOrderIdRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-updateLeverage(
-    params: UpdateLeverageRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-updateIsolatedMargin(
-    params: UpdateIsolatedMarginRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setIsolatedMarginLeverage(
-    params: SetIsolatedMarginLeverageRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-submitTwapOrder(
-    params: SubmitTwapOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-cancelTwapOrder(
-    params: CancelTwapOrderRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setCancelAllAfter(
-    params: { time?: number } = {},
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setReferrer(options: L1RequestOptions =
-⋮----
-registerReferrer(
-    params: { code: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-async approveBuilderFee(
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-approveApiWallet(
-    params: ApproveApiWalletRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-sendUsd(
-    params: SendUsdRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-sendSpotAsset(
-    params: SendSpotAssetRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-withdrawUsd(
-    params: WithdrawUsdRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-transferUsdBetweenSpotAndPerp(
-    params: TransferUsdBetweenSpotAndPerpRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-sendAsset(
-    params: SendAssetRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-sendToEvmWithData(
-    params: SendToEvmWithDataRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-sendAssetFromApiWallet(
-    params: SendAssetFromApiWalletRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-depositIntoStaking(
-    params: { wei: number },
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-withdrawFromStaking(
-    params: { wei: number },
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-delegateOrUndelegateStake(
-    params: DelegateOrUndelegateStakeRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-convertToMultiSigUser(
-    params: ConvertToMultiSigUserRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-linkStakingAccount(
-    params: LinkStakingAccountRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-disableStakingTradingLink(
-    params: { tradingUser: string },
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setUserPortfolioMargin(
-    params: UserToggleRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setUserAbstraction(
-    params: SetUserAbstractionRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setUserDexAbstraction(
-    params: UserToggleRequest,
-    options: UserSignedRequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-enableApiWalletDexAbstraction(
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setApiWalletAbstraction(
-    params: { abstraction: 'i' | 'p' | 'u' },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-executeBorrowLendOperation(
-    params: {
-      amount: string | null;
-      operation: 'borrow' | 'repay' | 'supply' | 'withdraw';
-      token: number;
-    },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-claimRewards(options: L1RequestOptions =
-⋮----
-createSubAccount(
-    params: { name: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-createVault(
-    params: { description: string; initialUsd: number; name: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse<string>>
-⋮----
-setEvmBigBlocks(
-    params: { usingBigBlocks: boolean },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-finalizeEvmContract(
-    params: {
-      input:
-        | 'customStorageSlot'
-        | 'firstStorageSlot'
-        | { create: { nonce: number } };
-      token: number;
-    },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-submitGossipPriorityBid(
-    params: { ip: string; maxGas: number; slotId: 0 | 1 },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-transferHip3LiquidatorFunds(
-    params: { dex: string; isDeposit: boolean; ntl: number },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-invalidateNonce(options: L1RequestOptions =
-⋮----
-deployPerp(
-    params: DeployPerpRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-deploySpot(
-    params: DeploySpotRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-reserveAdditionalActions(
-    params: { weight: number },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setDisplayName(
-    params: { displayName: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-setSpotDusting(
-    params: { toggleSpotDusting: { optOut: boolean } },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-renameSubAccount(
-    params: { name: string; subAccountUser: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-transferSpotToOrFromSubAccount(
-    params: TransferSpotToOrFromSubAccountRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-transferUsdToOrFromSubAccount(
-    params: TransferUsdToOrFromSubAccountRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-transferVaultFunds(
-    params: TransferVaultFundsRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-distributeVaultFunds(
-    params: { usd: number; vaultAddress: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-modifyVault(
-    params: {
-      allowDeposits?: boolean | null;
-      alwaysCloseOnWithdraw?: boolean | null;
-      vaultAddress: string;
-    },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-updateValidatorL1Stream(
-    params: { riskFreeRate: string },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-submitSignerAction(
-    params: { jailSelf: null } | { unjailSelf: null },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-submitValidatorAction(
-    params: Omit<JsonObject, 'type'>,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-authorizeAqav2Role(
-    params: { role: 'technical' | 'treasury'; token: number },
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-submitUserOutcome(
-    params: SubmitUserOutcomeRequest,
-    options: L1RequestOptions = {},
-): Promise<ExchangeResponse>
-⋮----
-private async accountInfo<T>(type: string, params: InfoParams): Promise<T>
-⋮----
-private async resolveAccountAddress(requestedUser?: string): Promise<string>
 
 ================
 File: src/WebsocketAPIClient.ts
@@ -4542,6 +3676,1282 @@ close(): void
 closeAll(): void
 ⋮----
 protected override post<T>(path: string, body: unknown): Promise<T>
+
+================
+File: .gitignore
+================
+hyperliquidref
+!.gitkeep
+.DS_Store
+*.log
+*.tgz
+.env
+.env.test
+localtest.sh
+.eslintcache
+.npm
+.tmp-packed*
+coverage
+dist
+node_modules
+README_BEFORE_RELEASE.md
+examples/tstests
+/tmp/
+localtest.sh
+
+================
+File: package.json
+================
+{
+  "name": "@siebly/hyperliquid-api",
+  "version": "0.0.2",
+  "description": "Node.js and TypeScript SDK for Hyperliquid REST APIs and WebSockets.",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
+    "lint": "eslint src",
+    "test": "jest --passWithNoTests",
+    "test:extensions": "tsc -p tsconfig.extensions.json",
+    "test:packed": "npm run build && node test/packaging/packed-consumer-smoke.mjs",
+    "test:types": "npm run test:extensions && tsc -p test/tsconfig.test.json --noEmit && tsc -p test/types/tsconfig.json",
+    "test:unit": "jest --passWithNoTests --runInBand test/unit"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "dist/mjs/index.js",
+  "types": "dist/mjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mjs/index.d.ts",
+      "browser": "./dist/mjs/index.js",
+      "import": "./dist/mjs/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/mjs/index.js"
+    }
+  },
+  "browser": {
+    "./dist/mjs/lib/https-agent.js": "./dist/mjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/https-agent.js": "./dist/cjs/lib/https-agent.browser.js",
+    "./dist/cjs/lib/event-emitter.js": "./dist/cjs/lib/event-emitter.browser.js",
+    "./dist/mjs/lib/event-emitter.js": "./dist/mjs/lib/event-emitter.browser.js"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "npm@11.12.0",
+  "files": [
+    "dist/*",
+    "llms.txt"
+  ],
+  "author": "Siebly.io (https://github.com/sieblyio)",
+  "contributors": [
+    "Tiago Siebler (https://github.com/tiagosiebler)"
+  ],
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
+    "axios": "1.18.1",
+    "ethers": "^6.16.0",
+    "events": "3.3.0",
+    "fflate": "^0.8.2",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/compat": "2.1.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.14",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "esbuild": "0.27.2",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-require-extensions": "0.1.3",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "@babel/core": "7.29.6",
+    "form-data": "4.0.6",
+    "js-yaml": "3.15.2"
+  },
+  "keywords": [
+    "hyperliquid",
+    "hyperliquid api",
+    "hyperliquid nodejs",
+    "hyperliquid javascript",
+    "hyperliquid typescript",
+    "hyperliquid websocket",
+    "hip-3",
+    "algo trading",
+    "api",
+    "sdk",
+    "websocket",
+    "rest",
+    "trading bots",
+    "cryptocurrency",
+    "siebly",
+    "siebly.io"
+  ],
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/tiagosiebler"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sieblyio/hyperliquid-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sieblyio/hyperliquid-api/issues"
+  },
+  "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  }
+}
+
+================
+File: src/types/response/info.types.ts
+================
+export type InfoResponse =
+  Record<string, unknown> | unknown[] | boolean | number | string | null;
+⋮----
+export type AllMidsResponse = Record<string, string>;
+⋮----
+export interface ExchangeStatus {
+  specialStatuses: string | null;
+  time: number;
+}
+⋮----
+export interface ExtraAgent {
+  address: string;
+  name: string;
+  validUntil: number | null;
+}
+⋮----
+export type GossipPriorityAuctionStatus = [
+  previousWinnerIps: Array<string | null>,
+  auctions: DeployGasAuction[],
+];
+⋮----
+export interface LeadingVault {
+  address: string;
+  name: string;
+}
+⋮----
+export interface LegalStatus {
+  acceptedTerms: boolean;
+  restrictions: 'a' | 'n' | 'o' | 'u';
+  userAllowed: boolean;
+}
+⋮----
+export interface LiquidatablePosition {
+  marginAvailable: [number, number];
+  /** Isolated positions are known; other position-index variants are undocumented. */
+  positionIndex: {
+    isolated?: { asset: number };
+    [variant: string]: unknown;
+  };
+  user: string;
+}
+⋮----
+/** Isolated positions are known; other position-index variants are undocumented. */
+⋮----
+export type MaxMarketOrderNotional = [
+  maxLeverage: number,
+  maxMarketOrderNtl: string,
+];
+⋮----
+export interface PreTransferCheck {
+  fee: string;
+  isSanctioned: boolean;
+  userExists: boolean;
+  userHasSentTx: boolean;
+}
+⋮----
+export interface Trade {
+  coin: string;
+  hash: string;
+  px: string;
+  side: 'A' | 'B';
+  sz: string;
+  tid: number;
+  time: number;
+  users: [buyer: string, seller: string];
+}
+⋮----
+export interface MultiSigSigners {
+  authorizedUsers: string[];
+  threshold: number;
+}
+⋮----
+/** Documented response; the public API may reject this request type. */
+export interface AlignedQuoteTokenStatus {
+  dailyAmountOwed: Array<[date: string, amount: string]>;
+  evmMintedSupply: string;
+  firstAlignedTime: number | null;
+  isAligned: boolean;
+  predictedRate: string;
+}
+⋮----
+export type UserRoleResponse =
+  | { role: 'agent'; data: { user: string } }
+  | { role: 'missing' | 'user' | 'vault' }
+  | { role: 'subAccount'; data: { master: string } };
+⋮----
+export interface OrderBookLevel {
+  n: number;
+  px: string;
+  sz: string;
+}
+⋮----
+export interface OrderBookResponse {
+  coin: string;
+  fast?: true;
+  levels: [OrderBookLevel[], OrderBookLevel[]];
+  spread?: string;
+  time: number;
+}
+⋮----
+export interface Candle {
+  T: number;
+  c: string;
+  h: string;
+  i:
+    | '1d'
+    | '12h'
+    | '15m'
+    | '1h'
+    | '1m'
+    | '1M'
+    | '2h'
+    | '30m'
+    | '3d'
+    | '3m'
+    | '4h'
+    | '5m'
+    | '8h'
+    | '1w';
+  l: string;
+  n: number;
+  o: string;
+  s: string;
+  t: number;
+  v: string;
+}
+⋮----
+export interface OpenOrder {
+  cloid?: string | null;
+  coin: string;
+  limitPx: string;
+  oid: number;
+  origSz?: string;
+  side: 'A' | 'B';
+  sz: string;
+  timestamp: number;
+  [key: string]: unknown;
+}
+⋮----
+export interface SpotBalance {
+  coin: string;
+  entryNtl: string;
+  hold: string;
+  token: number;
+  total: string;
+}
+⋮----
+export interface SpotBalancesResponse {
+  balances: SpotBalance[];
+  tokenToAvailableAfterMaintenance?: Array<[token: number, available: string]>;
+}
+⋮----
+export interface PerpMarginSummary {
+  accountValue: string;
+  totalMarginUsed: string;
+  totalNtlPos: string;
+  totalRawUsd: string;
+}
+⋮----
+export interface PerpCumulativeFunding {
+  allTime: string;
+  sinceChange: string;
+  sinceOpen: string;
+}
+⋮----
+export interface PerpCrossLeverage {
+  type: 'cross';
+  value: number;
+}
+⋮----
+export interface PerpIsolatedLeverage {
+  rawUsd: string;
+  type: 'isolated';
+  value: number;
+}
+⋮----
+export type PerpLeverage = PerpCrossLeverage | PerpIsolatedLeverage;
+⋮----
+export interface PerpPosition {
+  coin: string;
+  cumFunding: PerpCumulativeFunding;
+  entryPx: string | null;
+  leverage: PerpLeverage;
+  liquidationPx: string | null;
+  marginUsed: string;
+  maxLeverage: number;
+  positionValue: string;
+  returnOnEquity: string;
+  szi: string;
+  unrealizedPnl: string;
+}
+⋮----
+export interface PerpAssetPosition {
+  position: PerpPosition;
+  type: 'oneWay';
+}
+⋮----
+export interface PerpAccountSummaryResponse {
+  assetPositions: PerpAssetPosition[];
+  crossMaintenanceMarginUsed: string;
+  crossMarginSummary: PerpMarginSummary;
+  marginSummary: PerpMarginSummary;
+  time: number;
+  withdrawable: string;
+}
+⋮----
+export interface AccountBalancesResponse {
+  perp: PerpAccountSummaryResponse;
+  spot: SpotBalancesResponse;
+  user: string;
+}
+⋮----
+export interface UserFill {
+  builderFee?: string;
+  closedPnl: string;
+  coin: string;
+  crossed: boolean;
+  dir: string;
+  fee: string;
+  feeToken: string;
+  hash: string;
+  oid: number;
+  px: string;
+  side: 'A' | 'B';
+  startPosition: string;
+  sz: string;
+  time: number;
+  tid: number;
+  twapId?: number | null;
+  [key: string]: unknown;
+}
+⋮----
+export interface FrontendOpenOrder {
+  children?: FrontendOpenOrder[];
+  cloid?: string | null;
+  coin: string;
+  isPositionTpsl: boolean;
+  isTrigger: boolean;
+  limitPx: string;
+  oid: number;
+  orderType: string;
+  origSz: string;
+  reduceOnly: boolean;
+  side: 'A' | 'B';
+  sz: string;
+  tif?: string | null;
+  timestamp: number;
+  triggerCondition: string;
+  triggerPx: string;
+}
+⋮----
+export type OrderState =
+  | 'badAloPxRejected'
+  | 'badTriggerPxRejected'
+  | 'canceled'
+  | 'delistedCanceled'
+  | 'filled'
+  | 'insufficientSpotBalanceRejected'
+  | 'internalCancel'
+  | 'iocCancelRejected'
+  | 'liquidatedCanceled'
+  | 'marginCanceled'
+  | 'marketOrderNoLiquidityRejected'
+  | 'minTradeNtlRejected'
+  | 'open'
+  | 'openInterestCapCanceled'
+  | 'openInterestIncreaseRejected'
+  | 'oracleRejected'
+  | 'outcomeSettledCanceled'
+  | 'perpMarginRejected'
+  | 'perpMaxPositionRejected'
+  | 'positionFlipAtOpenInterestCapRejected'
+  | 'positionIncreaseAtOpenInterestCapRejected'
+  | 'reduceOnlyCanceled'
+  | 'reduceOnlyRejected'
+  | 'rejected'
+  | 'scheduledCancel'
+  | 'selfTradeCanceled'
+  | 'siblingFilledCanceled'
+  | 'tickRejected'
+  | 'tooAggressiveAtOpenInterestCapRejected'
+  | 'tooManyOpenOrdersRejected'
+  | 'triggered'
+  | 'vaultWithdrawalCanceled';
+⋮----
+export interface OrderStatusDetails {
+  order: FrontendOpenOrder;
+  status: OrderState;
+  statusTimestamp: number;
+}
+⋮----
+export type OrderStatusResponse =
+  { order: OrderStatusDetails; status: 'order' } | { status: 'unknownOid' };
+⋮----
+export interface HistoricalOrder {
+  order: FrontendOpenOrder;
+  status: OrderState;
+  statusTimestamp: number;
+}
+⋮----
+export interface UserRateLimit {
+  cumVlm: string;
+  nRequestsCap: number;
+  nRequestsSurplus: number;
+  nRequestsUsed: number;
+}
+⋮----
+export interface TwapSliceFill {
+  fill: UserFill;
+  twapId: number;
+}
+⋮----
+export interface TwapState {
+  coin: string;
+  executedNtl: string;
+  executedSz: string;
+  minutes: number;
+  randomize: boolean;
+  reduceOnly: boolean;
+  side: 'A' | 'B';
+  stopPx?: string | null;
+  sz: string;
+  timestamp: number;
+  trigger?: { above: boolean; px: string } | null;
+  user: string;
+}
+⋮----
+export type TwapStatus =
+  | {
+      status:
+        | 'activated'
+        | 'finished'
+        | 'stopped'
+        | 'terminated'
+        | 'waitingForTrigger';
+    }
+  | { description: string; status: 'error' };
+⋮----
+export interface TwapHistoryEntry {
+  state: TwapState;
+  status: TwapStatus;
+  time: number;
+  twapId?: number;
+}
+⋮----
+export interface SubAccount {
+  clearinghouseState: PerpAccountSummaryResponse;
+  master: string;
+  name: string;
+  spotState: {
+    balances: SpotBalance[];
+  };
+  subAccountUser: string;
+}
+⋮----
+export interface SubAccountWithAllDexStates {
+  abstraction?: Exclude<UserAbstraction, 'default'>;
+  dexToClearinghouseState: Array<
+    [dex: string, state: PerpAccountSummaryResponse]
+  >;
+  master: string;
+  name: string;
+  spotState: SpotBalancesResponse;
+  subAccountUser: string;
+}
+⋮----
+export type PortfolioPeriod =
+  | 'allTime'
+  | 'day'
+  | 'month'
+  | 'perpAllTime'
+  | 'perpDay'
+  | 'perpMonth'
+  | 'perpWeek'
+  | 'week';
+⋮----
+export interface PortfolioSnapshot {
+  accountValueHistory: Array<[time: number, value: string]>;
+  pnlHistory: Array<[time: number, value: string]>;
+  vlm: string;
+}
+⋮----
+export type PortfolioEntry = [
+  period: PortfolioPeriod,
+  snapshot: PortfolioSnapshot,
+];
+⋮----
+export interface VaultFollower {
+  allTimePnl: string;
+  daysFollowing: number;
+  lockupUntil: number;
+  pnl: string;
+  user: string;
+  vaultEntryTime: number;
+  vaultEquity: string;
+}
+⋮----
+export interface VaultDetails {
+  allowDeposits: boolean;
+  alwaysCloseOnWithdraw: boolean;
+  apr: number;
+  description: string;
+  followerState: VaultFollower | null;
+  followers: VaultFollower[];
+  isClosed: boolean;
+  leader: string;
+  leaderCommission: number;
+  leaderFraction: number;
+  maxDistributable: number;
+  maxWithdrawable: number;
+  name: string;
+  portfolio: PortfolioEntry[];
+  relationship: VaultRelationship;
+  vaultAddress: string;
+}
+⋮----
+export type VaultRelationship =
+  | { data: { childAddresses: string[] }; type: 'parent' }
+  | { type: 'child' | 'normal' };
+⋮----
+export interface VaultSummary {
+  createTimeMillis: number;
+  isClosed: boolean;
+  leader: string;
+  name: string;
+  relationship: VaultRelationship;
+  tvl: string;
+  vaultAddress: string;
+}
+⋮----
+export interface UserVaultDeposit {
+  equity: string;
+  vaultAddress: string;
+}
+⋮----
+export interface ReferralTokenState {
+  builderRewards: string;
+  claimedRewards: string;
+  cumVlm: string;
+  unclaimedRewards: string;
+}
+⋮----
+export interface ReferralUser {
+  cumFeesRewardedToReferrer: string;
+  cumRewardedFeesSinceReferred: string;
+  cumVlm: string;
+  timeJoined: number;
+  user: string;
+}
+⋮----
+export type ReferrerState =
+  | { stage: 'needToCreateCode' }
+  | {
+      data: { code: string; referralStates: ReferralUser[] };
+      stage: 'ready';
+    }
+  | {
+      data: { required: string };
+      stage: 'needToTrade';
+    };
+⋮----
+export interface ReferralInfo {
+  builderRewards: string;
+  claimedRewards: string;
+  cumVlm: string;
+  referredBy: { code: string; referrer: string } | null;
+  referrerState: ReferrerState;
+  rewardHistory: ReferralReward[];
+  tokenToState: Array<[token: number, state: ReferralTokenState]>;
+  unclaimedRewards: string;
+}
+⋮----
+export interface ReferralReward {
+  earned: string;
+  referralVlm: string;
+  time: number;
+  vlm: string;
+}
+⋮----
+export interface UserDailyVolume {
+  date: string;
+  exchange: string;
+  userAdd: string;
+  userCross: string;
+}
+⋮----
+export interface UserFeeTier {
+  add: string;
+  cross?: string;
+  makerFractionCutoff?: string;
+  ntlCutoff?: string;
+  spotAdd?: string;
+  spotCross?: string;
+}
+⋮----
+export interface StakingDiscountTier {
+  bpsOfMaxSupply: string;
+  discount: string;
+}
+⋮----
+export interface UserFees {
+  activeReferralDiscount: string;
+  activeStakingDiscount: StakingDiscountTier;
+  dailyUserVlm: UserDailyVolume[];
+  feeSchedule: {
+    add: string;
+    cross: string;
+    referralDiscount: string;
+    spotAdd: string;
+    spotCross: string;
+    stakingDiscountTiers: StakingDiscountTier[];
+    tiers: {
+      mm: UserFeeTier[];
+      vip: UserFeeTier[];
+    };
+  };
+  feeTrialEscrow?: string;
+  feeTrialReward?: string;
+  nextTrialAvailableTimestamp: number | null;
+  stakingLink: { stakingUser: string; type: 'tradingUser' } | null;
+  /** Non-null trial payloads have no documented schema. */
+  trial: unknown;
+  userAddRate: string;
+  userCrossRate: string;
+  userSpotAddRate: string;
+  userSpotCrossRate: string;
+}
+⋮----
+/** Non-null trial payloads have no documented schema. */
+⋮----
+export interface StakingDelegation {
+  amount: string;
+  lockedUntilTimestamp: number;
+  validator: string;
+}
+⋮----
+export interface StakingSummary {
+  delegated: string;
+  nPendingWithdrawals: number;
+  totalPendingWithdrawal: string;
+  undelegated: string;
+}
+⋮----
+export type StakingHistoryDelta =
+  | {
+      cDeposit: {
+        amount: string;
+      };
+    }
+  | {
+      delegate: {
+        amount: string;
+        isUndelegate: boolean;
+        validator: string;
+      };
+    }
+  | {
+      withdrawal: {
+        amount: string;
+        phase: string;
+      };
+    };
+⋮----
+export interface StakingHistoryEntry {
+  delta: StakingHistoryDelta;
+  hash: string;
+  time: number;
+}
+⋮----
+export interface StakingReward {
+  source: string;
+  time: number;
+  totalAmount: string;
+}
+⋮----
+export type UserAbstraction =
+  | 'default'
+  | 'dexAbstraction'
+  | 'disabled'
+  | 'portfolioMargin'
+  | 'unifiedAccount';
+⋮----
+export interface BorrowLendBalance {
+  basis: string;
+  value: string;
+}
+⋮----
+export interface UserBorrowLendInterest {
+  borrow: string;
+  supply: string;
+  time: number;
+  token: string;
+}
+⋮----
+export interface BorrowLendTokenState {
+  borrow: BorrowLendBalance;
+  supply: BorrowLendBalance;
+}
+⋮----
+export interface BorrowLendUserState {
+  health: string;
+  healthFactor: string | null;
+  tokenToState: Array<[token: number, state: BorrowLendTokenState]>;
+}
+⋮----
+export interface BorrowLendReserveState {
+  balance: string;
+  borrowYearlyRate: string;
+  ltv: string;
+  oraclePx: string;
+  supplyYearlyRate: string;
+  totalBorrowed: string;
+  totalSupplied: string;
+  utilization: string;
+}
+⋮----
+export type BorrowLendReserveEntry = [
+  token: number,
+  state: BorrowLendReserveState,
+];
+⋮----
+export interface PerpAsset {
+  deployerFeeScale?: string;
+  growthMode?: 'enabled';
+  isDelisted?: boolean;
+  lastFeeScaleChangeTime?: string;
+  /**
+   * "strictIsolated" means margin cannot be removed.
+   * "noCross" means only isolated margin is allowed.
+   */
+  marginMode?: 'noCross' | 'strictIsolated';
+  marginTableId: number;
+  maxLeverage: number;
+  name: string;
+  /** Deprecated. True for both "strictIsolated" and "noCross". */
+  onlyIsolated?: boolean;
+  szDecimals: number;
+}
+⋮----
+/**
+   * "strictIsolated" means margin cannot be removed.
+   * "noCross" means only isolated margin is allowed.
+   */
+⋮----
+/** Deprecated. True for both "strictIsolated" and "noCross". */
+⋮----
+export interface PerpMarginTier {
+  lowerBound: string;
+  maxLeverage: number;
+}
+⋮----
+export interface PerpMarginTable {
+  description: string;
+  marginTiers: PerpMarginTier[];
+}
+⋮----
+export interface PerpMeta {
+  collateralToken: number;
+  marginTables: Array<[id: number, table: PerpMarginTable]>;
+  universe: PerpAsset[];
+}
+⋮----
+export interface PerpAssetContext {
+  dayBaseVlm: string;
+  dayNtlVlm: string;
+  funding: string;
+  impactPxs: [string, string] | null;
+  markPx: string;
+  midPx: string | null;
+  openInterest: string;
+  oraclePx: string;
+  premium: string | null;
+  prevDayPx: string;
+}
+⋮----
+export type PerpMetaAndAssetContexts = [
+  meta: PerpMeta,
+  contexts: PerpAssetContext[],
+];
+⋮----
+export interface PerpDex {
+  assetToFundingClamp: Array<[coin: string, clamp: string]>;
+  assetToFundingInterestRate: Array<[coin: string, interestRate: string]>;
+  assetToFundingMultiplier: Array<[coin: string, multiplier: string]>;
+  assetToStreamingOiCap: Array<[coin: string, openInterestCap: string]>;
+  deployer: string;
+  feeRecipient: string | null;
+  fullName: string;
+  name: string;
+  oracleUpdater: string | null;
+  subDeployers: Array<[role: string, users: string[]]>;
+}
+⋮----
+export interface FundingHistory {
+  coin: string;
+  fundingRate: string;
+  premium: string;
+  time: number;
+}
+⋮----
+export interface UserFundingDelta {
+  coin: string;
+  fundingRate: string;
+  nSamples: number | null;
+  szi: string;
+  type: 'funding';
+  usdc: string;
+}
+⋮----
+export interface UserFunding {
+  delta: UserFundingDelta;
+  hash: string;
+  time: number;
+}
+⋮----
+/** Non-funding ledger entries, shared by Info and WebSocket history. */
+export type UserNonFundingLedgerDelta =
+  | { toPerp: boolean; type: 'accountClassTransfer'; usdc: string }
+  | { type: 'deposit'; usdc: string }
+  | { fee: string; nonce: number; type: 'withdraw'; usdc: string }
+  | {
+      destination: string;
+      fee: string;
+      type: 'internalTransfer';
+      usdc: string;
+      user: string;
+    }
+  | {
+      destination: string;
+      type: 'subAccountTransfer';
+      usdc: string;
+      user: string;
+    }
+  | {
+      accountValue: string;
+      leverageType: 'Cross' | 'Isolated';
+      liquidatedNtlPos?: string;
+      liquidatedPositions: Array<{ coin: string; szi: string }>;
+      type: 'liquidation';
+    }
+  | { amount: string; token?: string; type: 'rewardsClaim' }
+  | {
+      amount: string;
+      destination: string;
+      fee: string;
+      feeToken?: string;
+      nativeTokenFee?: string;
+      nonce?: number | null;
+      token: string;
+      type: 'spotTransfer';
+      usdcValue: string;
+      user: string;
+    }
+  | { fee?: string; type: 'vaultCreate'; usdc: string; vault: string }
+  | { type: 'vaultDeposit' | 'vaultDistribution'; usdc: string; vault: string }
+  | {
+      basis: string;
+      closingCost: string;
+      commission: string;
+      netWithdrawnUsd: string;
+      requestedUsd: string;
+      type: 'vaultWithdraw';
+      user: string;
+      vault: string;
+    }
+  | { type: 'vaultLeaderCommission'; usdc: string; user: string }
+  | {
+      amount: string;
+      destination: string;
+      destinationDex: string;
+      fee: string;
+      feeToken: string;
+      nativeTokenFee: string;
+      nonce: number;
+      sourceDex: string;
+      token: string;
+      type: 'send';
+      usdcValue: string;
+      user: string;
+    }
+  | { amount: string; token: string; type: 'deployGasAuction' | 'spotGenesis' }
+  | {
+      amount: string;
+      isDeposit: boolean;
+      token: string;
+      type: 'cStakingTransfer';
+    }
+  | {
+      amount: string;
+      interestAmount: string;
+      operation: 'borrow' | 'repay' | 'supply' | 'withdraw';
+      token: string;
+      type: 'borrowLend';
+    }
+  | {
+      amount: string;
+      dex: string;
+      token: string;
+      type: 'activateDexAbstraction';
+    };
+⋮----
+export interface UserNonFundingLedgerUpdate {
+  delta: UserNonFundingLedgerDelta;
+  hash: string;
+  time: number;
+}
+⋮----
+export interface PredictedFundingQuote {
+  fundingIntervalHours?: number;
+  fundingRate: string;
+  nextFundingTime: number;
+}
+⋮----
+export type PredictedFunding = [
+  coin: string,
+  venues: Array<[venue: string, quote: PredictedFundingQuote | null]>,
+];
+⋮----
+export interface DeployGasAuction {
+  currentGas: string | null;
+  durationSeconds: number;
+  endGas: string | null;
+  startGas: string;
+  startTimeSeconds: number;
+}
+⋮----
+export type PerpDeployAuctionStatus = DeployGasAuction;
+⋮----
+export interface ActiveAssetData {
+  availableToTrade: [string, string];
+  coin: string;
+  leverage: PerpLeverage;
+  markPx: string;
+  maxTradeSzs: [string, string];
+  user: string;
+}
+⋮----
+export interface PerpDexLimits {
+  coinToOiCap: Array<[coin: string, openInterestCap: string]>;
+  maxTransferNtl: string;
+  oiSzCapPerPerp: string;
+  totalOiCap: string;
+}
+⋮----
+export interface PerpDexStatus {
+  totalNetDeposit: string;
+}
+⋮----
+export interface PerpAnnotation {
+  category: string;
+  description: string;
+  displayName?: string;
+  keywords?: string[];
+}
+⋮----
+export type PerpCategory = [coin: string, category: string];
+⋮----
+export interface PerpConciseAnnotationInfo {
+  category: string;
+  displayName?: string;
+  keywords?: string[];
+}
+⋮----
+export type PerpConciseAnnotation = [
+  coin: string,
+  annotation: PerpConciseAnnotationInfo,
+];
+⋮----
+export interface SpotEvmContract {
+  address: string;
+  evm_extra_wei_decimals: number;
+}
+⋮----
+export interface SpotToken {
+  deployerTradingFeeShare: string;
+  evmContract: SpotEvmContract | null;
+  fullName: string | null;
+  index: number;
+  isCanonical: boolean;
+  name: string;
+  szDecimals: number;
+  tokenId: string;
+  weiDecimals: number;
+}
+⋮----
+export interface SpotPair {
+  index: number;
+  isCanonical: boolean;
+  name: string;
+  tokens: [base: number, quote: number];
+}
+⋮----
+export interface SpotMeta {
+  tokens: SpotToken[];
+  universe: SpotPair[];
+}
+⋮----
+export interface SpotAssetContext {
+  circulatingSupply: string;
+  coin: string;
+  dayBaseVlm: string;
+  dayNtlVlm: string;
+  markPx: string;
+  midPx: string | null;
+  prevDayPx: string;
+  totalSupply: string;
+}
+⋮----
+export type SpotMetaAndAssetContexts = [
+  meta: SpotMeta,
+  contexts: SpotAssetContext[],
+];
+⋮----
+export interface SpotDeployTokenSpec {
+  name: string;
+  szDecimals: number;
+  weiDecimals: number;
+}
+⋮----
+export interface SpotDeployTokenState {
+  existingTokenGenesisBalances: Array<[token: number, amount: string]>;
+  fullName: string;
+  hyperliquidityGenesisBalance: string;
+  maxSupply: number;
+  spec: SpotDeployTokenSpec;
+  spots: number[];
+  token: number;
+  totalGenesisBalanceWei: string;
+  userGenesisBalances: Array<[user: string, amount: string]>;
+}
+⋮----
+export interface SpotDeployStateResponse {
+  gasAuction: DeployGasAuction;
+  states: SpotDeployTokenState[];
+}
+⋮----
+export type SpotPairDeployAuctionStatus = DeployGasAuction;
+⋮----
+export interface TokenGenesis {
+  blacklistUsers: string[];
+  existingTokenBalances: Array<[token: number, amount: string]>;
+  userBalances: Array<[user: string, amount: string]>;
+}
+⋮----
+export interface TokenDetails {
+  circulatingSupply: string;
+  deployGas: string | null;
+  deployTime: string | null;
+  deployer: string | null;
+  futureEmissions: string;
+  genesis: TokenGenesis | null;
+  markPx: string;
+  maxSupply: string;
+  midPx: string;
+  name: string;
+  nonCirculatingUserBalances: Array<[user: string, amount: string]>;
+  prevDayPx: string;
+  seededUsdc: string;
+  szDecimals: number;
+  totalSupply: string;
+  weiDecimals: number;
+}
+⋮----
+export interface OutcomeSideSpec {
+  name: string;
+}
+⋮----
+export interface Outcome {
+  deployerFeeScale?: string;
+  description: string;
+  name: string;
+  outcome: number;
+  quoteToken: string;
+  sideSpecs: OutcomeSideSpec[];
+  venue?: string;
+}
+⋮----
+export interface OutcomeQuestion {
+  description: string;
+  fallbackOutcome: number;
+  name: string;
+  namedOutcomes: number[];
+  question: number;
+  settledNamedOutcomes: number[];
+}
+⋮----
+export interface OutcomeDeployer {
+  deployer: string;
+  subDeployers: Array<[role: string, users: string[]]>;
+  venue: string;
+}
+⋮----
+export interface OutcomeMetadata {
+  deployers: OutcomeDeployer[];
+  feeScale: string;
+  outcomes: Outcome[];
+  questions: OutcomeQuestion[];
+}
+⋮----
+export interface SettledOutcomeQuestion {
+  description: string;
+  name: string;
+  question: {
+    settled: number;
+  };
+}
+⋮----
+export interface SettledOutcome {
+  details: string;
+  question?: SettledOutcomeQuestion;
+  settleFraction: string;
+  spec: Outcome;
+}
+⋮----
+export interface OutcomeDeployerLimits {
+  nActiveOutcomesRemaining: number;
+  nDailyOutcomesRemaining: number;
+}
+⋮----
+export interface ValidatorStats {
+  nSamples: number;
+  predictedApr: string;
+  uptimeFraction: string;
+}
+⋮----
+export interface ValidatorSummary {
+  commission: string;
+  description: string;
+  isActive: boolean;
+  isJailed: boolean;
+  name: string;
+  nRecentBlocks: number;
+  signer: string;
+  /** Wire number; large stakes can exceed JavaScript's safe integer range. */
+  stake: number;
+  stats: Array<[period: 'day' | 'month' | 'week', stats: ValidatorStats]>;
+  unjailableAfter: number | null;
+  validator: string;
+}
+⋮----
+/** Wire number; large stakes can exceed JavaScript's safe integer range. */
+⋮----
+export type OutcomeGovernanceAction =
+  | {
+      registerTokensAndStandaloneOutcome: {
+        nameAndDescription: [string, string];
+        quoteToken: number;
+      };
+    }
+  | {
+      registerTokensAndQuestion: {
+        fallbackNameAndDescription: [string, string];
+        namedOutcomes: Array<[string, string]>;
+        questionNameAndDescription: [string, string];
+        quoteToken: number;
+      };
+    }
+  | {
+      registerTemplate: {
+        id: string;
+        keywordToHint: Array<
+          [keyword: string, hint: 'date' | 'dateTime' | 'hlPerp' | 'string']
+        >;
+        nameAndDescription: [string, string];
+        role: { standaloneOutcome: { sideNames: [string, string] } };
+      };
+    }
+  | {
+      settleOutcome: {
+        details: string;
+        outcome: number;
+        settleFraction: string;
+      };
+    }
+  | {
+      settleQuestion: {
+        question: number;
+        settleFractionsAndDetails: Array<
+          [outcome: number, fractionAndDetails: [string, string]]
+        >;
+      };
+    }
+  | {
+      settleQuestion2: {
+        nameAndDescription: [string, string];
+        outcomeSettlements: Array<{
+          details: string;
+          nameAndDescription: [string, string];
+          outcome: number;
+          settleFraction: string;
+          sideNames: [string, string];
+        }>;
+        question: number;
+      };
+    };
+⋮----
+export type ValidatorL1VoteAction =
+  | { C: string[] }
+  | { D: string }
+  | {
+      E: {
+        evmRebalanceContract: string;
+        technicalStaker: string;
+        token: number;
+        treasuryEvmAddress: string;
+        treasuryStaker: string;
+      };
+    }
+  | { O: OutcomeGovernanceAction };
+⋮----
+export interface ValidatorL1Vote {
+  action: ValidatorL1VoteAction;
+  expireTime: number;
+  quorumReached: boolean;
+  votes: string[];
+}
+⋮----
+export interface WebData2 {
+  agentAddress: string | null;
+  agentValidUntil: number | null;
+  assetCtxs: PerpAssetContext[];
+  clearinghouseState: PerpAccountSummaryResponse;
+  cumLedger: string;
+  isVault: boolean;
+  leadingVaults: LeadingVault[];
+  meta: PerpMeta;
+  openOrders: FrontendOpenOrder[];
+  optOutOfSpotDusting?: true;
+  perpsAtOpenInterestCap?: string[];
+  serverTime: number;
+  spotAssetCtxs: SpotAssetContext[];
+  spotState?: SpotBalancesResponse;
+  totalVaultEquity: string;
+  twapStates: Array<[twapId: number, state: TwapState]>;
+  user: string;
+}
 
 ================
 File: src/WebsocketClient.ts
@@ -4670,6 +5080,1167 @@ private logUnmatchedResponse(
 private rejectRequest(id: number, error: unknown): void
 
 ================
+File: src/RestClient.ts
+================
+import { MAINNET_API_URL, TESTNET_API_URL } from './constants.js';
+import type { AssetIdentifier } from './lib/action-factory.js';
+import type { ResolvedAsset } from './lib/asset-resolver.js';
+import { BaseRestClient } from './lib/BaseRestClient.js';
+import { decimalToWire } from './lib/decimal.js';
+import { normalizeAddresses } from './lib/normalize-addresses.js';
+import {
+  decimalOrSubaccountAmount,
+  floorDecimalPlaces,
+  marketLimitPrice,
+  normalizeUserRequest,
+  positiveDecimal,
+} from './lib/request-utils.js';
+import { USER_SIGNED_ACTIONS } from './lib/user-signed-actions.js';
+import type {
+  ApproveApiWalletRequest,
+  CancelOrdersByClientOrderIdRequest,
+  CancelOrdersRequest,
+  CancelTwapOrderRequest,
+  ConvertToMultiSigUserRequest,
+  DelegateOrUndelegateStakeRequest,
+  DeployPerpRequest,
+  DeploySpotRequest,
+  L1RequestOptions,
+  LinkStakingAccountRequest,
+  ModifyOrderRequest,
+  ModifyOrdersRequest,
+  SendAssetFromApiWalletRequest,
+  SendAssetRequest,
+  SendSpotAssetRequest,
+  SendToEvmWithDataRequest,
+  SendUsdRequest,
+  SetIsolatedMarginLeverageRequest,
+  SetUserAbstractionRequest,
+  SubmitLimitOrderRequest,
+  SubmitMarketCloseRequest,
+  SubmitMarketOrderRequest,
+  SubmitOrderRequest,
+  SubmitTwapOrderRequest,
+  SubmitUserOutcomeRequest,
+  TransferSpotToOrFromSubAccountRequest,
+  TransferUsdBetweenSpotAndPerpRequest,
+  TransferUsdToOrFromSubAccountRequest,
+  TransferVaultFundsRequest,
+  UpdateIsolatedMarginRequest,
+  UpdateLeverageRequest,
+  UserSignedRequestOptions,
+  UserToggleRequest,
+  WithdrawUsdRequest,
+} from './types/request/exchange.types.js';
+import type {
+  AccountDexRequest,
+  AccountRequest,
+  GetCandlesRequest,
+  GetFundingHistoryRequest,
+  GetMaxBuilderFeeRequest,
+  GetOrderBookRequest,
+  GetOrderStatusRequest,
+  GetPreTransferCheckRequest,
+  GetUserBorrowLendInterestRequest,
+  GetUserFillsByTimeRequest,
+  GetUserFillsRequest,
+  GetUserFundingHistoryRequest,
+  GetUserNonFundingLedgerUpdatesRequest,
+  GetUserTwapSliceFillsByTimeRequest,
+  GetVaultDetailsRequest,
+  UserRequest,
+} from './types/request/info.types.js';
+import type {
+  CancelResponseData,
+  ExchangeResponse,
+  OrderResponseData,
+  TwapCancelResponseData,
+  TwapOrderResponseData,
+} from './types/response/exchange.types.js';
+import type {
+  AccountBalancesResponse,
+  ActiveAssetData,
+  AlignedQuoteTokenStatus,
+  AllMidsResponse,
+  BorrowLendReserveEntry,
+  BorrowLendReserveState,
+  BorrowLendUserState,
+  Candle,
+  ExchangeStatus,
+  ExtraAgent,
+  FrontendOpenOrder,
+  FundingHistory,
+  GossipPriorityAuctionStatus,
+  HistoricalOrder,
+  LeadingVault,
+  LegalStatus,
+  LiquidatablePosition,
+  MaxMarketOrderNotional,
+  MultiSigSigners,
+  OpenOrder,
+  OrderBookResponse,
+  OrderStatusResponse,
+  OutcomeDeployerLimits,
+  OutcomeMetadata,
+  PerpAccountSummaryResponse,
+  PerpAnnotation,
+  PerpCategory,
+  PerpConciseAnnotation,
+  PerpDeployAuctionStatus,
+  PerpDex,
+  PerpDexLimits,
+  PerpDexStatus,
+  PerpMarginTable,
+  PerpMeta,
+  PerpMetaAndAssetContexts,
+  PortfolioEntry,
+  PredictedFunding,
+  PreTransferCheck,
+  ReferralInfo,
+  SettledOutcome,
+  SpotBalancesResponse,
+  SpotDeployStateResponse,
+  SpotMeta,
+  SpotMetaAndAssetContexts,
+  SpotPairDeployAuctionStatus,
+  StakingDelegation,
+  StakingHistoryEntry,
+  StakingReward,
+  StakingSummary,
+  SubAccount,
+  SubAccountWithAllDexStates,
+  TokenDetails,
+  Trade,
+  TwapHistoryEntry,
+  TwapSliceFill,
+  UserAbstraction,
+  UserBorrowLendInterest,
+  UserFees,
+  UserFill,
+  UserFunding,
+  UserNonFundingLedgerUpdate,
+  UserRateLimit,
+  UserRoleResponse,
+  UserVaultDeposit,
+  ValidatorL1Vote,
+  ValidatorSummary,
+  VaultDetails,
+  VaultSummary,
+  WebData2,
+} from './types/response/info.types.js';
+import type {
+  JsonObject,
+  RestClientNetworkOptions,
+  RestClientOptions,
+} from './types/shared.types.js';
+⋮----
+type InfoParams = object;
+⋮----
+function hip3Dex(canonicalName: string): string | undefined
+⋮----
+export class RestClient extends BaseRestClient
+⋮----
+constructor(
+    options: RestClientOptions = {},
+    networkOptions: RestClientNetworkOptions = {},
+)
+⋮----
+resolveAsset(identifier: AssetIdentifier): Promise<ResolvedAsset>
+⋮----
+nameToCoin(name: string): Promise<string>
+⋮----
+refreshAssetMetadata(): Promise<void>
+⋮----
+getAccountAddress(): Promise<string>
+⋮----
+/**
+   * Mid prices for all coins (`allMids`).
+   *
+   * An empty book falls back to the last trade price. Spot mids are included
+   * only when `dex` is omitted or empty.
+   */
+getAllMids(params:
+⋮----
+/**
+   * User's active asset data (`activeAssetData`): leverage, max trade size,
+   * available to trade, and mark price for one coin.
+   */
+getActiveAssetData(
+    params: AccountRequest & { coin: string },
+): Promise<ActiveAssetData>
+⋮----
+/**
+   * Borrow and lend reserve state for every token (`allBorrowLendReserveStates`).
+   *
+   * Each entry is `[token, reserve]`.
+   */
+getAllBorrowLendReserveStates(): Promise<BorrowLendReserveEntry[]>
+⋮----
+/**
+   * Metadata for every perp DEX (`allPerpMetas`).
+   *
+   * Each entry is one DEX: universe, margin tables, and collateral token.
+   * Index 0 is the default perp DEX.
+   */
+getAllPerpMetadata(): Promise<PerpMeta[]>
+⋮----
+/**
+   * Builder addresses this user has approved (`approvedBuilders`).
+   */
+getApprovedBuilders(params: AccountRequest =
+⋮----
+/**
+   * Borrow and lend reserve state for one token (`borrowLendReserveState`).
+   */
+getBorrowLendReserveState(params: {
+    token: number;
+}): Promise<BorrowLendReserveState>
+⋮----
+/**
+   * User borrow and lend balances (`borrowLendUserState`).
+   *
+   * `tokenToState` entries are `[token, state]`.
+   */
+getUserBorrowLendState(
+    params: AccountRequest = {},
+): Promise<BorrowLendUserState>
+⋮----
+/**
+   * Candle snapshot (`candleSnapshot`).
+   *
+   * Only the most recent 5000 candles are available. HIP-3 coins use a
+   * `dex:COIN` name.
+   */
+async getCandles(params: GetCandlesRequest): Promise<Candle[]>
+⋮----
+/**
+   * Perp account summary (`clearinghouseState`): open positions and margin.
+   *
+   * `assetPositions[].position.szi` is signed: positive is long, negative is short.
+   * Under unified account or portfolio margin, use spot balances for the
+   * trading account balance across spot and perps.
+   */
+getPerpAccountSummary(
+    params: AccountDexRequest = {},
+): Promise<PerpAccountSummaryResponse>
+⋮----
+/**
+   * Stake delegated to validators (`delegations`).
+   */
+getStakingDelegations(
+    params: AccountRequest = {},
+): Promise<StakingDelegation[]>
+⋮----
+/**
+   * Staking history (`delegatorHistory`).
+   *
+   * `delta` is one of `delegate`, `cDeposit`, or `withdrawal`.
+   */
+getStakingHistory(
+    params: AccountRequest = {},
+): Promise<StakingHistoryEntry[]>
+⋮----
+/**
+   * Staking rewards (`delegatorRewards`).
+   *
+   * `source` is `"delegation"` or `"commission"` in the documented samples.
+   */
+getStakingRewards(params: AccountRequest =
+⋮----
+/**
+   * Staking summary (`delegatorSummary`): delegated, undelegated, and pending withdrawals.
+   */
+getStakingSummary(params: AccountRequest =
+⋮----
+getExchangeStatus(): Promise<ExchangeStatus>
+⋮----
+getExtraAgents(params: AccountRequest =
+⋮----
+/**
+   * Open orders with trigger and reduce-only fields (`frontendOpenOrders`).
+   *
+   * Spot orders are included only for the first perp DEX.
+   */
+getFrontendOpenOrders(
+    params: AccountDexRequest = {},
+): Promise<FrontendOpenOrder[]>
+⋮----
+/**
+   * Historical funding rates for one coin (`fundingHistory`).
+   */
+async getFundingHistory(
+    params: GetFundingHistoryRequest,
+): Promise<FundingHistory[]>
+⋮----
+getGossipPriorityAuctionStatus(): Promise<GossipPriorityAuctionStatus>
+⋮----
+getGossipRootIps(): Promise<string[]>
+⋮----
+/**
+   * Recent historical orders (`historicalOrders`).
+   *
+   * Returns at most 2000 orders. `status` uses the same values as `getOrderStatus()`.
+   */
+getOrderHistory(params: AccountRequest =
+⋮----
+getVipStatus(params: AccountRequest =
+⋮----
+/**
+   * L2 order book (`l2Book`).
+   *
+   * At most 20 levels per side. `nSigFigs` aggregates prices. `mantissa` is
+   * only valid when `nSigFigs` is 5.
+   */
+async getOrderBook(
+    params: GetOrderBookRequest,
+): Promise<OrderBookResponse | null>
+⋮----
+getLeadingVaults(params: AccountRequest =
+⋮----
+getLegalStatus(params: AccountRequest =
+⋮----
+getLiquidatablePositions(): Promise<LiquidatablePosition[]>
+⋮----
+getMarginTable(params:
+⋮----
+/**
+   * Maximum approved builder fee (`maxBuilderFee`).
+   *
+   * The number is in tenths of a basis point. `1` means 0.001%.
+   */
+getMaxBuilderFee(params: GetMaxBuilderFeeRequest): Promise<number>
+⋮----
+getMaxMarketOrderNotionals(): Promise<MaxMarketOrderNotional[]>
+⋮----
+/**
+   * Perp metadata (`meta`): universe and margin tables.
+   *
+   * `dex` defaults to the empty string, which is the first perp DEX.
+   */
+getPerpMetadata(params:
+⋮----
+/**
+   * Perp metadata plus asset contexts (`metaAndAssetCtxs`).
+   *
+   * The tuple is `[meta, contexts]`. Contexts line up with `meta.universe`
+   * and include mark price, funding, open interest, and related fields.
+   * `dex` defaults to the empty string, which is the first perp DEX.
+   */
+getPerpAssetContexts(
+    params: { dex?: string } = {},
+): Promise<PerpMetaAndAssetContexts>
+⋮----
+/**
+   * Open orders (`openOrders`).
+   *
+   * Spot orders are included only for the first perp DEX. `side` `"B"` is bid
+   * and `"A"` is ask.
+   */
+getOpenOrders(params: AccountDexRequest =
+⋮----
+/**
+   * Order status by order id or client order id (`orderStatus`).
+   *
+   * `status: "unknownOid"` means the order was not found. Otherwise
+   * `status` is `"order"` and `order.status` is the order state.
+   */
+getOrderStatus(params: GetOrderStatusRequest): Promise<OrderStatusResponse>
+⋮----
+/**
+   * Outcome metadata (`outcomeMeta`): outcomes, questions, and deployers.
+   */
+getOutcomeMetadata(): Promise<OutcomeMetadata>
+⋮----
+/**
+   * Remaining outcome deployment allowance for a venue (`outcomeDeployerLimits`).
+   *
+   * `venue` is the venue name, for example `"out"`.
+   */
+getOutcomeDeployerLimits(params: {
+    venue: string;
+}): Promise<OutcomeDeployerLimits>
+⋮----
+/**
+   * Perp annotation for one coin (`perpAnnotation`).
+   *
+   * Returns `null` when the coin has no annotation.
+   */
+getPerpAnnotation(params:
+⋮----
+/**
+   * Perp category for each listed coin (`perpCategories`).
+   *
+   * Each entry is `[coin, category]`.
+   */
+getPerpCategories(): Promise<PerpCategory[]>
+⋮----
+/**
+   * Concise perp annotations (`perpConciseAnnotations`).
+   *
+   * Each entry is `[coin, annotation]`. `keywords` is omitted when absent.
+   */
+getConcisePerpAnnotations(): Promise<PerpConciseAnnotation[]>
+⋮----
+/**
+   * Perp deploy auction status (`perpDeployAuctionStatus`).
+   */
+getPerpDeployAuctionStatus(): Promise<PerpDeployAuctionStatus>
+⋮----
+/**
+   * Builder-deployed perp market limits (`perpDexLimits`).
+   *
+   * `dex` is required. The empty string is not allowed.
+   */
+getPerpDexLimits(params:
+⋮----
+/**
+   * Perp DEX deposit status (`perpDexStatus`).
+   *
+   * The empty string is the first perp DEX.
+   */
+getPerpDexStatus(params:
+⋮----
+/**
+   * All perpetual DEXs (`perpDexs`).
+   *
+   * Index 0 is `null`, the default perp DEX. Later entries are
+   * builder-deployed HIP-3 DEXs.
+   */
+getPerpDexs(): Promise<Array<PerpDex | null>>
+⋮----
+/**
+   * Coins currently at their open-interest cap (`perpsAtOpenInterestCap`).
+   *
+   * `dex` selects a builder-deployed market. Omitted means the first perp DEX.
+   */
+getPerpsAtOpenInterestCap(params:
+⋮----
+/**
+   * Account value, PnL, and volume history (`portfolio`).
+   *
+   * Each entry is `[period, snapshot]`. Periods include `day`, `week`,
+   * `month`, `allTime`, and the `perp*` variants.
+   */
+getPortfolio(params: AccountRequest =
+⋮----
+getPreTransferCheck(
+    params: GetPreTransferCheckRequest,
+): Promise<PreTransferCheck>
+⋮----
+/**
+   * Predicted funding rates by venue (`predictedFundings`).
+   *
+   * Only the first perp DEX is supported. Each entry is `[coin, venues]`,
+   * and each venue is `[venue, quote]`. `quote` is `null` when that venue
+   * has no predicted rate.
+   */
+getPredictedFundingRates(): Promise<PredictedFunding[]>
+⋮----
+getRecentTrades(params:
+⋮----
+/**
+   * Referral state (`referral`).
+   *
+   * `referredBy` is `null` when the user was not referred. `referrerState.stage`
+   * is `"ready"` or `"needToTrade"`. Claimed rewards now also appear in the
+   * non-funding ledger. `rewardHistory` is legacy.
+   */
+getReferralInfo(params: AccountRequest =
+⋮----
+/**
+   * Settled outcome (`settledOutcome`).
+   *
+   * Returns `null` when the outcome is still unsettled.
+   */
+getSettledOutcome(params: {
+    outcome: number;
+}): Promise<SettledOutcome | null>
+⋮----
+async getBalances(
+    params: AccountDexRequest = {},
+): Promise<AccountBalancesResponse>
+⋮----
+/**
+   * Spot token balances (`spotClearinghouseState`).
+   *
+   * Under unified account or portfolio margin, this is the trading-account
+   * balance across spot and perps.
+   */
+getSpotBalances(params: AccountRequest =
+⋮----
+/**
+   * Spot deploy state for a user (`spotDeployState`), including the gas auction.
+   */
+getSpotDeployAuctionStatus(
+    params: AccountRequest = {},
+): Promise<SpotDeployStateResponse>
+⋮----
+/**
+   * Spot metadata (`spotMeta`): tokens and trading pairs.
+   */
+getSpotMetadata(): Promise<SpotMeta>
+⋮----
+/**
+   * Spot metadata plus asset contexts (`spotMetaAndAssetCtxs`).
+   *
+   * The tuple is `[meta, contexts]`. Contexts include mark price, volume,
+   * and supply. `midPx` is `null` when there is no mid.
+   */
+getSpotAssetContexts(): Promise<SpotMetaAndAssetContexts>
+⋮----
+/**
+   * Dutch auction for deploying a spot pair (`spotPairDeployAuctionStatus`).
+   */
+getSpotPairDeployAuctionStatus(): Promise<SpotPairDeployAuctionStatus>
+⋮----
+/**
+   * Subaccounts of a master (`subAccounts`).
+   *
+   * Returns `null` when the address has no subaccounts.
+   */
+getSubAccounts(params: AccountRequest =
+⋮----
+getSubAccountsWithAllDexStates(
+    params: AccountRequest = {},
+): Promise<SubAccountWithAllDexStates[] | null>
+⋮----
+/**
+   * Token details (`tokenDetails`): supply, prices, and genesis balances.
+   *
+   * `tokenId` is the 34-character onchain id, for example
+   * `0x00000000000000000000000000000000`.
+   */
+getTokenDetails(params:
+⋮----
+getTwapHistory(params: AccountRequest =
+⋮----
+/**
+   * Account abstraction mode (`userAbstraction`).
+   */
+getUserAbstraction(params: AccountRequest =
+⋮----
+getUserBorrowLendInterest(
+    params: GetUserBorrowLendInterestRequest,
+): Promise<UserBorrowLendInterest[]>
+⋮----
+/**
+   * Whether HIP-3 DEX abstraction is enabled (`userDexAbstraction`).
+   */
+getUserDexAbstraction(params: AccountRequest =
+⋮----
+/**
+   * User fee rates and the current fee schedule (`userFees`).
+   */
+getUserFees(params: AccountRequest =
+⋮----
+/**
+   * Recent fills (`userFills`).
+   *
+   * Returns at most 2000 fills. `builderFee` is omitted when it is zero.
+   * `side` `"B"` is buy and `"A"` is sell.
+   */
+getUserFills(params: GetUserFillsRequest =
+⋮----
+/**
+   * Fills in a time range (`userFillsByTime`).
+   *
+   * Returns at most 2000 fills, and only the 10000 most recent fills are available.
+   * Paginate by using the last `time` as the next `startTime`.
+   */
+getUserFillsByTime(params: GetUserFillsByTimeRequest): Promise<UserFill[]>
+⋮----
+/**
+   * User funding payments (`userFunding`).
+   *
+   * `startTime` is inclusive, in milliseconds. `endTime` defaults to now.
+   */
+getUserFundingHistory(
+    params: GetUserFundingHistoryRequest = {},
+): Promise<UserFunding[]>
+⋮----
+/**
+   * User non-funding ledger updates (`userNonFundingLedgerUpdates`):
+   * deposits, withdrawals, transfers, and other account events.
+   *
+   * `startTime` is inclusive, in milliseconds. `endTime` defaults to now.
+   * Read `delta.type` to see which delta fields are set.
+   */
+getUserNonFundingLedgerUpdates(
+    params: GetUserNonFundingLedgerUpdatesRequest = {},
+): Promise<UserNonFundingLedgerUpdate[]>
+⋮----
+/**
+   * Address request usage and cap (`userRateLimit`).
+   *
+   * `nRequestsUsed` is usage above the reserved amount.
+   * `nRequestsSurplus` is reserved amount not yet used.
+   */
+getUserRateLimit(params: AccountRequest =
+⋮----
+/**
+   * Account role (`userRole`): user, agent, vault, subaccount, or missing.
+   *
+   * Query the master or subaccount address itself. An agent wallet address
+   * returns the agent role, not the trading account.
+   */
+getUserRole(params: UserRequest): Promise<UserRoleResponse>
+⋮----
+getMultiSigSigners(
+    params: AccountRequest = {},
+): Promise<MultiSigSigners | null>
+⋮----
+/**
+   * Recent TWAP slice fills (`userTwapSliceFills`).
+   *
+   * Returns at most 2000 fills. TWAP fill hashes are zero.
+   */
+getUserTwapSliceFills(params: AccountRequest =
+⋮----
+getUserTwapSliceFillsByTime(
+    params: GetUserTwapSliceFillsByTimeRequest,
+): Promise<TwapSliceFill[]>
+⋮----
+/**
+   * Vault equity for this user (`userVaultEquities`).
+   */
+getUserVaultDeposits(
+    params: AccountRequest = {},
+): Promise<UserVaultDeposit[]>
+⋮----
+getValidatorL1Votes(): Promise<ValidatorL1Vote[]>
+⋮----
+getValidatorSummaries(): Promise<ValidatorSummary[]>
+⋮----
+/**
+   * Vault details (`vaultDetails`).
+   *
+   * Returns `null` when the vault does not exist. `relationship.type` is
+   * `"normal"`, `"parent"`, or `"child"`. Pass `user` for `followerState`.
+   */
+getVaultDetails(
+    params: GetVaultDetailsRequest,
+): Promise<VaultDetails | null>
+⋮----
+getVaultSummaries(): Promise<VaultSummary[]>
+⋮----
+getWebData2(params: AccountRequest =
+⋮----
+/** Published response schema; the public API currently rejects this request type. */
+getAlignedQuoteTokenStatus(params: {
+    token: number;
+}): Promise<AlignedQuoteTokenStatus>
+⋮----
+/**
+   * Place one or more orders (`order`).
+   *
+   * Each status is `resting`, `filled`, or `error`. The request can succeed
+   * while an individual order is rejected.
+   */
+async submitOrder(
+    params: SubmitOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<OrderResponseData>>
+⋮----
+/**
+   * Place an IOC order around the current mid (`order`).
+   *
+   * `maxSlippage` is a fraction from 0 inclusive to 1 exclusive. The default is 0.05.
+   */
+async submitMarketOrder(
+    params: SubmitMarketOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<OrderResponseData>>
+⋮----
+/**
+   * Close a perp position with a reduce-only IOC order (`order`).
+   *
+   * Closes the entire position for that coin, not just a recently opened size.
+   * Size defaults to the open position size.
+   */
+async submitMarketClose(
+    params: SubmitMarketCloseRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<OrderResponseData>>
+⋮----
+/**
+   * Place a limit order (`order`).
+   *
+   * `postOnly` sends ALO. `timeInForce: "IOC"` sends IOC. Otherwise the order is GTC.
+   */
+async submitLimitOrder(
+    params: SubmitLimitOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<OrderResponseData>>
+⋮----
+/**
+   * Modify one resting order (`modify`).
+   *
+   * Success is the default acknowledgement. The exchange assigns a new oid.
+   * Callers must read open orders (or use cloid) to find it.
+   *
+   * `alwaysPlace` sends `a: true` so the new
+   * order is placed even when the cancel fails. `false` is omitted, because
+   * hashing `a: false` is rejected.
+   */
+async modifyOrder(
+    params: ModifyOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Modify multiple resting orders (`batchModify`).
+   *
+   * Statuses match `submitOrder()`. `alwaysPlace` has the same meaning as
+   * on `modifyOrder()`.
+   */
+async modifyOrders(
+    params: ModifyOrdersRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<OrderResponseData>>
+⋮----
+/**
+   * Cancel orders by order id (`cancel`).
+   *
+   * Each status is `"success"` or `{ error }`. `fastCancel` sends `f: true`.
+   * Trigger orders are rejected when fast cancel is set. `false` is omitted.
+   */
+async cancelOrders(
+    params: CancelOrdersRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<CancelResponseData>>
+⋮----
+/**
+   * Cancel orders by client order id (`cancelByCloid`).
+   *
+   * Statuses match `cancelOrders()`. `fastCancel` has the same meaning.
+   */
+async cancelOrdersByClientOrderId(
+    params: CancelOrdersByClientOrderIdRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<CancelResponseData>>
+⋮----
+/**
+   * Set cross or isolated leverage for one asset (`updateLeverage`).
+   */
+updateLeverage(
+    params: UpdateLeverageRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Add or remove isolated margin (`updateIsolatedMargin`).
+   *
+   * `ntli` is a 6-decimal integer. `1000000` is 1 USD.
+   */
+updateIsolatedMargin(
+    params: UpdateIsolatedMarginRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Set isolated margin to a target leverage (`topUpIsolatedOnlyMargin`).
+   *
+   * This changes leverage directly. `updateIsolatedMargin()` changes a USDC amount.
+   */
+setIsolatedMarginLeverage(
+    params: SetIsolatedMarginLeverageRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Place a TWAP order (`twapOrder`).
+   *
+   * A running TWAP returns `{ running: { twapId } }`. A rejected TWAP returns `{ error }`.
+   */
+submitTwapOrder(
+    params: SubmitTwapOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<TwapOrderResponseData>>
+⋮----
+/**
+   * Cancel a TWAP order (`twapCancel`).
+   *
+   * `status` is `"success"` or `{ error }`.
+   */
+cancelTwapOrder(
+    params: CancelTwapOrderRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<TwapCancelResponseData>>
+⋮----
+/**
+   * Schedule a cancel-all, or clear one (`scheduleCancel`).
+   *
+   * `time` is a millisecond timestamp at least 5 seconds in the future.
+   * Omit `time` to remove the scheduled cancel. At most 10 triggers per day.
+   */
+setCancelAllAfter(
+    params: { time?: number } = {},
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+setReferrer(options: L1RequestOptions =
+⋮----
+registerReferrer(
+    params: { code: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Approve the configured builder fee (`approveBuilderFee`).
+   *
+   * `maxFeeRate` is a percent string such as `"0.001%"`.
+   */
+async approveBuilderFee(
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Approve an API wallet (`approveAgent`).
+   *
+   * An account can have one unnamed agent and up to three named agents.
+   * Append `valid_until {timestamp}` to the name to set an expiration,
+   * at most 180 days ahead.
+   */
+approveApiWallet(
+    params: ApproveApiWalletRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Send USDC to another address on HyperCore (`usdSend`).
+   *
+   * This does not touch the EVM bridge. `expiresAfter` is not supported.
+   */
+sendUsd(
+    params: SendUsdRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Send a spot token to another address on HyperCore (`spotSend`).
+   *
+   * This does not touch the EVM bridge. `token` is `name:tokenId`.
+   */
+sendSpotAsset(
+    params: SendSpotAssetRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Start a USDC withdrawal to the bridge (`withdraw3`).
+   */
+withdrawUsd(
+    params: WithdrawUsdRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Move USDC between spot and perp (`usdClassTransfer`).
+   *
+   * `toPerp: true` sends spot to perp.
+   */
+transferUsdBetweenSpotAndPerp(
+    params: TransferUsdBetweenSpotAndPerpRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Transfer collateral between perp DEXs, spot, users, or subaccounts (`sendAsset`).
+   *
+   * Use `""` for the default USDC perp DEX and `"spot"` for spot.
+   * Only the collateral token can move to or from a perp DEX.
+   */
+sendAsset(
+    params: SendAssetRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Send tokens from Core to EVM with calldata (`sendToEvmWithData`).
+   *
+   * The linked contract must implement `coreReceiveWithData`.
+   */
+sendToEvmWithData(
+    params: SendToEvmWithDataRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Transfer collateral with an API wallet (`agentSendAsset`).
+   *
+   * Destination must match the source address. Dex names match `sendAsset()`.
+   */
+sendAssetFromApiWallet(
+    params: SendAssetFromApiWalletRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Move native token from spot into staking (`cDeposit`).
+   *
+   * `wei` is the amount in wei.
+   */
+depositIntoStaking(
+    params: { wei: number },
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Move native token from staking back to spot (`cWithdraw`).
+   *
+   * The transfer waits in a 7-day unstaking queue.
+   */
+withdrawFromStaking(
+    params: { wei: number },
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Delegate or undelegate stake to a validator (`tokenDelegate`).
+   *
+   * A delegation to one validator locks for 1 day.
+   */
+delegateOrUndelegateStake(
+    params: DelegateOrUndelegateStakeRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+convertToMultiSigUser(
+    params: ConvertToMultiSigUserRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+linkStakingAccount(
+    params: LinkStakingAccountRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+disableStakingTradingLink(
+    params: { tradingUser: string },
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+setUserPortfolioMargin(
+    params: UserToggleRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Set account abstraction (`userSetAbstraction`).
+   *
+   * `abstraction` is `"disabled"`, `"unifiedAccount"`, or `"portfolioMargin"`.
+   */
+setUserAbstraction(
+    params: SetUserAbstractionRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Enable or disable HIP-3 DEX abstraction (`userDexAbstraction`).
+   *
+   * Deprecated. Prefer `setUserAbstraction()`.
+   */
+setUserDexAbstraction(
+    params: UserToggleRequest,
+    options: UserSignedRequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Enable HIP-3 DEX abstraction from an API wallet (`agentEnableDexAbstraction`).
+   *
+   * Deprecated. Prefer `setApiWalletAbstraction()`. This only changes `null` to enabled.
+   */
+enableApiWalletDexAbstraction(
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Set account abstraction from an API wallet (`agentSetAbstraction`).
+   *
+   * `"i"` is disabled, `"u"` is unified account, and `"p"` is portfolio margin.
+   */
+setApiWalletAbstraction(
+    params: { abstraction: 'i' | 'p' | 'u' },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+executeBorrowLendOperation(
+    params: {
+      amount: string | null;
+      operation: 'borrow' | 'repay' | 'supply' | 'withdraw';
+      token: number;
+    },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Claim rewards (`claimRewards`).
+   */
+claimRewards(options: L1RequestOptions =
+⋮----
+createSubAccount(
+    params: { name: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<string>>
+⋮----
+createVault(
+    params: { description: string; initialUsd: number; name: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse<string>>
+⋮----
+setEvmBigBlocks(
+    params: { usingBigBlocks: boolean },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+finalizeEvmContract(
+    params: {
+      input:
+        | 'customStorageSlot'
+        | 'firstStorageSlot'
+        | { create: { nonce: number } };
+      token: number;
+    },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+submitGossipPriorityBid(
+    params: { ip: string; maxGas: number; slotId: 0 | 1 },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Deposit or withdraw from an HIP-3 backstop liquidator (`hip3LiquidatorTransfer`).
+   *
+   * `ntl` is an integer in 1e-6 quote-token units and must be a multiple of
+   * 1000 quote tokens. Only principal can be withdrawn, not PnL.
+   */
+transferHip3LiquidatorFunds(
+    params: { dex: string; isDeposit: boolean; ntl: number },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Mark a nonce as used without another effect (`noop`).
+   */
+invalidateNonce(options: L1RequestOptions =
+⋮----
+deployPerp(
+    params: DeployPerpRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+deploySpot(
+    params: DeploySpotRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Buy extra address request weight (`reserveRequestWeight`).
+   *
+   * Each reserved action costs 0.0005 USDC from the perp balance.
+   */
+reserveAdditionalActions(
+    params: { weight: number },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+setDisplayName(
+    params: { displayName: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+setSpotDusting(
+    params: { toggleSpotDusting: { optOut: boolean } },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+renameSubAccount(
+    params: { name: string; subAccountUser: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+transferSpotToOrFromSubAccount(
+    params: TransferSpotToOrFromSubAccountRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+transferUsdToOrFromSubAccount(
+    params: TransferUsdToOrFromSubAccountRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Deposit or withdraw vault funds (`vaultTransfer`).
+   */
+transferVaultFunds(
+    params: TransferVaultFundsRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+distributeVaultFunds(
+    params: { usd: number; vaultAddress: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+modifyVault(
+    params: {
+      allowDeposits?: boolean | null;
+      alwaysCloseOnWithdraw?: boolean | null;
+      vaultAddress: string;
+    },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Vote the risk-free rate for an aligned quote asset (`validatorL1Stream`).
+   *
+   * `riskFreeRate` is a decimal string such as `"0.04"` for 4%.
+   */
+updateValidatorL1Stream(
+    params: { riskFreeRate: string },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+submitSignerAction(
+    params: { jailSelf: null } | { unjailSelf: null },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+submitValidatorAction(
+    params: Omit<JsonObject, 'type'>,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Authorize an AQAv2 role (`authorizeAqav2Role`).
+   *
+   * `token` is the token index, for example `0` for USDC.
+   * `role` is `"technical"` or `"treasury"`.
+   */
+authorizeAqav2Role(
+    params: { role: 'technical' | 'treasury'; token: number },
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+/**
+   * Split, merge, or negate outcome shares (`userOutcome`).
+   *
+   * `splitOutcome` turns quote tokens into Yes and No shares.
+   * `mergeOutcome` and `mergeQuestion` turn shares back into quote tokens.
+   * `amount: null` merges the maximum. `negateOutcome` converts No shares
+   * into Yes shares of the other outcomes on the same question.
+   */
+submitUserOutcome(
+    params: SubmitUserOutcomeRequest,
+    options: L1RequestOptions = {},
+): Promise<ExchangeResponse>
+⋮----
+private async accountInfo<T>(type: string, params: InfoParams): Promise<T>
+⋮----
+private async resolveAccountAddress(requestedUser?: string): Promise<string>
+
+================
 File: README.md
 ================
 # Node.js & JavaScript SDK for Hyperliquid REST APIs & WebSockets
@@ -4776,6 +6347,8 @@ Node.js 24 or newer and npm 11 or newer are supported.
 - [Builder codes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes)
 
 Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST API, WebSocket, and WebSocket API samples.
+
+Exchange methods share one response wrapper: `ExchangeResponse` for acknowledgements, or `ExchangeResponse<T>` when the response contains data, such as `ExchangeResponse<OrderResponseData>` for orders and `ExchangeResponse<string>` for a new vault or subaccount address. Check `status === 'ok'` before reading `response.data`. Raw Exchange methods use `ExchangeResponse<unknown>` because the response depends on the submitted action. The same types apply to `RestClient` and `WebsocketAPIClient`.
 
 ## Issues & Discussion
 
@@ -5209,7 +6782,7 @@ const masterClient = new RestClient({
 await masterClient.approveBuilderFee();
 ```
 
-The approval remains valid until it is changed or revoked, so it should not be called during every startup. The configured approval limit is 0.01%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
+The approval remains valid until it is changed or revoked, so it should not be called during every startup. The configured approval limit is 0.1%. See Hyperliquid's [builder-code documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) and [exchange endpoint documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for the upstream rules.
 
 ---
 
