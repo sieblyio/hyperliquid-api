@@ -202,7 +202,7 @@ const result = await client.submitOrder({
 });
 ```
 
-For ordinary single orders, use the CEX-style convenience methods. They handle much of the complexity of sending orders to Hyperliquid's API.
+We've added some convenient wrapper methods for common workflows:
 
 ```ts
 const marketOrder = await client.submitMarketOrder({

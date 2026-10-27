@@ -1619,7 +1619,7 @@ Hyperliquid uses one Info endpoint for market and account reads, one Exchange en
 npm install @siebly/hyperliquid-api
 ```
 
-Node.js 24 or newer is supported. Every example below is plain JavaScript.
+Node.js 22 or newer is supported. Every example below is plain JavaScript.
 
 ## Set up a wallet and API wallet
 
@@ -3747,7 +3747,7 @@ File: package.json
   ],
   "dependencies": {
     "@msgpack/msgpack": "^3.1.2",
-    "axios": "1.18.1",
+    "axios": "1.20.0",
     "ethers": "^6.16.0",
     "events": "3.3.0",
     "fflate": "^0.8.2",
@@ -3759,8 +3759,8 @@ File: package.json
     "@types/jest": "^30.0.0",
     "@types/node": "^24.10.14",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
+    "@typescript-eslint/eslint-plugin": "8.70.0",
+    "@typescript-eslint/parser": "8.70.0",
     "esbuild": "0.27.2",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
@@ -3808,8 +3808,7 @@ File: package.json
   },
   "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
   "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=11.0.0"
+    "node": ">=22.0.0"
   }
 }
 
@@ -6251,7 +6250,7 @@ File: README.md
 [![npm downloads](https://img.shields.io/npm/dt/%40siebly%2Fhyperliquid-api)][1]
 [![last commit](https://img.shields.io/github/last-commit/sieblyio/hyperliquid-api)][1]
 [![Telegram](https://img.shields.io/badge/chat-on%20telegram-blue.svg)](https://t.me/nodetraders)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sieblyio/hyperliquid-api)
+[![Hyperliquid Tutorial](https://img.shields.io/badge/Hyperliquid%20Tutorial-siebly.io-blue)](https://siebly.io/sdk/hyperliquid/javascript/tutorial)
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@siebly/hyperliquid-api">
@@ -6334,7 +6333,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 npm install @siebly/hyperliquid-api
 ```
 
-Node.js 24 or newer and npm 11 or newer are supported.
+Node.js 22 or newer is supported.
 
 ## Documentation
 
@@ -6447,7 +6446,7 @@ const result = await client.submitOrder({
 });
 ```
 
-For ordinary single orders, use the CEX-style convenience methods. They handle much of the complexity of sending orders to Hyperliquid's API.
+We've added some convenient wrapper methods for common workflows:
 
 ```ts
 const marketOrder = await client.submitMarketOrder({
@@ -6762,13 +6761,11 @@ Use [llms.txt](./llms.txt) for packaged SDK context, the [endpoint map](./docs/e
 
 ---
 
-## Referral & Builder Codes
+## Referral & Builder Codes, 4% fee discount
 
-On the first order, cancellation, or modification from a client instance, the SDK passively attempts to set the `SIEBLY` referral code. It does not query the existing referral first, delay the triggering request, or retry repeatedly. If the account already has a referrer or the request fails, trading continues normally.
+Accounts without an existing referrer currently receive a 4% referral fee discount when `SIEBLY` is set while using this HyperLiquid JavaScript SDK. The referral also supports ongoing SDK maintenance. On the first order, cancellation, or modification from a client instance, the SDK passively attempts to set the `SIEBLY` referral code. It does not query the existing referral first, delay the triggering request, or retry repeatedly. If the account already has a referrer or the request fails, trading continues normally.
 
-Accounts without an existing referrer currently receive a 4% referral fee discount when `SIEBLY` is set. The referral also supports ongoing SDK maintenance. Referral rules are controlled by Hyperliquid; see the [referral terms](https://hyperliquid.gitbook.io/hyperliquid-docs/referrals) before trading.
-
-Orders include the fixed Siebly builder code only after the SDK confirms that the account's main wallet has approved it. If an approval check fails, the order continues without the builder code and the SDK emits a warning. When a main-wallet private key is configured and approval is missing, the SDK attempts approval in the background. API and agent wallets cannot grant builder approval themselves.
+Referral rules are controlled by Hyperliquid; see the [referral terms](https://hyperliquid.gitbook.io/hyperliquid-docs/referrals) before trading. Orders include the fixed Siebly builder code only after the SDK confirms that the account's main wallet has approved it. If an approval check fails, the order continues without the builder code and the SDK emits a warning. When a main-wallet private key is configured and approval is missing, the SDK attempts approval in the background. API and agent wallets cannot grant builder approval themselves.
 
 Please consider approving our HyperLiquid builder address to further support our work. This approval must be signed by your Hyperliquid main wallet, not an API or agent wallet. Create a RestClient using your main-wallet private key or signer, then call `approveBuilderFee()` once. For example:
 
@@ -6817,9 +6814,6 @@ Contributions are encouraged, I will review any incoming pull requests. See the 
 [![Star History Chart](https://api.star-history.com/svg?repos=sieblyio/bybit-api,sieblyio/okx-api,sieblyio/binance,sieblyio/bitget-api,sieblyio/bitmart-api,sieblyio/gateio-api,sieblyio/kucoin-api,sieblyio/coinbase-api,sieblyio/orderbooks,sieblyio/accountstate,sieblyio/awesome-crypto-examples&type=Date)](https://star-history.com/#sieblyio/bybit-api&sieblyio/okx-api&sieblyio/binance&sieblyio/bitget-api&sieblyio/bitmart-api&sieblyio/gateio-api&sieblyio/kucoin-api&sieblyio/coinbase-api&sieblyio/orderbooks&sieblyio/accountstate&sieblyio/awesome-crypto-examples&Date)
 
 <!-- template_star_history_end -->
-
-
-
 
 
 ================================================================

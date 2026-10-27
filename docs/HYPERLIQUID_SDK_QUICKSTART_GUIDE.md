@@ -259,7 +259,7 @@ Hyperliquid uses one Info endpoint for market and account reads, one Exchange en
 npm install @siebly/hyperliquid-api
 ```
 
-Node.js 24 or newer is supported. Every example below is plain JavaScript.
+Node.js 22 or newer is supported. Every example below is plain JavaScript.
 
 ## Set up a wallet and API wallet
 
