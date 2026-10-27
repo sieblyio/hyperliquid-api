@@ -89,7 +89,7 @@ Professional Node.js, JavaScript & TypeScript SDK for the HyperLiquid REST APIs,
 npm install @siebly/hyperliquid-api
 ```
 
-Node.js 24 or newer and npm 11 or newer are supported.
+Node.js 22 or newer and npm 11 or newer are supported.
 
 ## Documentation
 

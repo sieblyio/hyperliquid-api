@@ -104,7 +104,7 @@
   },
   "homepage": "https://github.com/sieblyio/hyperliquid-api#readme",
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=22.0.0",
     "npm": ">=11.0.0"
   }
 }
