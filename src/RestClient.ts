@@ -913,6 +913,7 @@ export class RestClient extends BaseRestClient {
   /**
    * Close a perp position with a reduce-only IOC order (`order`).
    *
+   * Closes the entire position for that coin, not just a recently opened size.
    * Size defaults to the open position size.
    */
   async submitMarketClose(
@@ -994,14 +995,17 @@ export class RestClient extends BaseRestClient {
   /**
    * Modify one resting order (`modify`).
    *
-   * Statuses match `submitOrder()`. `alwaysPlace` sends `a: true` so the new
+   * Success is the default acknowledgement. The exchange assigns a new oid.
+   * Callers must read open orders (or use cloid) to find it.
+   *
+   * `alwaysPlace` sends `a: true` so the new
    * order is placed even when the cancel fails. `false` is omitted, because
    * hashing `a: false` is rejected.
    */
   async modifyOrder(
     params: ModifyOrderRequest,
     options: L1RequestOptions = {},
-  ): Promise<ExchangeResponse<OrderResponseData>> {
+  ): Promise<ExchangeResponse> {
     return this.submitRawL1Action(
       await this.actionBuilder.actions.modify(params, params.alwaysPlace),
       options,

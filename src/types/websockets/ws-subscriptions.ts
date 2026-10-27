@@ -31,7 +31,6 @@ export type CandleInterval =
   | '3m'
   | '4h'
   | '5m'
-  | '6h'
   | '8h'
   | '1w';
 

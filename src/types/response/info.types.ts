@@ -224,6 +224,7 @@ export interface UserFill {
   sz: string;
   time: number;
   tid: number;
+  twapId?: number | null;
   [key: string]: unknown;
 }
 
@@ -794,6 +795,7 @@ export interface UserNonFundingLedgerUpdate {
 }
 
 export interface PredictedFundingQuote {
+  fundingIntervalHours?: number;
   fundingRate: string;
   nextFundingTime: number;
 }
@@ -844,6 +846,7 @@ export type PerpCategory = [coin: string, category: string];
 
 export interface PerpConciseAnnotationInfo {
   category: string;
+  displayName?: string;
   keywords?: string[];
 }
 
@@ -930,7 +933,7 @@ export interface TokenGenesis {
 
 export interface TokenDetails {
   circulatingSupply: string;
-  deployGas: string;
+  deployGas: string | null;
   deployTime: string | null;
   deployer: string | null;
   futureEmissions: string;
