@@ -149,7 +149,6 @@ const mids = await client.getAllMids();
 const book = await client.getOrderBook({
   coin: 'BTC',
   nSigFigs: 5,
-  mantissa: 1,
 });
 const perpSummary = await client.getPerpAccountSummary({
   user: '0x1234567890123456789012345678901234567890',
@@ -376,9 +375,9 @@ const book = {
   type: 'l2Book',
   coin: 'BTC',
   nSigFigs: 5,
-  mantissa: 1,
   fast: true,
 } as const;
+
 const fills = {
   type: 'userFills',
   user: '0x1234567890123456789012345678901234567890',
