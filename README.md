@@ -103,7 +103,7 @@ Node.js 22 or newer is supported.
 
 Request and response types are exported from the package root. Every documented Info and Exchange operation has a corresponding `RestClient` method. Public lookup methods use `get...` names based on the information they return instead of exposing Hyperliquid's internal request type names. See the [examples](./examples) directory for REST API, WebSocket, and WebSocket API samples.
 
-Exchange methods share one response wrapper: `ExchangeResponse` for acknowledgements, or `ExchangeResponse<T>` when the response contains data, such as `ExchangeResponse<OrderResponseData>` for orders and `ExchangeResponse<string>` for a new vault or subaccount address. Check `status === 'ok'` before reading `response.data`. Raw Exchange methods use `ExchangeResponse<unknown>` because the response depends on the submitted action. The same types apply to `RestClient` and `WebsocketAPIClient`.
+Exchange methods share one response wrapper: `ExchangeResponse` for acknowledgements, or `ExchangeResponse<T>` when the response contains data, such as `ExchangeResponse<OrderResponseData>` for orders and `ExchangeResponse<string>` for a new vault or subaccount address. For an order result, check `order.status === 'ok'` before reading `order.response.data`. Raw Exchange methods use `ExchangeResponse<unknown>` because the response depends on the submitted action. The same types apply to `RestClient` and `WebsocketAPIClient`.
 
 ## Issues & Discussion
 
@@ -187,7 +187,7 @@ console.log('Account:', balances.user);
 console.log('Spot:', balances.spot.balances);
 console.log('Perpetuals:', balances.perp.assetPositions);
 
-const result = await client.submitOrder({
+const order = await client.submitOrder({
   orders: [
     {
       a: 'BTC',
@@ -199,6 +199,8 @@ const result = await client.submitOrder({
     },
   ],
 });
+
+if (order.status === 'ok') console.log(order.response.data);
 ```
 
 We've added some convenient wrapper methods for common workflows:
