@@ -16,3 +16,4 @@ README_BEFORE_RELEASE.md
 examples/tstests
 /tmp/
 localtest.sh
+rest-ts.ts
