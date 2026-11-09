@@ -114,6 +114,17 @@ export interface CancelTwapOrderRequest {
   t: number;
 }
 
+export interface SubmitTrailingStopRequest {
+  activationPx: string | null;
+  /** Numeric perpetual asset ID. */
+  asset: number;
+  isBuy: boolean;
+  reduceOnly: boolean;
+  /** Percent string such as "1.234%", or a price distance. */
+  retracement: { pct: string } | { px: string };
+  sz: string;
+}
+
 export interface TransferUsdToOrFromSubAccountRequest {
   isDeposit: boolean;
   subAccountUser: string;

@@ -36,6 +36,7 @@ import type {
   SubmitMarketCloseRequest,
   SubmitMarketOrderRequest,
   SubmitOrderRequest,
+  SubmitTrailingStopRequest,
   SubmitTwapOrderRequest,
   SubmitUserOutcomeRequest,
   TransferSpotToOrFromSubAccountRequest,
@@ -70,6 +71,7 @@ import type {
   CancelResponseData,
   ExchangeResponse,
   OrderResponseData,
+  TrailingStopResponseData,
   TwapCancelResponseData,
   TwapOrderResponseData,
 } from './types/response/exchange.types.js';
@@ -1136,6 +1138,20 @@ export class RestClient extends BaseRestClient {
     options: L1RequestOptions = {},
   ): Promise<ExchangeResponse<TwapCancelResponseData>> {
     return this.l1('twapCancel', params, options);
+  }
+
+  /**
+   * Place a trailing stop order for perpetuals only (`trailingStop`).
+   *
+   * `asset` is a numeric asset ID. `retracement` is a percent string such as
+   * `{ pct: '1.234%' }` or a price distance such as `{ px: '100' }`.
+   * A successful request returns `{ oid }`.
+   */
+  submitTrailingStop(
+    params: SubmitTrailingStopRequest,
+    options: L1RequestOptions = {},
+  ): Promise<ExchangeResponse<TrailingStopResponseData>> {
+    return this.l1('trailingStop', params, options);
   }
 
   /**
