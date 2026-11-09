@@ -70,3 +70,7 @@ export interface TwapOrderResponseData {
 export interface TwapCancelResponseData {
   status: 'success' | TwapErrorStatus;
 }
+
+export interface TrailingStopResponseData {
+  oid: number;
+}
