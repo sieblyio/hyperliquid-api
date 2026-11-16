@@ -254,6 +254,8 @@ export type OrderState =
   | 'delistedCanceled'
   | 'filled'
   | 'insufficientSpotBalanceRejected'
+  /** Returned by Hyperliquid, not yet in their docs. */
+  | 'insufficientWeiCanceled'
   | 'internalCancel'
   | 'iocCancelRejected'
   | 'liquidatedCanceled'
