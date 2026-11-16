@@ -246,11 +246,6 @@ File: .npmrc
 min-release-age=30
 
 ================
-File: .nvmrc
-================
-v24.18.0
-
-================
 File: .prettierrc
 ================
 {
@@ -988,6 +983,11 @@ export interface L1ActionOptions {
   nonce?: number;
   vaultAddress?: string | null;
 }
+
+================
+File: .nvmrc
+================
+v24.22.3
 
 ================
 File: tsconfig.extensions.json
@@ -3741,6 +3741,132 @@ localtest.sh
 rest-ts.ts
 
 ================
+File: src/WebsocketClient.ts
+================
+import { inflateSync, strFromU8 } from 'fflate';
+⋮----
+import { MAINNET_WS_URL, TESTNET_WS_URL } from './constants.js';
+import type { ResolvedAsset } from './lib/asset-resolver.js';
+import {
+  BaseWebsocketClient,
+  type EmittableEvent,
+  type WSOperation,
+} from './lib/BaseWSClient.js';
+import { HyperliquidApiError } from './lib/errors.js';
+import { normalizeAddresses } from './lib/normalize-addresses.js';
+import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
+import {
+  DefaultLogger,
+  type DefaultLogger as Logger,
+} from './lib/websocket/logger.js';
+import { sanitizeObjectForWire } from './lib/wire.js';
+import { RestClient } from './RestClient.js';
+import type { ExchangeResponse } from './types/response/exchange.types.js';
+import type { RequestOptions } from './types/shared.types.js';
+import type {
+  WebsocketMessageEvent,
+  WebsocketPostResponseEvent,
+  WebsocketResponseEvent,
+} from './types/websockets/ws-events.js';
+import type {
+  WebsocketClientOptions,
+  WsKey,
+} from './types/websockets/ws-general.js';
+import type { WebsocketSubscription } from './types/websockets/ws-subscriptions.js';
+⋮----
+function normalizeSubscriptionFields(
+  subscription: WebsocketSubscription,
+): WebsocketSubscription
+⋮----
+function recordValue(value: unknown): Record<string, unknown> | undefined
+⋮----
+function postErrorRequestId(message: string): number | undefined
+⋮----
+function decompressFastAssetCtxs(data: unknown): unknown
+⋮----
+export class WebsocketClient extends BaseWebsocketClient<
+⋮----
+constructor(
+    options: WebsocketClientOptions = {},
+    logger: Logger = DefaultLogger,
+  )
+⋮----
+connect(wsKey: WsKey = 'public'): Promise<void>
+⋮----
+/** Connect all cached connection groups, or the public connection if none exist. */
+async connectAll(): Promise<void>
+⋮----
+isConnected(wsKey: WsKey = 'public'): boolean
+⋮----
+/** Reject pending work immediately; emit 'close' when the socket confirms closure. */
+close(wsKey?: WsKey): void
+⋮----
+/**
+   * Subscribe to one or more wire topics. Listen for data with on('message').
+   * Topics are cached before connecting and restored automatically after reconnect.
+   * The promise confirms local sending; server acknowledgements emit 'response'.
+   * Resolve display aliases explicitly with nameToCoin() when needed.
+   */
+async subscribe(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+  ): Promise<void>
+⋮----
+/** Remove cached topics independently of event listeners, including while disconnected. */
+async unsubscribe(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+  ): Promise<void>
+⋮----
+async sendWSAPIRequest<T>(
+    endpoint: 'action' | 'info',
+    body: unknown,
+    options: RequestOptions = {},
+  ): Promise<T>
+⋮----
+resolveAsset(identifier: number | string): Promise<ResolvedAsset>
+⋮----
+nameToCoin(name: string): Promise<string>
+⋮----
+refreshAssetMetadata(): Promise<void>
+⋮----
+private groupSubscriptions(
+    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
+  ): Map<WsKey, WebsocketSubscription[]>
+⋮----
+protected override getWsUrl(): string
+⋮----
+protected override getMaxConnections(): number
+⋮----
+protected override getWsRequestEvents(
+    _wsKey: WsKey,
+    operation: WSOperation,
+    topics: WebsocketSubscription[],
+  ): object[]
+⋮----
+protected override sendPingEvent(wsKey: WsKey): boolean
+⋮----
+protected override resolveEmittableEvents(
+    wsKey: WsKey,
+    message: string,
+  ): EmittableEvent<WsKey>[]
+⋮----
+// Emit each wire message once. Subscription ownership never controls listeners.
+// Keep upstream channel names (including user and activeSpotAssetCtx) unchanged.
+⋮----
+private handlePostMessage(
+    record: Record<string, unknown>,
+  ): 'exception' | 'response'
+⋮----
+private logUnmatchedResponse(
+    requestId: unknown,
+    parsed: Record<string, unknown>,
+  ): void
+⋮----
+// IDs are monotonic for this client. A known ID without a pending promise has
+// already settled (for example by timeout or abort); its late reply is expected.
+⋮----
+private rejectRequest(id: number, error: unknown): void
+
+================
 File: src/types/response/info.types.ts
 ================
 export type InfoResponse =
@@ -4001,6 +4127,8 @@ export type OrderState =
   | 'delistedCanceled'
   | 'filled'
   | 'insufficientSpotBalanceRejected'
+  /** Returned by Hyperliquid, not yet in their docs. */
+  | 'insufficientWeiCanceled'
   | 'internalCancel'
   | 'iocCancelRejected'
   | 'liquidatedCanceled'
@@ -4027,6 +4155,8 @@ export type OrderState =
   | 'tooManyOpenOrdersRejected'
   | 'triggered'
   | 'vaultWithdrawalCanceled';
+⋮----
+/** Returned by Hyperliquid, not yet in their docs. */
 ⋮----
 export interface OrderStatusDetails {
   order: FrontendOpenOrder;
@@ -4879,132 +5009,6 @@ export interface WebData2 {
   twapStates: Array<[twapId: number, state: TwapState]>;
   user: string;
 }
-
-================
-File: src/WebsocketClient.ts
-================
-import { inflateSync, strFromU8 } from 'fflate';
-⋮----
-import { MAINNET_WS_URL, TESTNET_WS_URL } from './constants.js';
-import type { ResolvedAsset } from './lib/asset-resolver.js';
-import {
-  BaseWebsocketClient,
-  type EmittableEvent,
-  type WSOperation,
-} from './lib/BaseWSClient.js';
-import { HyperliquidApiError } from './lib/errors.js';
-import { normalizeAddresses } from './lib/normalize-addresses.js';
-import { HyperliquidWebSocketError } from './lib/websocket/errors.js';
-import {
-  DefaultLogger,
-  type DefaultLogger as Logger,
-} from './lib/websocket/logger.js';
-import { sanitizeObjectForWire } from './lib/wire.js';
-import { RestClient } from './RestClient.js';
-import type { ExchangeResponse } from './types/response/exchange.types.js';
-import type { RequestOptions } from './types/shared.types.js';
-import type {
-  WebsocketMessageEvent,
-  WebsocketPostResponseEvent,
-  WebsocketResponseEvent,
-} from './types/websockets/ws-events.js';
-import type {
-  WebsocketClientOptions,
-  WsKey,
-} from './types/websockets/ws-general.js';
-import type { WebsocketSubscription } from './types/websockets/ws-subscriptions.js';
-⋮----
-function normalizeSubscriptionFields(
-  subscription: WebsocketSubscription,
-): WebsocketSubscription
-⋮----
-function recordValue(value: unknown): Record<string, unknown> | undefined
-⋮----
-function postErrorRequestId(message: string): number | undefined
-⋮----
-function decompressFastAssetCtxs(data: unknown): unknown
-⋮----
-export class WebsocketClient extends BaseWebsocketClient<
-⋮----
-constructor(
-    options: WebsocketClientOptions = {},
-    logger: Logger = DefaultLogger,
-  )
-⋮----
-connect(wsKey: WsKey = 'public'): Promise<void>
-⋮----
-/** Connect all cached connection groups, or the public connection if none exist. */
-async connectAll(): Promise<void>
-⋮----
-isConnected(wsKey: WsKey = 'public'): boolean
-⋮----
-/** Reject pending work immediately; emit 'close' when the socket confirms closure. */
-close(wsKey?: WsKey): void
-⋮----
-/**
-   * Subscribe to one or more wire topics. Listen for data with on('message').
-   * Topics are cached before connecting and restored automatically after reconnect.
-   * The promise confirms local sending; server acknowledgements emit 'response'.
-   * Resolve display aliases explicitly with nameToCoin() when needed.
-   */
-async subscribe(
-    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
-  ): Promise<void>
-⋮----
-/** Remove cached topics independently of event listeners, including while disconnected. */
-async unsubscribe(
-    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
-  ): Promise<void>
-⋮----
-async sendWSAPIRequest<T>(
-    endpoint: 'action' | 'info',
-    body: unknown,
-    options: RequestOptions = {},
-  ): Promise<T>
-⋮----
-resolveAsset(identifier: number | string): Promise<ResolvedAsset>
-⋮----
-nameToCoin(name: string): Promise<string>
-⋮----
-refreshAssetMetadata(): Promise<void>
-⋮----
-private groupSubscriptions(
-    subscriptions: WebsocketSubscription | readonly WebsocketSubscription[],
-  ): Map<WsKey, WebsocketSubscription[]>
-⋮----
-protected override getWsUrl(): string
-⋮----
-protected override getMaxConnections(): number
-⋮----
-protected override getWsRequestEvents(
-    _wsKey: WsKey,
-    operation: WSOperation,
-    topics: WebsocketSubscription[],
-  ): object[]
-⋮----
-protected override sendPingEvent(wsKey: WsKey): boolean
-⋮----
-protected override resolveEmittableEvents(
-    wsKey: WsKey,
-    message: string,
-  ): EmittableEvent<WsKey>[]
-⋮----
-// Emit each wire message once. Subscription ownership never controls listeners.
-// Keep upstream channel names (including user and activeSpotAssetCtx) unchanged.
-⋮----
-private handlePostMessage(
-    record: Record<string, unknown>,
-  ): 'exception' | 'response'
-⋮----
-private logUnmatchedResponse(
-    requestId: unknown,
-    parsed: Record<string, unknown>,
-  ): void
-⋮----
-// IDs are monotonic for this client. A known ID without a pending promise has
-// already settled (for example by timeout or abort); its late reply is expected.
-⋮----
-private rejectRequest(id: number, error: unknown): void
 
 ================
 File: src/RestClient.ts
@@ -6186,7 +6190,7 @@ File: package.json
 ================
 {
   "name": "@siebly/hyperliquid-api",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Professional JavaScript & Node.js SDK for Hyperliquid's REST APIs and WebSockets, built in TypeScript with strong end to end tests.",
   "scripts": {
     "clean": "node scripts/clean.mjs",
