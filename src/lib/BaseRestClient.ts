@@ -228,10 +228,18 @@ export abstract class BaseRestClient {
       const response = await this.axios.post<T>(path, body);
 
       if (isHyperliquidErrorResponse(response.data)) {
-        throw new HyperliquidApiError(
-          response.data.response || 'Hyperliquid rejected the request.',
-          { response: response.data, status: response.status },
-        );
+        const message =
+          response.data.response || 'Hyperliquid rejected the request.';
+        const exchangeCode = /Unexpected error \(code=(\d+)\)/.exec(
+          message,
+        )?.[1];
+
+        throw new HyperliquidApiError(message, {
+          exchangeCode:
+            exchangeCode === undefined ? undefined : Number(exchangeCode),
+          response: response.data,
+          status: response.status,
+        });
       }
 
       return response.data;
