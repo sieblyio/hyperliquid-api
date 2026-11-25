@@ -52,6 +52,24 @@ export type UserSubscriptionType =
   | 'userTwapSliceFills'
   | 'webData3';
 
+/** Incremental order book feed. s and m work like l2Book's nSigFigs and mantissa.
+ * https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions
+ */
+export interface L2Subscription {
+  c: string;
+  s?: number;
+  m?: number;
+  type: 'l2';
+}
+
+export interface PacSubscription {
+  type: 'pac';
+}
+
+export interface SacSubscription {
+  type: 'sac';
+}
+
 export type WebsocketSubscription =
   | { dex?: string; type: 'allMids' }
   | { dex?: string; type: 'assetCtxs' }
@@ -63,6 +81,7 @@ export type WebsocketSubscription =
   | { coin: string; interval: CandleInterval; type: 'candle' }
   | { dex?: string; user: string; type: 'clearinghouseState' }
   | { type: 'fastAssetCtxs' }
+  | L2Subscription
   | {
       coin: string;
       fast?: boolean;
@@ -74,6 +93,8 @@ export type WebsocketSubscription =
   | { dex?: string; user: string; type: 'openOrders' }
   | { user: string; type: 'orderUpdates' }
   | { type: 'outcomeMetaUpdates' }
+  | PacSubscription
+  | SacSubscription
   | { type: 'spotAssetCtxs' }
   | {
       ignorePortfolioMargin?: boolean;
@@ -124,6 +145,39 @@ export interface AssetCtxsEvent {
 export interface AllDexsAssetCtxsEvent {
   ctxs: Array<[dex: string, contexts: PerpAssetContext[]]>;
 }
+
+export type WsBook = Pick<OrderBookResponse, 'coin' | 'levels' | 'time'>;
+
+/** Snapshot, uncompressed diff, or base64 raw-DEFLATE compressed WsL2Diff. */
+export type WsL2 = { s: WsBook } | { u: WsL2Diff } | { c: string };
+
+export interface WsL2Diff {
+  /** Coin. */
+  c: string;
+  /** Time. */
+  t: number;
+  /** [bids, asks] levels to add or replace by price after removals. */
+  l: [WsL2LevelUpdate[], WsL2LevelUpdate[]];
+  /** [bids, asks] indexes to remove from the previous book. */
+  r: [number[], number[]];
+}
+
+export interface WsL2LevelUpdate {
+  /** Price. */
+  p: string;
+  /** Size. Diffs do not include the number of orders. */
+  s: string;
+}
+
+/** Decoded perp contexts by dex, positional over each dex's universe. The first dex is ''.
+ * After the initial snapshot, contexts contain only changed fields, or {}.
+ */
+export type WsPac = Array<
+  [dex: string, contexts: Array<Partial<PerpAssetContext>>]
+>;
+
+/** Decoded spot contexts by coin. After the snapshot, only changed coins/fields appear. */
+export type WsSac = Record<string, Partial<SpotAssetContext>>;
 
 export interface ClearinghouseStateEvent {
   clearinghouseState: PerpAccountSummaryResponse;
@@ -315,11 +369,14 @@ export interface WebsocketSubscriptionData {
   candle: Candle;
   clearinghouseState: ClearinghouseStateEvent;
   fastAssetCtxs: FastAssetCtxsEvent;
+  l2: WsL2;
   l2Book: OrderBookResponse;
   notification: NotificationEvent;
   openOrders: OpenOrdersEvent;
   orderUpdates: OrderUpdateEvent[];
   outcomeMetaUpdates: OutcomeMetaUpdatesEvent;
+  pac: WsPac;
+  sac: WsSac;
   spotAssetCtxs: SpotAssetCtxsEvent;
   spotState: SpotStateEvent;
   trades: TradeEvent[];

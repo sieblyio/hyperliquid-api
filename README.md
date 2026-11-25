@@ -77,7 +77,7 @@ Take a look at our dedicated [HyperLiquid API quickstart guides for major framew
   - [Customise Logging](#customise-logging)
   - [Debug HTTP Requests](#debug-http-requests)
 - [Raw Methods](#raw-methods)
-- [Browser Usage](#browser-usage)
+- [Browser/Frontend Usage](#browserfrontend-usage)
 - [Use with LLMs & AI](#use-with-llms--ai)
 
 ## Contributing
@@ -523,15 +523,29 @@ await client.submitRawUserSignedAction(
 
 Raw order actions follow the same approval check as typed orders. A caller-provided builder is removed, and the fixed package builder is included only after its approval has been confirmed. Raw methods do not bypass signing, address normalization, nonce handling, or partner attribution.
 
-## Browser Usage
+## Browser/Frontend Usage
 
-Modern bundlers can import the normal package entry. Public REST API calls and public subscriptions are browser-safe.
+The npm package includes ES module and CommonJS builds. You do not need to build a standalone Webpack bundle to use the SDK in a frontend project. Choose the setup for your application below.
 
-```ts
-import { RestClient, WebsocketClient } from '@siebly/hyperliquid-api';
-```
+### Vite and React
 
-Never embed a private key in frontend code, browser storage, or a public environment variable. Keep backend keys and unattended trading on a trusted server. Direct browser REST API access also depends on Hyperliquid's CORS policy.
+Use the [Vite guide](https://sieblyio.github.io/docs/hyperliquid/environments/vite.html) or [React guide](https://sieblyio.github.io/docs/hyperliquid/environments/react.html) for a complete public market-data project that imports `@siebly/hyperliquid-api` from npm.
+
+The Vite example uses the package's browser entry points without extra bundler aliases or polyfills. These browser examples use public Hyperliquid REST data and WebSocket subscriptions. Keep private keys and API credentials in a secure server-side environment and make authenticated calls there.
+
+Browser REST requests also depend on Hyperliquid's CORS policy. If a request is blocked, call the SDK through your application's server route instead. A development proxy does not solve CORS for a deployed application.
+
+### Next.js and server-side requests
+
+The [Next.js guide](https://sieblyio.github.io/docs/hyperliquid/environments/next.html) runs the SDK in a Node.js Route Handler and returns the result to the frontend. Use this pattern when requests need credentials or cannot be made directly from the browser.
+
+### React Native and Expo
+
+Follow the [Expo guide](https://sieblyio.github.io/docs/hyperliquid/environments/expo.html) for a public REST and WebSocket market-data example using the package's normal imports. The guide does not require custom Metro configuration or additional polyfills. Browser bundler configuration is not interchangeable with Metro configuration. Keep authenticated operations on your server.
+
+### Standalone Webpack bundle
+
+This repository does not include a standalone Webpack configuration or a bundle packaging script. Use the npm imports in the framework guides above, or configure your application's bundler if you need a standalone UMD bundle. From a checkout of this repository, `npm ci` followed by `npm run build` produces the ES module and CommonJS builds in `dist/mjs` and `dist/cjs`.
 
 ## Use with LLMs & AI
 

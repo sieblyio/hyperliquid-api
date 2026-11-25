@@ -89,10 +89,10 @@ function postErrorRequestId(message: string): number | undefined {
   }
 }
 
-function decompressFastAssetCtxs(data: unknown): unknown {
+function decompressPayload(data: unknown, channel: string): unknown {
   if (typeof data !== 'string') {
     throw new HyperliquidWebSocketError(
-      'fastAssetCtxs data must be a base64 string.',
+      `${channel} data must be a base64 string.`,
     );
   }
   const compressed = Uint8Array.from(atob(data), (character) =>
@@ -343,9 +343,13 @@ export class WebsocketClient extends BaseWebsocketClient<
     // Emit each wire message once. Subscription ownership never controls listeners.
     // Keep upstream channel names (including user and activeSpotAssetCtx) unchanged.
     let data = record.data;
-    if (record.channel === 'fastAssetCtxs') {
+    if (
+      record.channel === 'fastAssetCtxs' ||
+      record.channel === 'pac' ||
+      record.channel === 'sac'
+    ) {
       try {
-        data = decompressFastAssetCtxs(data);
+        data = decompressPayload(data, record.channel);
       } catch (error) {
         this.emitException(
           wsKey,
