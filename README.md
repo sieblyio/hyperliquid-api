@@ -4,6 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/%40siebly%2Fhyperliquid-api)][1]
 [![npm size](https://img.shields.io/bundlephobia/min/%40siebly%2Fhyperliquid-api/latest)][1]
 [![npm downloads](https://img.shields.io/npm/dt/%40siebly%2Fhyperliquid-api)][1]
+[![license](https://img.shields.io/npm/l/%40siebly%2Fhyperliquid-api)](./LICENSE.md)
 [![last commit](https://img.shields.io/github/last-commit/sieblyio/hyperliquid-api)][1]
 [![Telegram](https://img.shields.io/badge/chat-on%20telegram-blue.svg)](https://t.me/nodetraders)
 [![Hyperliquid Tutorial](https://img.shields.io/badge/Hyperliquid%20Tutorial-siebly.io-blue)](https://siebly.io/sdk/hyperliquid/javascript/tutorial)
@@ -19,11 +20,37 @@
 
 [1]: https://www.npmjs.com/package/@siebly/hyperliquid-api
 
-Professional Node.js, JavaScript & TypeScript SDK for the Hyperliquid REST APIs, WebSocket APIs & WebSocket Events.
+Professional Node.js, JavaScript and TypeScript SDK for the Hyperliquid REST APIs, WebSocket APIs and WebSocket events. Over 4.5 million npm downloads across 10+ SDKs.
 
-Take a look at our dedicated [HyperLiquid API quickstart guides for major frameworks and JavaScript runtimes](#frameworks--quickstart-guides).
+- REST: one `RestClient` for public market data, account information, trading, transfers, staking, vaults, subaccounts and more.
+- WebSockets: `WebsocketClient` for streaming subscriptions, plus `WebsocketAPIClient` for the same promise-driven methods over the WebSocket API.
+- Testnet: pass `testnet: true` on `RestClient` or `WebsocketClient`.
+- Agent wallets: approve an API wallet with `approveApiWallet()` (Hyperliquid `approveAgent`), and pass `accountAddress` for the master account.
+- Typed responses: TypeScript declarations for REST and WebSocket requests and responses. JavaScript works too; TypeScript is recommended.
 
-- Complete integration with all HyperLiquid REST APIs & WebSockets, including the WebSocket API.
+## Quick start
+
+```ts
+import { RestClient, WebsocketClient } from '@siebly/hyperliquid-api';
+
+const client = new RestClient();
+const mids = await client.getAllMids();
+console.log('BTC mid:', mids.BTC);
+
+const ws = new WebsocketClient();
+ws.on('message', (event) => {
+  if (event.channel === 'l2Book') console.log(event.data.coin, event.data.levels);
+});
+await ws.subscribe({ type: 'l2Book', coin: 'BTC' });
+```
+
+Read the [Hyperliquid JavaScript tutorial](https://siebly.io/sdk/hyperliquid/javascript/tutorial) and the [SDK docs](https://sieblyio.github.io/docs/hyperliquid/). Runnable samples are in the [examples](./examples) folder, including `examples/Rest/rest-public.ts` and `examples/Websocket/ws-public.ts`.
+
+If this SDK saves you time, a star on GitHub helps others find it.
+
+Take a look at our dedicated [Hyperliquid API quickstart guides for major frameworks and JavaScript runtimes](#frameworks--quickstart-guides).
+
+- Complete integration with all Hyperliquid REST APIs & WebSockets, including the WebSocket API.
 - Actively maintained with a modern, promise-driven interface.
 - TypeScript support with thorough type declarations for API requests and responses, including the WebSocket API.
 - JavaScript support. TypeScript is not required, but is definitely recommended.
@@ -53,6 +80,7 @@ Take a look at our dedicated [HyperLiquid API quickstart guides for major framew
 
 ## Overview
 
+- [Quick start](#quick-start)
 - [Installation](#installation)
   - [Frameworks & Quickstart Guides](#frameworks--quickstart-guides)
 - [Documentation](#documentation)
@@ -83,6 +111,7 @@ Take a look at our dedicated [HyperLiquid API quickstart guides for major framew
 ## Contributing
 
 - [Contributions & Thanks](#contributions--thanks)
+- [Licence](#licence)
 
 ---
 
@@ -103,7 +132,7 @@ Our complete Hyperliquid SDK supports all the major JavaScript runtimes. For max
 | Backend (trading bots)     | Using [Node.js and JavaScript](https://sieblyio.github.io/docs/hyperliquid/environments/node.html), [Node.js and TypeScript](https://sieblyio.github.io/docs/hyperliquid/environments/typescript.html), [Bun](https://sieblyio.github.io/docs/hyperliquid/environments/bun.html), or [Deno](https://sieblyio.github.io/docs/hyperliquid/environments/deno.html). This is the recommendation for algorithmic trading systems. |
 | Frontend / Web Development | Using [React with Vite](https://sieblyio.github.io/docs/hyperliquid/environments/react.html) or [Vite with plain JavaScript](https://sieblyio.github.io/docs/hyperliquid/environments/vite.html). Display REST and WebSocket prices in the browser.                                                                                                                                                                          |
 | Next.js App Router         | Using the [Next.js App Router](https://sieblyio.github.io/docs/hyperliquid/environments/next.html) to serve the price from a Route Handler running on Node.js.                                                                                                                                                                                                                                                               |
-| Mobile (iOS & Android)     | Using [React Native with Expo for iOS and Android](https://sieblyio.github.io/docs/hyperliquid/environments/expo.html). The example guides you to display the current price of an asset via HyperLiquid and stream updates over WebSockets.                                                                                                                                                                                  |
+| Mobile (iOS & Android)     | Using [React Native with Expo for iOS and Android](https://sieblyio.github.io/docs/hyperliquid/environments/expo.html). The example guides you to display the current price of an asset via Hyperliquid and stream updates over WebSockets.                                                                                                                                                                                  |
 | Cloudflare Workers         | [Cloudflare Workers](https://sieblyio.github.io/docs/hyperliquid/environments/cloudflare-workers.html). Return a public price from a Worker, with a separate example for authenticated orders.                                                                                                                                                                                                                               |
 
 Refer to [runtime compatibility](https://sieblyio.github.io/docs/hyperliquid/compatibility.html) for a complete list of runtimes that we've actively tested, including setup guides.
@@ -598,6 +627,10 @@ Have my projects helped you? Share the love, there are many ways you can show yo
 ### Contributions & Pull Requests
 
 Contributions are encouraged, I will review any incoming pull requests. See the [issues tab](https://github.com/sieblyio/hyperliquid-api/issues) for todo items.
+
+## Licence
+
+This project is released under the [MIT licence](./LICENSE.md).
 
 <!-- template_star_history -->
 
