@@ -55,6 +55,7 @@ Take a look at our dedicated [HyperLiquid API quickstart guides for major framew
 
 - [Installation](#installation)
   - [Frameworks & Quickstart Guides](#frameworks--quickstart-guides)
+  - [Try it in the browser](#try-it-in-the-browser)
 - [Documentation](#documentation)
 - [Issues & Discussion](#issues--discussion)
 - [Related Projects](#related-projects)
@@ -107,6 +108,15 @@ Our complete Hyperliquid SDK supports all the major JavaScript runtimes. For max
 | Cloudflare Workers         | [Cloudflare Workers](https://sieblyio.github.io/docs/hyperliquid/environments/cloudflare-workers.html). Return a public price from a Worker, with a separate example for authenticated orders.                                                                                                                                                                                                                               |
 
 Refer to [runtime compatibility](https://sieblyio.github.io/docs/hyperliquid/compatibility.html) for a complete list of runtimes that we've actively tested, including setup guides.
+
+### Try it in the browser
+
+- Node.js / JavaScript: [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/fork/github/sieblyio/docs/tree/main/starters/hyperliquid/node?title=Hyperliquid%20Node.js%20%2F%20JavaScript%20starter)
+- Node.js / TypeScript: [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/fork/github/sieblyio/docs/tree/main/starters/hyperliquid/typescript?title=Hyperliquid%20Node.js%20%2F%20TypeScript%20starter)
+- Vite (plain JavaScript): [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](<https://stackblitz.com/fork/github/sieblyio/docs/tree/main/starters/hyperliquid/vite?title=Hyperliquid%20Vite%20(plain%20JavaScript)%20starter>)
+- React: [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/fork/github/sieblyio/docs/tree/main/starters/hyperliquid/react?title=Hyperliquid%20React%20starter)
+
+No account is needed. Keep API keys out of public sandboxes.
 
 ## Documentation
 

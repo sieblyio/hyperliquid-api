@@ -215,10 +215,13 @@ function normalizeExistingOrderWire(value: unknown): JsonObject {
     }
 
     normalized.t = {
-      trigger: {
-        ...trigger,
-        triggerPx: decimalToWire(triggerPx),
-      },
+      trigger: orderObjectFields(
+        {
+          ...trigger,
+          triggerPx: decimalToWire(triggerPx),
+        },
+        ['isMarket', 'triggerPx', 'tpsl'],
+      ),
     };
   }
 
